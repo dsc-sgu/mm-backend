@@ -39,19 +39,19 @@ func SetupRoutes(
 		routes.Session(ctx, userRepo, sessionRepo, logger, cookieConfig)
 	})
 
-	r.GET("/block/:id", func(ctx *gin.Context) {
+	r.GET("/blocks/:id", func(ctx *gin.Context) {
 		routes.GetBlock(ctx)
 	})
 
-	r.POST("/block", func(ctx *gin.Context) {
+	r.POST("/blocks", func(ctx *gin.Context) {
 		routes.CreateBlock(ctx)
 	})
 
-	r.PATCH("/block/:id", func(ctx *gin.Context) {
+	r.PATCH("/blocks/:id", func(ctx *gin.Context) {
 		routes.PatchBlock(ctx)
 	})
 
-	r.DELETE("/block/:id", func(ctx *gin.Context) {
+	r.DELETE("/blocks/:id", func(ctx *gin.Context) {
 		routes.DeleteBlock(ctx)
 	})
 

@@ -56,7 +56,7 @@ type SwaggerCreateBlockType struct {
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /block/:id [GET]
+// @router /blocks/:id [GET]
 func GetBlock(c *gin.Context) {
 	_, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -85,7 +85,7 @@ func GetBlock(c *gin.Context) {
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /block [POST]
+// @router /blocks [POST]
 func CreateBlock(c *gin.Context) {
 	var createJson CreateBlockType
 	if err := c.ShouldBindBodyWithJSON(&createJson); err != nil {
@@ -112,7 +112,7 @@ func CreateBlock(c *gin.Context) {
 // @failure 404 {object} apierr.ApiError "Parameter not found"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /block/:id [PATCH]
+// @router /blocks/:id [PATCH]
 func PatchBlock(c *gin.Context) {
 	_, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -143,7 +143,7 @@ func PatchBlock(c *gin.Context) {
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /block/:id [DELETE]
+// @router /blocks/:id [DELETE]
 func DeleteBlock(c *gin.Context) {
 	_, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
