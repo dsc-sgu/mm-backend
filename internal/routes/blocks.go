@@ -6,46 +6,10 @@ import (
 	"strconv"
 
 	"github.com/MergeMinds/mm-backend-go/internal/apierr"
+	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-type TextDataType struct {
-	Format string `json:"format" `
-	Text   string `json:"text"`
-}
-
-type QuizDataType struct {
-	QuestionQuantity int      `json:""`
-	Questions        []string `json:""`
-	Answers          []string `json:""`
-}
-
-type BlockType struct {
-	Id        uuid.UUID       `json:"id" binding:"required"`
-	BlockType string          `json:"blockType" binding:"required"`
-	Data      json.RawMessage `json:"data" binding:"required"`
-	CourseId  uuid.UUID       `json:"courseId" binding:"required"`
-}
-
-// @description For swagger use only. Use BlockType instead
-type SwaggerBlockType struct {
-	Id        uuid.UUID   `json:"id" binding:"required"`
-	BlockType string      `json:"blockType" binding:"required"`
-	Data      interface{} `json:"data" binding:"required" swaggertype:"object"`
-	CourseId  uuid.UUID   `json:"courseId" binding:"required"`
-}
-
-type CreateBlockType struct {
-	BlockType string          `json:"blockType" binding:"required"`
-	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
-}
-
-// @description For swagger use only. Use CreateBlockType instead
-type SwaggerCreateBlockType struct {
-	BlockType string      `json:"blockType" binding:"required"`
-	Data      interface{} `json:"data" binding:"required"`
-}
 
 // @description Get block data
 // @summary Get block data
@@ -64,7 +28,7 @@ func GetBlock(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, BlockType{
+	c.JSON(http.StatusOK, dto.BlockType{
 		Id:        uuid.New(),
 		BlockType: "text",
 		Data: json.RawMessage(`{
@@ -87,12 +51,12 @@ func GetBlock(c *gin.Context) {
 // @failure 500 {object} apierr.ApiError "Internal server error"
 // @router /blocks [POST]
 func CreateBlock(c *gin.Context) {
-	var createJson CreateBlockType
+	var createJson dto.CreateBlockType
 	if err := c.ShouldBindBodyWithJSON(&createJson); err != nil {
 		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
 		return
 	}
-	c.JSON(http.StatusCreated, BlockType{
+	c.JSON(http.StatusCreated, dto.BlockType{
 		Id:        uuid.New(),
 		BlockType: createJson.BlockType,
 		Data:      createJson.Data,
@@ -120,13 +84,13 @@ func PatchBlock(c *gin.Context) {
 		return
 	}
 
-	var req CreateBlockType
+	var req dto.CreateBlockType
 	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
 		return
 	}
 
-	c.JSON(http.StatusOK, BlockType{
+	c.JSON(http.StatusOK, dto.BlockType{
 		Id:        uuid.New(),
 		BlockType: req.BlockType,
 		Data:      req.Data,
