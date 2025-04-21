@@ -4,36 +4,6 @@ definitions:
       error:
         type: string
     type: object
-  routes.BlockModelResponse:
-    properties:
-      blockType:
-        type: string
-      courseId:
-        type: string
-      data:
-        $ref: '#/definitions/routes.DataType'
-    required:
-    - blockType
-    - courseId
-    - data
-    type: object
-  routes.CreateBlockType:
-    properties:
-      blockType:
-        type: string
-      data:
-        $ref: '#/definitions/routes.DataType'
-    required:
-    - blockType
-    - data
-    type: object
-  routes.DataType:
-    properties:
-      format:
-        type: string
-      text:
-        type: string
-    type: object
   routes.LoginModel:
     properties:
       password:
@@ -68,6 +38,33 @@ definitions:
     - password
     - username
     type: object
+  routes.SwaggerBlockType:
+    description: For swagger use only. Use BlockType instead
+    properties:
+      blockType:
+        type: string
+      courseId:
+        type: string
+      data:
+        type: object
+      id:
+        type: string
+    required:
+    - blockType
+    - courseId
+    - data
+    - id
+    type: object
+  routes.SwaggerCreateBlockType:
+    description: For swagger use only. Use CreateBlockType instead
+    properties:
+      blockType:
+        type: string
+      data: {}
+    required:
+    - blockType
+    - data
+    type: object
   user.OutModel:
     properties:
       createdAt:
@@ -89,6 +86,40 @@ info:
   contact: {}
 paths:
   /block:
+    post:
+      consumes:
+      - application/json
+      description: Register a new account
+      parameters:
+      - description: Block payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/routes.SwaggerCreateBlockType'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/routes.SwaggerBlockType'
+        "400":
+          description: Invalid JSON
+          schema:
+            $ref: '#/definitions/apierr.ApiError'
+        "403":
+          description: No permission
+          schema:
+            $ref: '#/definitions/apierr.ApiError'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/apierr.ApiError'
+      summary: Register a new account
+      tags:
+      - blocks
+  /block/:id:
     delete:
       description: Will remove block from course but won't delete it from database
       parameters:
@@ -131,7 +162,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/routes.BlockModelResponse'
+            $ref: '#/definitions/routes.SwaggerBlockType'
         "400":
           description: Invalid ID
           schema:
@@ -162,14 +193,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/routes.CreateBlockType'
+          $ref: '#/definitions/routes.SwaggerCreateBlockType'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/routes.BlockModelResponse'
+            $ref: '#/definitions/routes.SwaggerBlockType'
         "400":
           description: Invalid ID
           schema:
@@ -183,39 +214,6 @@ paths:
           schema:
             $ref: '#/definitions/apierr.ApiError'
       summary: Modify block
-      tags:
-      - blocks
-    post:
-      consumes:
-      - application/json
-      description: Register a new account
-      parameters:
-      - description: Block payload
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/routes.CreateBlockType'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/routes.BlockModelResponse'
-        "400":
-          description: Invalid JSON
-          schema:
-            $ref: '#/definitions/apierr.ApiError'
-        "403":
-          description: No permission
-          schema:
-            $ref: '#/definitions/apierr.ApiError'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/apierr.ApiError'
-      summary: Register a new account
       tags:
       - blocks
   /login:

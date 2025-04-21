@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -9,27 +10,41 @@ import (
 	"github.com/google/uuid"
 )
 
-type DataType struct {
+type TextDataType struct {
 	Format string `json:"format" `
 	Text   string `json:"text"`
 }
 
-type BlockModel struct {
-	Id        uuid.UUID `json:"id" binding:"required"`
-	BlockType string    `json:"blockType" binding:"required"`
-	Data      DataType  `json:"data" binding:"required"`
-	CourseId  uuid.UUID `json:"courseId" binding:"required"`
+type QuizDataType struct {
+	QuestionQuantity int      `json:""`
+	Questions        []string `json:""`
+	Answers          []string `json:""`
 }
 
-type BlockModelResponse struct {
-	BlockType string    `json:"blockType" binding:"required"`
-	Data      DataType  `json:"data" binding:"required"`
-	CourseId  uuid.UUID `json:"courseId" binding:"required"`
+type BlockType struct {
+	Id        uuid.UUID       `json:"id" binding:"required"`
+	BlockType string          `json:"blockType" binding:"required"`
+	Data      json.RawMessage `json:"data" binding:"required"`
+	CourseId  uuid.UUID       `json:"courseId" binding:"required"`
+}
+
+// @description For swagger use only. Use BlockType instead
+type SwaggerBlockType struct {
+	Id        uuid.UUID   `json:"id" binding:"required"`
+	BlockType string      `json:"blockType" binding:"required"`
+	Data      interface{} `json:"data" binding:"required" swaggertype:"object"`
+	CourseId  uuid.UUID   `json:"courseId" binding:"required"`
 }
 
 type CreateBlockType struct {
-	BlockType string   `json:"blockType" binding:"required"`
-	Data      DataType `json:"data" binding:"required"`
+	BlockType string          `json:"blockType" binding:"required"`
+	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
+}
+
+// @description For swagger use only. Use CreateBlockType instead
+type SwaggerCreateBlockType struct {
+	BlockType string      `json:"blockType" binding:"required"`
+	Data      interface{} `json:"data" binding:"required"`
 }
 
 // @description Get block data
@@ -37,7 +52,7 @@ type CreateBlockType struct {
 // @tags blocks
 // @produce json
 // @param blockId path int true "Block ID"
-// @success 201 {object} BlockModelResponse
+// @success 201 {object} SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -49,12 +64,13 @@ func GetBlock(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, BlockModelResponse{
+	c.JSON(http.StatusOK, BlockType{
+		Id:        uuid.New(),
 		BlockType: "text",
-		Data: DataType{
-			Format: "markdown",
-			Text:   "Mock text lmao",
-		},
+		Data: json.RawMessage(`{
+			format:"markdown",
+			text:"Mock text lmao"
+	}`),
 		CourseId: uuid.New(),
 	})
 }
@@ -64,8 +80,8 @@ func GetBlock(c *gin.Context) {
 // @tags blocks
 // @accept json
 // @produce json
-// @param request body CreateBlockType true "Block payload"
-// @success 201 {object} BlockModelResponse
+// @param request body SwaggerCreateBlockType true "Block payload"
+// @success 201 {object} SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -76,7 +92,8 @@ func CreateBlock(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
 		return
 	}
-	c.JSON(http.StatusCreated, BlockModelResponse{
+	c.JSON(http.StatusCreated, BlockType{
+		Id:        uuid.New(),
 		BlockType: createJson.BlockType,
 		Data:      createJson.Data,
 		CourseId:  uuid.New(),
@@ -89,8 +106,8 @@ func CreateBlock(c *gin.Context) {
 // @accept json
 // @produce json
 // @param blockId path int true "Block ID"
-// @param request body CreateBlockType true "Block payload"
-// @success 200 {object} BlockModelResponse
+// @param request body SwaggerCreateBlockType true "Block payload"
+// @success 200 {object} SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Parameter not found"
 // @failure 404 {object} apierr.ApiError "Block not found"
@@ -109,7 +126,8 @@ func PatchBlock(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, BlockModelResponse{
+	c.JSON(http.StatusOK, BlockType{
+		Id:        uuid.New(),
 		BlockType: req.BlockType,
 		Data:      req.Data,
 		CourseId:  uuid.New(),

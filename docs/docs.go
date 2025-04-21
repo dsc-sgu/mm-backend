@@ -16,6 +16,58 @@ const docTemplate = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/block": {
+            "post": {
+                "description": "Register a new account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "blocks"
+                ],
+                "summary": "Register a new account",
+                "parameters": [
+                    {
+                        "description": "Block payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/routes.SwaggerCreateBlockType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/routes.SwaggerBlockType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/block/:id": {
             "get": {
                 "description": "Get block data",
                 "produces": [
@@ -38,7 +90,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/routes.BlockModelResponse"
+                            "$ref": "#/definitions/routes.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -49,56 +101,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Block not found",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Register a new account",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "blocks"
-                ],
-                "summary": "Register a new account",
-                "parameters": [
-                    {
-                        "description": "Block payload",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/routes.CreateBlockType"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/routes.BlockModelResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid JSON",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    },
-                    "403": {
-                        "description": "No permission",
                         "schema": {
                             "$ref": "#/definitions/apierr.ApiError"
                         }
@@ -179,7 +181,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/routes.CreateBlockType"
+                            "$ref": "#/definitions/routes.SwaggerCreateBlockType"
                         }
                     }
                 ],
@@ -187,7 +189,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/routes.BlockModelResponse"
+                            "$ref": "#/definitions/routes.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -401,51 +403,6 @@ const docTemplate = `{
                 }
             }
         },
-        "routes.BlockModelResponse": {
-            "type": "object",
-            "required": [
-                "blockType",
-                "courseId",
-                "data"
-            ],
-            "properties": {
-                "blockType": {
-                    "type": "string"
-                },
-                "courseId": {
-                    "type": "string"
-                },
-                "data": {
-                    "$ref": "#/definitions/routes.DataType"
-                }
-            }
-        },
-        "routes.CreateBlockType": {
-            "type": "object",
-            "required": [
-                "blockType",
-                "data"
-            ],
-            "properties": {
-                "blockType": {
-                    "type": "string"
-                },
-                "data": {
-                    "$ref": "#/definitions/routes.DataType"
-                }
-            }
-        },
-        "routes.DataType": {
-            "type": "object",
-            "properties": {
-                "format": {
-                    "type": "string"
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
         "routes.LoginModel": {
             "type": "object",
             "required": [
@@ -494,6 +451,44 @@ const docTemplate = `{
                 "username": {
                     "type": "string"
                 }
+            }
+        },
+        "routes.SwaggerBlockType": {
+            "description": "For swagger use only. Use BlockType instead",
+            "type": "object",
+            "required": [
+                "blockType",
+                "courseId",
+                "data",
+                "id"
+            ],
+            "properties": {
+                "blockType": {
+                    "type": "string"
+                },
+                "courseId": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "routes.SwaggerCreateBlockType": {
+            "description": "For swagger use only. Use CreateBlockType instead",
+            "type": "object",
+            "required": [
+                "blockType",
+                "data"
+            ],
+            "properties": {
+                "blockType": {
+                    "type": "string"
+                },
+                "data": {}
             }
         },
         "user.OutModel": {
