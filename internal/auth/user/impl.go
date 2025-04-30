@@ -81,17 +81,17 @@ func (r *PGRepo) GetById(id uuid.UUID) (*Model, error) {
 	return &user, nil
 }
 
-const getByUsernameSql = `
+const getByEmailSql = `
 	SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
 	FROM users
-	WHERE username = $1
+	WHERE email = $1
 `
 
-func (r *PGRepo) GetByUsername(username string) (*Model, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByUsernameSql))
+func (r *PGRepo) GetByEmail(email string) (*Model, error) {
+	r.logger.Debug("Executing query", zap.String("query", getByEmailSql))
 
 	var user Model
-	err := r.db.GetContext(context.Background(), &user, getByUsernameSql, username)
+	err := r.db.GetContext(context.Background(), &user, getByEmailSql, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

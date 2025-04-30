@@ -16,7 +16,7 @@ import (
 // @tags blocks
 // @produce json
 // @param blockId path int true "Block ID"
-// @success 201 {object} SwaggerBlockType
+// @success 201 {object} dto.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -44,8 +44,8 @@ func GetBlock(c *gin.Context) {
 // @tags blocks
 // @accept json
 // @produce json
-// @param request body SwaggerCreateBlockType true "Block payload"
-// @success 201 {object} SwaggerBlockType
+// @param request body dto.SwaggerCreateBlockType true "Block payload"
+// @success 201 {object} dto.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -70,8 +70,8 @@ func CreateBlock(c *gin.Context) {
 // @accept json
 // @produce json
 // @param blockId path int true "Block ID"
-// @param request body SwaggerCreateBlockType true "Block payload"
-// @success 200 {object} SwaggerBlockType
+// @param request body dto.SwaggerCreateBlockType true "Block payload"
+// @success 200 {object} dto.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Parameter not found"
 // @failure 404 {object} apierr.ApiError "Block not found"

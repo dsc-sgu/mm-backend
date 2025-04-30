@@ -14,7 +14,7 @@ import (
 )
 
 type LoginModel struct {
-	Username string `json:"username" binding:"required"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -52,7 +52,7 @@ func Login(c *gin.Context, userRepo user.Repo,
 		return
 	}
 
-	user, err := userRepo.GetByUsername(loginJson.Username)
+	user, err := userRepo.GetByEmail(loginJson.Email)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
@@ -87,9 +87,7 @@ func Login(c *gin.Context, userRepo user.Repo,
 		cookieConfig.HttpOnly,
 	)
 
-	c.JSON(http.StatusCreated, gin.H{
-		"status": "OK",
-	})
+	c.JSON(http.StatusCreated, nil)
 }
 
 // @description Register a new account
@@ -122,14 +120,14 @@ func Register(c *gin.Context, userRepo user.Repo,
 		Role:      "USER",
 	}
 
-	u, err := userRepo.Create(&createUser)
+	_, err := userRepo.Create(&createUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
 		logger.Error(err.Error())
 		return
 	}
 
-	c.JSON(http.StatusCreated, mapUserToUserOut(u))
+	c.JSON(http.StatusCreated, nil)
 }
 
 // @description Logout from an account
@@ -165,9 +163,7 @@ func Logout(c *gin.Context, userRepo user.Repo,
 
 	c.SetCookie(session.COOKIE_NAME, "", -1, "/", "localhost", false, true)
 
-	c.JSON(http.StatusCreated, gin.H{
-		"status": "OK",
-	})
+	c.JSON(http.StatusCreated, nil)
 }
 
 // @description Get active session
@@ -205,12 +201,14 @@ func Session(c *gin.Context, userRepo user.Repo,
 
 func mapUserToUserOut(u *user.Model) *user.OutModel {
 	return &user.OutModel{
-		Id:        u.Id,
-		CreatedAt: u.CreatedAt,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		Username:  u.Username,
-		Email:     u.Email,
-		Role:      u.Role,
+		Id:         u.Id,
+		CreatedAt:  u.CreatedAt,
+		FirstName:  u.FirstName,
+		LastName:   u.LastName,
+		Patronymic: u.Patronymic,
+		Username:   u.Username,
+		Email:      u.Email,
+		Role:       u.Role,
+		AvatarUrl:  u.AvatarUrl,
 	}
 }
