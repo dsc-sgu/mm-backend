@@ -15,9 +15,11 @@ CREATE TABLE users (
     created_at TIMESTAMPTZ NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
+    patronymic TEXT NOT NULL,
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     role user_role NOT NULL,
+    avatar_url TEXT NOT NULL,
     password_hash BYTEA NOT NULL,
     password_salt BYTEA NOT NULL
 );
