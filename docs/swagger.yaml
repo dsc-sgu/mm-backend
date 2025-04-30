@@ -4,15 +4,42 @@ definitions:
       error:
         type: string
     type: object
-  routes.LoginModel:
+  dto.SwaggerBlockType:
+    description: For swagger use only. Use BlockType instead
     properties:
-      password:
+      blockType:
         type: string
-      username:
+      courseId:
+        type: string
+      data:
+        type: object
+      id:
         type: string
     required:
+    - blockType
+    - courseId
+    - data
+    - id
+    type: object
+  dto.SwaggerCreateBlockType:
+    description: For swagger use only. Use CreateBlockType instead
+    properties:
+      blockType:
+        type: string
+      data: {}
+    required:
+    - blockType
+    - data
+    type: object
+  routes.LoginModel:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
     - password
-    - username
     type: object
   routes.LoginSuccessResponse:
     properties:
@@ -38,35 +65,10 @@ definitions:
     - password
     - username
     type: object
-  routes.SwaggerBlockType:
-    description: For swagger use only. Use BlockType instead
-    properties:
-      blockType:
-        type: string
-      courseId:
-        type: string
-      data:
-        type: object
-      id:
-        type: string
-    required:
-    - blockType
-    - courseId
-    - data
-    - id
-    type: object
-  routes.SwaggerCreateBlockType:
-    description: For swagger use only. Use CreateBlockType instead
-    properties:
-      blockType:
-        type: string
-      data: {}
-    required:
-    - blockType
-    - data
-    type: object
   user.OutModel:
     properties:
+      avatarUrl:
+        type: string
       createdAt:
         type: string
       email:
@@ -77,6 +79,8 @@ definitions:
         type: string
       lastName:
         type: string
+      patronymic:
+        type: string
       role:
         type: string
       username:
@@ -85,7 +89,7 @@ definitions:
 info:
   contact: {}
 paths:
-  /block:
+  /blocks:
     post:
       consumes:
       - application/json
@@ -96,14 +100,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/routes.SwaggerCreateBlockType'
+          $ref: '#/definitions/dto.SwaggerCreateBlockType'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/routes.SwaggerBlockType'
+            $ref: '#/definitions/dto.SwaggerBlockType'
         "400":
           description: Invalid JSON
           schema:
@@ -119,7 +123,7 @@ paths:
       summary: Register a new account
       tags:
       - blocks
-  /block/:id:
+  /blocks/:id:
     delete:
       description: Will remove block from course but won't delete it from database
       parameters:
@@ -162,7 +166,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/routes.SwaggerBlockType'
+            $ref: '#/definitions/dto.SwaggerBlockType'
         "400":
           description: Invalid ID
           schema:
@@ -193,14 +197,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/routes.SwaggerCreateBlockType'
+          $ref: '#/definitions/dto.SwaggerCreateBlockType'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/routes.SwaggerBlockType'
+            $ref: '#/definitions/dto.SwaggerBlockType'
         "400":
           description: Invalid ID
           schema:

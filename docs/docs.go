@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/block": {
+        "/blocks": {
             "post": {
                 "description": "Register a new account",
                 "consumes": [
@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/routes.SwaggerCreateBlockType"
+                            "$ref": "#/definitions/dto.SwaggerCreateBlockType"
                         }
                     }
                 ],
@@ -43,7 +43,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/routes.SwaggerBlockType"
+                            "$ref": "#/definitions/dto.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -67,7 +67,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/block/:id": {
+        "/blocks/:id": {
             "get": {
                 "description": "Get block data",
                 "produces": [
@@ -90,7 +90,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/routes.SwaggerBlockType"
+                            "$ref": "#/definitions/dto.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -181,7 +181,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/routes.SwaggerCreateBlockType"
+                            "$ref": "#/definitions/dto.SwaggerCreateBlockType"
                         }
                     }
                 ],
@@ -189,7 +189,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/routes.SwaggerBlockType"
+                            "$ref": "#/definitions/dto.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -403,17 +403,55 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.SwaggerBlockType": {
+            "description": "For swagger use only. Use BlockType instead",
+            "type": "object",
+            "required": [
+                "blockType",
+                "courseId",
+                "data",
+                "id"
+            ],
+            "properties": {
+                "blockType": {
+                    "type": "string"
+                },
+                "courseId": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "object"
+                },
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SwaggerCreateBlockType": {
+            "description": "For swagger use only. Use CreateBlockType instead",
+            "type": "object",
+            "required": [
+                "blockType",
+                "data"
+            ],
+            "properties": {
+                "blockType": {
+                    "type": "string"
+                },
+                "data": {}
+            }
+        },
         "routes.LoginModel": {
             "type": "object",
             "required": [
-                "password",
-                "username"
+                "email",
+                "password"
             ],
             "properties": {
-                "password": {
+                "email": {
                     "type": "string"
                 },
-                "username": {
+                "password": {
                     "type": "string"
                 }
             }
@@ -453,47 +491,12 @@ const docTemplate = `{
                 }
             }
         },
-        "routes.SwaggerBlockType": {
-            "description": "For swagger use only. Use BlockType instead",
-            "type": "object",
-            "required": [
-                "blockType",
-                "courseId",
-                "data",
-                "id"
-            ],
-            "properties": {
-                "blockType": {
-                    "type": "string"
-                },
-                "courseId": {
-                    "type": "string"
-                },
-                "data": {
-                    "type": "object"
-                },
-                "id": {
-                    "type": "string"
-                }
-            }
-        },
-        "routes.SwaggerCreateBlockType": {
-            "description": "For swagger use only. Use CreateBlockType instead",
-            "type": "object",
-            "required": [
-                "blockType",
-                "data"
-            ],
-            "properties": {
-                "blockType": {
-                    "type": "string"
-                },
-                "data": {}
-            }
-        },
         "user.OutModel": {
             "type": "object",
             "properties": {
+                "avatarUrl": {
+                    "type": "string"
+                },
                 "createdAt": {
                     "type": "string"
                 },
@@ -507,6 +510,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "lastName": {
+                    "type": "string"
+                },
+                "patronymic": {
                     "type": "string"
                 },
                 "role": {
