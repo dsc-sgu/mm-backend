@@ -22,6 +22,7 @@ type BlockType struct {
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data" binding:"required"`
 	CourseId  uuid.UUID       `json:"courseId" binding:"required"`
+	Position  int             `json:"position" binding:"required"`
 }
 
 // @description For swagger use only. Use BlockType instead
