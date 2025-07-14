@@ -36,7 +36,8 @@ CREATE TABLE block (
     id uuid PRIMARY KEY,
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
-    course_id uuid NOT NULL -- REFERENCES course(id)
+    course_id uuid NOT NULL, -- REFERENCES course(id)
+    position integer NOT NULL
 );
 
 -- NOTE(mchernigin): for example "Programming languages"
