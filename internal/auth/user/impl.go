@@ -21,12 +21,13 @@ func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
 }
 
 const createUserSql = `
-	INSERT INTO users (first_name, last_name, username, email, role, password_hash, password_salt, created_at)
-	VALUES (:first_name, :last_name, :username, :email, :role, :password_hash, :password_salt, :created_at)
-	RETURNING id, created_at
+	INSERT INTO users (id, first_name, last_name, username, email, role, password_hash, password_salt, created_at)
+	VALUES (:id, :first_name, :last_name, :username, :email, :role, :password_hash, :password_salt, :created_at)
+	RETURNING created_at
 `
 
 func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
+	uuid := uuid.New()
 	passwordSalt, err := password.GenerateSalt()
 	if err != nil {
 		return nil, nil
@@ -36,6 +37,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 	r.logger.Debug("Executing query", zap.String("query", createUserSql))
 
 	newUser := Model{
+		Id:           uuid,
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
 		Username:     user.Username,
@@ -53,7 +55,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 	defer rows.Close()
 
 	if rows.Next() {
-		if err := rows.Scan(&newUser.Id, &newUser.CreatedAt); err != nil {
+		if err := rows.Scan(&newUser.CreatedAt); err != nil {
 			return nil, err
 		}
 	}

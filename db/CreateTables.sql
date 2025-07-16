@@ -11,7 +11,7 @@ CREATE TABLE unit_type (
 );
 
 CREATE TABLE users (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY,
     created_at TIMESTAMPTZ NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
