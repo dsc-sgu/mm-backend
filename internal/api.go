@@ -16,6 +16,7 @@ func SetupRoutes(
 	r *gin.RouterGroup,
 	userRepo user.Repo,
 	sessionRepo session.Repo,
+	handler routes.AttemptHandler,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 ) {
@@ -55,4 +56,19 @@ func SetupRoutes(
 		routes.DeleteBlock(ctx)
 	})
 
+	r.GET("/attempts/:id", func(ctx *gin.Context) {
+		handler.GetAttempt(ctx)
+	})
+
+	r.POST("/attempts", func(ctx *gin.Context) {
+		handler.CreateAttempt(ctx)
+	})
+
+	r.PATCH("/attempts/:id", func(ctx *gin.Context) {
+		handler.PatchAttempt(ctx)
+	})
+
+	r.DELETE("/attempts/:id", func(ctx *gin.Context) {
+		handler.DeleteAttempt(ctx)
+	})
 }
