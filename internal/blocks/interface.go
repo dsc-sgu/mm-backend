@@ -6,8 +6,9 @@ import (
 )
 
 type Repo interface {
-	Create(model *dto.CreateBlockType, courseId uuid.UUID) (*dto.BlockType, error)
+	Create(model *dto.CreateBlockType) (*dto.BlockType, error)
 	GetById(id uuid.UUID) (*dto.BlockType, error)
-	UpdateById(id uuid.UUID, update *dto.UpdateBlockType) (*dto.BlockType, error)
+	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*dto.BlockType, error)
+	UpdateById(update *dto.UpdateBlockType) (*dto.BlockType, error)
 	DeleteById(id uuid.UUID) error
 }

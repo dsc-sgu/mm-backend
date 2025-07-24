@@ -1,45 +1,60 @@
 package routes
 
 import (
-	"encoding/json"
-
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
-func GetBlock(c *gin.Context, m *dto.IdBlockModel) (*dto.BlockType, error) {
-	return &dto.BlockType{
-		Id:        uuid.New(),
-		BlockType: "text",
-		Data: json.RawMessage(`{
-			format:"markdown",
-			text:"Mock text lmao"
-	}`),
-		CourseId: uuid.New(),
-	}, nil
+func GetBlock(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	m *dto.IdModel,
+) (*dto.BlockType, error) {
+	return blockRepo.GetById(m.ID)
 }
 
-func CreateBlock(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
-	return &dto.BlockType{
-		Id:        uuid.New(),
-		BlockType: m.BlockType,
-		Data:      m.Data,
-		CourseId:  uuid.New(),
-	}, nil
-}
+func GetAllBlocks(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	m *dto.IdModel,
+) ([]*dto.BlockType, error) {
 
-func PatchBlock(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
-
-	return &dto.BlockType{
-		Id:        uuid.New(),
-		BlockType: m.BlockType,
-		Data:      m.Data,
-		CourseId:  uuid.New(),
-	}, nil
+	return blockRepo.GetAllBlocksByCourseId(m.ID)
 
 }
 
-func DeleteBlock(c *gin.Context, m *dto.IdBlockModel) (*struct{}, error) {
-	return &struct{}{}, nil
+func CreateBlock(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	m *dto.CreateBlockType,
+) (*dto.BlockType, error) {
+
+	createdBlock, err := blockRepo.Create(m)
+	if err != nil {
+		return nil, err
+	}
+
+	return createdBlock, nil
+
+}
+
+func PatchBlock(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	m *dto.UpdateBlockType,
+) (*dto.BlockType, error) {
+
+	return blockRepo.UpdateById(m)
+
+}
+
+func DeleteBlock(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	m *dto.IdModel,
+) (*struct{}, error) {
+
+	return &struct{}{}, blockRepo.DeleteById(m.ID)
+
 }
