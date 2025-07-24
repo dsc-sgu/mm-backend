@@ -20,17 +20,17 @@ func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
 }
 
 const createBlockSql = `
-    INSERT INTO blocks (block_type, data, course_id)
-    VALUES (:block_type, :data, :course_id)
+    INSERT INTO block (id, block_type, data, course_id, position)
+    VALUES (:id, :block_type, :data, :course_id, :position)
     RETURNING id
 `
 const nextPositionSql = `
     SELECT position
-    FROM blocks
-    WHERE courseId = $1
+    FROM block
+    WHERE course_id = $1
 `
 
-func (r *PGRepo) Create(block *dto.CreateBlockType, courseId uuid.UUID) (*dto.BlockType, error) {
+func (r *PGRepo) Create(RequestBlock *dto.CreateBlockType, courseId uuid.UUID) (*dto.BlockType, error) {
 
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
 
@@ -49,9 +49,11 @@ func (r *PGRepo) Create(block *dto.CreateBlockType, courseId uuid.UUID) (*dto.Bl
 	}
 
 	r.logger.Debug("Executing query", zap.String("query", createBlockSql))
+
 	newBlock := dto.BlockType{
-		BlockType: block.BlockType,
-		Data:      block.Data,
+		Id:        uuid.New(),
+		BlockType: RequestBlock.BlockType,
+		Data:      RequestBlock.Data,
 		CourseId:  courseId,
 		Position:  position,
 	}
@@ -67,12 +69,13 @@ func (r *PGRepo) Create(block *dto.CreateBlockType, courseId uuid.UUID) (*dto.Bl
 			return nil, err
 		}
 	}
+
 	return &newBlock, nil
 }
 
 const getByIdSql = `
-    SELECT id, block_type, data, course_id
-    FROM blocks
+    SELECT id, block_type, data, course_id, position
+    FROM block
     WHERE id = $1
 `
 
@@ -90,10 +93,48 @@ func (r *PGRepo) GetById(id uuid.UUID) (*dto.BlockType, error) {
 	return &block, nil
 }
 
+const getAllByCourseIdSql = `
+    SELECT *
+    FROM block
+    WHERE course_id = $1
+`
+
+func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*dto.BlockType, error) {
+	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+
+	var block dto.BlockType
+	var blockList []*dto.BlockType
+	rows, err := r.db.Query(getAllByCourseIdSql, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		if err := rows.Scan(
+			&block.Id,
+			&block.BlockType,
+			&block.Data,
+			&block.CourseId,
+			&block.Position,
+		); err != nil {
+			return nil, err
+		}
+		blockList = append(blockList, &block)
+	}
+	if err = rows.Err(); err != nil {
+		return blockList, err
+	}
+	return blockList, nil
+}
+
 const updateByIdSql = `
-    UPDATE blocks
+    UPDATE block
     SET data = $1, position = $2
-    WHERE block_id = $3
+    WHERE id = $3
     RETURNING id, block_type, data, course_id, position
 `
 
@@ -125,7 +166,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *dto.UpdateBlockType) (*dto.Blo
 }
 
 const deleteByIdSql = `
-    DELETE FROM blocks
+    DELETE FROM block
     WHERE id = $1
 `
 
