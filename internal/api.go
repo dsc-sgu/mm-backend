@@ -5,6 +5,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/MergeMinds/mm-backend-go/internal/swagger"
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,7 @@ func SetupRoutes(
 	userRepo user.Repo,
 	sessionRepo session.Repo,
 	blockRepo blocks.Repo,
+	courseRepo courses.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 ) {
@@ -58,6 +60,26 @@ func SetupRoutes(
 
 	r.DELETE("/blocks/:id", func(ctx *gin.Context) {
 		routes.DeleteBlock(ctx, blockRepo, logger)
+	})
+
+	r.POST("/courses", func(ctx *gin.Context) {
+		routes.CreateCourse(ctx, sessionRepo, courseRepo, logger)
+	})
+
+	r.GET("/courses/:course_id", func(ctx *gin.Context) {
+		routes.GetCourse(ctx, courseRepo, logger)
+	})
+
+	r.GET("/courses", func(ctx *gin.Context) {
+		routes.GetCourselistPage(ctx, courseRepo, logger)
+	})
+
+	r.PATCH("/courses/:course_id", func(ctx *gin.Context) {
+		routes.PatchCourse(ctx, courseRepo, logger)
+	})
+
+	r.DELETE("/courses/:course_id", func(ctx *gin.Context) {
+		routes.DeleteCourse(ctx, courseRepo, logger)
 	})
 
 }
