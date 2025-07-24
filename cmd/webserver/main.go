@@ -14,6 +14,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/config"
 	"github.com/MergeMinds/mm-backend-go/internal/cors"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
@@ -90,9 +91,10 @@ func main() {
 
 	userRepo := user.NewPGRepo(dbConn, logger)
 	sessionRepo := session.NewRedisRepo(redisClient, logger)
+	blockRepo := blocks.NewPGRepo(dbConn, logger)
 
 	v1 := r.Group("api/v1")
-	api.SetupRoutes(v1, userRepo, sessionRepo, logger, cookieConfig)
+	api.SetupRoutes(v1, userRepo, sessionRepo, blockRepo, logger, cookieConfig)
 
 	server := &http.Server{
 		Handler: r,
