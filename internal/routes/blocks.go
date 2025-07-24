@@ -9,7 +9,7 @@ import (
 func GetBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *dto.IdModel,
+	m *dto.BlockIDMODEL,
 ) (*dto.BlockType, error) {
 	return blockRepo.GetById(m.ID)
 }
@@ -17,7 +17,7 @@ func GetBlock(
 func GetAllBlocks(
 	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *dto.IdModel,
+	m *dto.CourseIDModel,
 ) ([]*dto.BlockType, error) {
 
 	return blockRepo.GetAllBlocksByCourseId(m.ID)
@@ -52,7 +52,7 @@ func PatchBlock(
 func DeleteBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *dto.IdModel,
+	m *dto.BlockIDMODEL,
 ) (*struct{}, error) {
 
 	return &struct{}{}, blockRepo.DeleteById(m.ID)
