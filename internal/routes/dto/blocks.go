@@ -34,7 +34,7 @@ type SwaggerBlockType struct {
 }
 
 type CreateBlockType struct {
-	ID        uuid.UUID       `path:"id" validate:"required"`
+	CourseIDModel
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
 }
@@ -45,18 +45,22 @@ type SwaggerCreateBlockType struct {
 	Data      interface{} `json:"data" binding:"required"`
 }
 
-type IdModel struct {
-	ID uuid.UUID `path:"id" validate:"required"`
+type BlockIDMODEL struct {
+	ID uuid.UUID `path:"block_id" validate:"required"`
+}
+
+type CourseIDModel struct {
+	ID uuid.UUID `path:"course_id" validate:"required"`
 }
 type UpdateBlockType struct {
-	IdModel
+	BlockIDMODEL
 	Data     json.RawMessage `json:"data" swaggertype:"object"`
 	Position int             `json:"position"`
 }
 
 type DeleteBlockFromCourse struct {
-	courseID uuid.UUID `path:"course_id" validate:"required"`
-	blockID  uuid.UUID `path:"block_id" validate:"required"`
+	CourseIDModel
+	BlockIDMODEL
 }
 
 // @description For swagger use only. Use UpdateBlockType instead
