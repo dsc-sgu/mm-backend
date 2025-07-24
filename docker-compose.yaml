@@ -84,6 +84,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    ports:
+      - "5432:5432"
     env_file:
       - .env
 
