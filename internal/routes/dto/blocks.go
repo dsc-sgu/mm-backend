@@ -18,23 +18,23 @@ type QuizDataType struct {
 }
 
 type BlockType struct {
-	Id        uuid.UUID       `json:"id" binding:"required"`
-	BlockType string          `json:"blockType" binding:"required"`
-	Data      json.RawMessage `json:"data" binding:"required"`
-	CourseId  uuid.UUID       `json:"courseId" binding:"required"`
-	Position  int             `json:"position" binding:"required"`
+	Id        uuid.UUID       `json:"id" db:"id" binding:"required"`
+	BlockType string          `json:"blockType" db:"block_type" binding:"required"`
+	Data      json.RawMessage `json:"data" db:"data" binding:"required"`
+	CourseId  uuid.UUID       `json:"courseId" db:"course_id" binding:"required"`
+	Position  int             `json:"position" db:"position" binding:"required"`
 }
 
 // @description For swagger use only. Use BlockType instead
 type SwaggerBlockType struct {
-	Id        uuid.UUID   `json:"id" binding:"required"`
+	ID        uuid.UUID   `json:"id" binding:"required"`
 	BlockType string      `json:"blockType" binding:"required"`
 	Data      interface{} `json:"data" binding:"required" swaggertype:"object"`
 	CourseId  uuid.UUID   `json:"courseId" binding:"required"`
 }
 
 type CreateBlockType struct {
-	IdBlockModel
+	ID        uuid.UUID       `path:"id" validate:"required"`
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
 }
@@ -45,6 +45,22 @@ type SwaggerCreateBlockType struct {
 	Data      interface{} `json:"data" binding:"required"`
 }
 
-type IdBlockModel struct {
-	ID *uint32 `path:"id" validate:"required"`
+type IdModel struct {
+	ID uuid.UUID `path:"id" validate:"required"`
+}
+type UpdateBlockType struct {
+	IdModel
+	Data     json.RawMessage `json:"data" swaggertype:"object"`
+	Position int             `json:"position"`
+}
+
+type DeleteBlockFromCourse struct {
+	courseID uuid.UUID `path:"course_id" validate:"required"`
+	blockID  uuid.UUID `path:"block_id" validate:"required"`
+}
+
+// @description For swagger use only. Use UpdateBlockType instead
+type SwaggerUpdateBlockType struct {
+	Data     interface{} `json:"data"`
+	Position int         `json:"position"`
 }

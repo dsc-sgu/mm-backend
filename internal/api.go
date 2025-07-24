@@ -5,6 +5,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ func SetupRoutes(
 	r *fizz.RouterGroup,
 	userRepo user.Repo,
 	sessionRepo session.Repo,
+	blockRepo blocks.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 ) {
@@ -73,8 +75,8 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.IdBlockModel) (*dto.BlockType, error) {
-			return routes.GetBlock(c, m)
+		tonic.Handler(func(c *gin.Context, m *dto.IdModel) (*dto.BlockType, error) {
+			return routes.GetBlock(c, blockRepo, m)
 		}, 201))
 
 	r.POST("/blocks", []fizz.OperationOption{
@@ -85,7 +87,7 @@ func SetupRoutes(
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
 		tonic.Handler(func(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
-			return routes.CreateBlock(c, m)
+			return routes.CreateBlock(c, blockRepo, m)
 		}, 201))
 
 	r.PATCH("/blocks/:id", []fizz.OperationOption{
@@ -95,18 +97,50 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
+		tonic.Handler(func(c *gin.Context, m *dto.UpdateBlockType) (*dto.BlockType, error) {
+			return routes.PatchBlock(c, blockRepo, m)
+		}, 200))
+
+	r.GET("/courses/:id/blocks", []fizz.OperationOption{
+		fizz.Summary("Получить блоки, связанные с курсом"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *dto.IdModel) ([]*dto.BlockType, error) {
+			return routes.GetAllBlocks(c, blockRepo, m)
+		}, 200))
+	r.POST("/courses/:id/blocks", []fizz.OperationOption{
+		fizz.Summary("Добавить блок в курс"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
 		tonic.Handler(func(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
-			return routes.PatchBlock(c, m)
+			return routes.CreateBlock(c, blockRepo, m)
 		}, 200))
 
 	r.DELETE("/blocks/:id", []fizz.OperationOption{
+		fizz.Summary("Удалить блок из курса"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *dto.IdModel) (*struct{}, error) {
+			return routes.DeleteBlock(c, blockRepo, m)
+		}, 200))
+
+	r.DELETE("/courses/:course_id:blocks/:block_id", []fizz.OperationOption{
 		fizz.Summary("Удалить блок"),
 		fizz.Description("Удаление блока из курса (не из базы)"),
 		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.IdBlockModel) (*struct{}, error) {
-			return routes.DeleteBlock(c, m)
+		tonic.Handler(func(c *gin.Context, m *dto.DeleteBlockFromCourse) (*struct{}, error) {
+			return routes.UnlinkBlock(c, blockRepo, m)
 		}, 204))
 }
