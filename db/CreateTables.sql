@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
 -- NOTE(nrydanov): Need to think of other types together
-CREATE TYPE block_type AS ENUM ('task', 'markdown');
+CREATE TYPE block_type AS ENUM ('task', 'text');
 
 CREATE TABLE unit_type (
     id uuid PRIMARY KEY,
