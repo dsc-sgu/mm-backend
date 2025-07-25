@@ -45,6 +45,7 @@ type SwaggerCreateBlockType struct {
 }
 
 type UpdateBlockType struct {
+	CourseId uuid.UUID       `json:"courseId" db:"course_id" binding:"required"`
 	Data     json.RawMessage `json:"data" swaggertype:"object"`
 	Position int             `json:"position"`
 }
