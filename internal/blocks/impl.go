@@ -134,8 +134,8 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
 
 const updateByIdSql = `
     UPDATE block
-    SET data = $1, position = $2
-    WHERE id = $3
+    SET course_id = $1, data = $2, position = $3
+    WHERE id = $4
     RETURNING id, block_type, data, course_id, position
 `
 
@@ -144,9 +144,10 @@ func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
 
 	row := r.db.QueryRow(
 		updateByIdSql,
+		update.CourseID.ID,
 		update.Data,
 		update.Position,
-		update.ID,
+		update.BlockID.ID,
 	)
 
 	var block BlockType

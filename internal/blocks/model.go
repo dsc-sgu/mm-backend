@@ -38,6 +38,7 @@ type BlockID struct {
 
 type UpdateBlockType struct {
 	BlockID
+	courses.CourseID
 	Data     json.RawMessage `json:"data" swaggertype:"object"`
 	Position int             `json:"position"`
 }

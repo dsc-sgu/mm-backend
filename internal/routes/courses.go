@@ -104,6 +104,9 @@ func DeleteCourse(
 	for _, block := range linkedBlocks {
 
 		updatedBlock := blocks.UpdateBlockType{
+			CourseID: courses.CourseID{
+				ID: uuid.Nil,
+			},
 			Data:     block.Data,
 			Position: block.Position,
 		}
