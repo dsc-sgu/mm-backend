@@ -46,12 +46,12 @@ func GetBlock(
 // @summary Get All block data
 // @tags blocks
 // @produce json
-// @param blockId path int true "Block ID"
+// @param courseId path int true "Course ID"
 // @success 201 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /courses/:course_id/blocks [GET]
+// @router /courses/{course_id}/blocks [GET]
 func GetAllBlocks(
 	c *gin.Context,
 	blockRepo blocks.Repo,
@@ -79,13 +79,13 @@ func GetAllBlocks(
 // @tags blocks
 // @accept json
 // @produce json
-// @param courseId path int true "Block ID"
+// @param courseId path int true "Course ID"
 // @param request body blocks.SwaggerCreateBlockType true "Block payload"
 // @success 201 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router courses/:course_id/blocks [POST]
+// @router /courses/{course_id}/blocks [POST]
 func CreateBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,

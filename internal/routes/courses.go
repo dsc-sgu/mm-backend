@@ -17,12 +17,12 @@ import (
 // @tags courses
 // @accept json
 // @produce json
-// @param request body dto.CreateCourseType true "Course payload"
-// @success 201 {object} dto.CourseType
+// @param request body courses.CreateCourseType true "Course payload"
+// @success 201 {object} courses.CourseType
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router courses/ [POST]
+// @router /courses/ [POST]
 func CreateCourse(
 	c *gin.Context,
 	sessionRepo session.Repo,

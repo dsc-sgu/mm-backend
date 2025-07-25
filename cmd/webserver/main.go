@@ -19,6 +19,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/cors"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
+	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -94,9 +95,19 @@ func main() {
 	sessionRepo := session.NewRedisRepo(redisClient, logger)
 	blockRepo := blocks.NewPGRepo(dbConn, logger)
 	courseRepo := courses.NewPGRepo(dbConn, logger)
+	disciplineRepo := disciplines.NewPGRepo(dbConn, logger)
 
 	v1 := r.Group("api/v1")
-	api.SetupRoutes(v1, userRepo, sessionRepo, blockRepo, courseRepo, logger, cookieConfig)
+	api.SetupRoutes(
+		v1,
+		userRepo,
+		sessionRepo,
+		blockRepo,
+		courseRepo,
+		disciplineRepo,
+		logger,
+		cookieConfig,
+	)
 
 	server := &http.Server{
 		Handler: r,
