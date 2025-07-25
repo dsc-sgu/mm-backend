@@ -1,14 +1,13 @@
 package blocks
 
 import (
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/google/uuid"
 )
 
 type Repo interface {
-	Create(model *dto.CreateBlockType) (*dto.BlockType, error)
-	GetById(id uuid.UUID) (*dto.BlockType, error)
-	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*dto.BlockType, error)
-	UpdateById(update *dto.UpdateBlockType) (*dto.BlockType, error)
+	Create(model *CreateBlockType) (*BlockType, error)
+	GetById(id uuid.UUID) (*BlockType, error)
+	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*BlockType, error)
+	UpdateById(update *UpdateBlockType) (*BlockType, error)
 	DeleteById(id uuid.UUID) error
 }

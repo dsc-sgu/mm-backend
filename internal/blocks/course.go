@@ -1,4 +1,4 @@
-package dto
+package blocks
 
 type CoursePagination struct {
 	Limit  int `query:"limit"`

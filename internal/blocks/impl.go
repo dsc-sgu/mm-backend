@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
@@ -32,7 +31,7 @@ const nextPositionSql = `
     WHERE course_id = $1
 `
 
-func (r *PGRepo) Create(RequestBlock *dto.CreateBlockType) (*dto.BlockType, error) {
+func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
 
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
 
@@ -52,7 +51,7 @@ func (r *PGRepo) Create(RequestBlock *dto.CreateBlockType) (*dto.BlockType, erro
 
 	r.logger.Debug("Executing query", zap.String("query", createBlockSql))
 
-	newBlock := dto.BlockType{
+	newBlock := BlockType{
 		Id:        uuid.New(),
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
@@ -81,10 +80,10 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*dto.BlockType, error) {
+func (r *PGRepo) GetById(id uuid.UUID) (*BlockType, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var block dto.BlockType
+	var block BlockType
 	err := r.db.GetContext(context.Background(), &block, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -101,11 +100,11 @@ const getAllByCourseIdSql = `
     WHERE course_id = $1
 `
 
-func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*dto.BlockType, error) {
+func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var block dto.BlockType
-	var blockList []*dto.BlockType
+	var block BlockType
+	var blockList []*BlockType
 	rows, err := r.db.Query(getAllByCourseIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -140,7 +139,7 @@ const updateByIdSql = `
     RETURNING id, block_type, data, course_id, position
 `
 
-func (r *PGRepo) UpdateById(update *dto.UpdateBlockType) (*dto.BlockType, error) {
+func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
@@ -150,7 +149,7 @@ func (r *PGRepo) UpdateById(update *dto.UpdateBlockType) (*dto.BlockType, error)
 		update.ID,
 	)
 
-	var block dto.BlockType
+	var block BlockType
 
 	err := row.Scan(
 		&block.Id,
