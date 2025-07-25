@@ -60,6 +60,10 @@ func SetupRoutes(
 		routes.PatchBlock(ctx, blockRepo, logger)
 	})
 
+	r.DELETE("/courses/:course_id/blocks/:id", func(ctx *gin.Context) {
+		routes.UnlinkBlock(ctx, blockRepo, logger)
+	})
+
 	r.DELETE("/blocks/:id", func(ctx *gin.Context) {
 		routes.DeleteBlock(ctx, blockRepo, logger)
 	})

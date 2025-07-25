@@ -157,16 +157,17 @@ func PatchBlock(
 }
 
 // @description Will remove block from course but won't delete it from database
-// @summary Remove block
+// @summary Remove block from course
 // @tags blocks
 // @produce json
 // @param blockId path int true "Block ID"
+// @param courseId path int true "Course ID"
 // @success 204
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /blocks/:id [DELETE]
-func DeleteBlock(
+// @router /courses/{course_id}/blocks/:id [DELETE]
+func UnlinkBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,
 	logger *zap.Logger,
@@ -186,4 +187,36 @@ func DeleteBlock(
 	}
 
 	c.JSON(http.StatusOK, unlinkedBlock)
+}
+
+// @description Will permanently delete block
+// @summary Permanently delete block
+// @tags blocks
+// @produce json
+// @param blockId path int true "Block ID"
+// @success 204
+// @failure 400 {object} apierr.ApiError "Invalid ID"
+// @failure 404 {object} apierr.ApiError "Block not found"
+// @failure 500 {object} apierr.ApiError "Internal server error"
+// @router /blocks/:id [DELETE]
+func DeleteBlock(
+	c *gin.Context,
+	blockRepo blocks.Repo,
+	logger *zap.Logger,
+) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, apierr.New("INVALID_ID"))
+		return
+	}
+
+	err = blockRepo.DeleteById(id)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
+		logger.Error(err.Error())
+		return
+	}
+
+	c.JSON(http.StatusNoContent, nil)
 }

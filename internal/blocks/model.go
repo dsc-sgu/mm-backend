@@ -31,6 +31,7 @@ type SwaggerBlockType struct {
 	BlockType string      `json:"blockType" binding:"required"`
 	Data      interface{} `json:"data" binding:"required" swaggertype:"object"`
 	CourseId  uuid.UUID   `json:"courseId" binding:"required"`
+	Position  int         `json:"position" db:"position" binding:"required"`
 }
 
 type CreateBlockType struct {
