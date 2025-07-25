@@ -55,17 +55,6 @@ func GetCourse(
 	return course, nil
 }
 
-// @description From course list get page of limited number of courses with custom offset
-// @summary Get course list page
-// @tags courses
-// @produce json
-// @param limit query int true "Number of courses on the page"
-// @param offset query int true "List offset"
-// @success 201 {object} courses.CourseType
-// @failure 400 {object} apierr.ApiError "Invalid limit or offset"
-// @failure 404 {object} apierr.ApiError "Courses not found"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /courses [GET]
 func GetCourselistPage(
 	c *gin.Context,
 	courseRepo courses.Repo,
@@ -82,19 +71,6 @@ func GetCourselistPage(
 	return coursePage, nil
 }
 
-// @description Change single or multiple parameters of the course
-// @summary Modify course
-// @tags courses
-// @accept json
-// @produce json
-// @param courseId path int true "Course ID"
-// @param request body courses.UpdateCourseType true "Course payload"
-// @success 200 {object} courses.CourseType
-// @failure 400 {object} apierr.ApiError "Invalid ID"
-// @failure 404 {object} apierr.ApiError "Parameter not found"
-// @failure 404 {object} apierr.ApiError "Course not found"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /courses/:id [PATCH]
 func PatchCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,
@@ -111,16 +87,6 @@ func PatchCourse(
 	return updatedCourse, nil
 }
 
-// @description Will permanently delete course
-// @summary Delete course
-// @tags courses
-// @produce json
-// @param courseId path int true "Course ID"
-// @success 204
-// @failure 400 {object} apierr.ApiError "Invalid ID"
-// @failure 404 {object} apierr.ApiError "Course not found"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /courses/:id [DELETE]
 func DeleteCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,

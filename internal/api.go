@@ -7,6 +7,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
+	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/gin-gonic/gin"
 	"github.com/loopfz/gadgeto/tonic"
@@ -20,6 +21,7 @@ func SetupRoutes(
 	sessionRepo session.Repo,
 	blockRepo blocks.Repo,
 	courseRepo courses.Repo,
+	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 ) {
@@ -199,6 +201,50 @@ func SetupRoutes(
 	},
 		tonic.Handler(func(c *gin.Context, m *courses.CourseID) (*struct{}, error) {
 			return routes.DeleteCourse(c, courseRepo, logger, m)
+		}, 204))
+
+	r.POST("/disciplines", []fizz.OperationOption{
+		fizz.Summary("Создать дисциплину"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный JSON", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("403", "Нет прав", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *disciplines.CreateDisciplineType) (*disciplines.DisciplineType, error) {
+			return routes.CreateDiscipline(c, disciplineRepo, logger, m)
+		}, 201))
+
+	r.GET("/disciplines/:discipline_id", []fizz.OperationOption{
+		fizz.Summary("Получить дисциплину"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Дисциплина не найдена", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *disciplines.DisciplineID) (*disciplines.DisciplineType, error) {
+			return routes.GetDiscipline(c, disciplineRepo, logger, m)
+		}, 200))
+
+	r.PATCH("/disciplines/:discipline_id", []fizz.OperationOption{
+		fizz.Summary("Изменить дисциплину"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Дисциплина не найдена", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *disciplines.CreateDisciplineType) (*disciplines.DisciplineType, error) {
+			return routes.PatchDiscipline(c, disciplineRepo, logger, m)
+		}, 200))
+
+	r.DELETE("/disciplines/:discipline_id", []fizz.OperationOption{
+		fizz.Summary("Удалить дисциплину"),
+		fizz.Description(""),
+		fizz.Response("400", "Некорректный ID", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("404", "Дисциплина не найдена", apierr.ApiError{}, nil, apierr.ApiError{}),
+		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
+	},
+		tonic.Handler(func(c *gin.Context, m *disciplines.DisciplineID) (*struct{}, error) {
+			return routes.DeleteDiscipline(c, disciplineRepo, logger, m)
 		}, 204))
 
 }
