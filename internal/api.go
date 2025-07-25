@@ -81,7 +81,7 @@ func SetupRoutes(
 	})
 
 	r.DELETE("/courses/:course_id", func(ctx *gin.Context) {
-		routes.DeleteCourse(ctx, courseRepo, logger)
+		routes.DeleteCourse(ctx, courseRepo, blockRepo, logger)
 	})
 
 	r.POST("/disciplines", func(ctx *gin.Context) {

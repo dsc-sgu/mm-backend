@@ -6,6 +6,7 @@ import (
 
 	"github.com/MergeMinds/mm-backend-go/internal/apierr"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -191,18 +192,36 @@ func PatchCourse(
 func DeleteCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,
+	blockRepo blocks.Repo,
 	logger *zap.Logger,
 ) {
-
-	//If course is deleted it might possible have
-	//linked blocks that should be detached.
-
-	//TODO: implement block detaching logic
 
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, apierr.New("INVALID_ID"))
 		return
+	}
+
+	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
+		logger.Error(err.Error())
+		return
+	}
+
+	for _, block := range linkedBlocks {
+
+		updatedBlock := blocks.UpdateBlockType{
+			CourseId: uuid.Nil,
+			Data:     block.Data,
+			Position: block.Position,
+		}
+		_, err := blockRepo.UpdateById(block.Id, &updatedBlock)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, apierr.InternalServer)
+			logger.Error(err.Error())
+			return
+		}
 	}
 
 	err = courseRepo.DeleteById(id)
