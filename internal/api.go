@@ -132,7 +132,7 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *blocks.BlockID) (*blocks.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.BlockID) (*struct{}, error) {
 			return routes.DeleteBlock(c, blockRepo, m)
 		}, 200))
 

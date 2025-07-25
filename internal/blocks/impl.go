@@ -29,6 +29,7 @@ const nextPositionSql = `
     SELECT position
     FROM block
     WHERE course_id = $1
+	ORDER BY position ASC
 `
 
 func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
@@ -56,7 +57,7 @@ func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
 		CourseId:  RequestBlock.ID,
-		Position:  position,
+		Position:  position + 1,
 	}
 
 	rows, err := r.db.NamedQuery(createBlockSql, newBlock)
