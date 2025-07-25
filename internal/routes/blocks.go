@@ -177,7 +177,7 @@ func DeleteBlock(
 		return
 	}
 
-	err = blockRepo.DeleteById(id)
+	unlinkedBlock, err := blockRepo.UnlinkFromCourseById(id)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
@@ -185,5 +185,5 @@ func DeleteBlock(
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	c.JSON(http.StatusOK, unlinkedBlock)
 }
