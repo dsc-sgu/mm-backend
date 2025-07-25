@@ -1,4 +1,4 @@
-package dto
+package blocks
 
 import (
 	"encoding/json"

@@ -5,7 +5,6 @@ import (
 
 	"github.com/MergeMinds/mm-backend-go/internal/apierr"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ import (
 // @tags blocks
 // @produce json
 // @param blockId path int true "Block ID"
-// @success 201 {object} dto.SwaggerBlockType
+// @success 201 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -48,7 +47,7 @@ func GetBlock(
 // @tags blocks
 // @produce json
 // @param blockId path int true "Block ID"
-// @success 201 {object} dto.SwaggerBlockType
+// @success 201 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Block not found"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -81,8 +80,8 @@ func GetAllBlocks(
 // @accept json
 // @produce json
 // @param courseId path int true "Block ID"
-// @param request body dto.SwaggerCreateBlockType true "Block payload"
-// @success 201 {object} dto.SwaggerBlockType
+// @param request body blocks.SwaggerCreateBlockType true "Block payload"
+// @success 201 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid JSON"
 // @failure 403 {object} apierr.ApiError "No permission"
 // @failure 500 {object} apierr.ApiError "Internal server error"
@@ -93,7 +92,7 @@ func CreateBlock(
 	logger *zap.Logger,
 
 ) {
-	var inputCreateBlock dto.CreateBlockType
+	var inputCreateBlock blocks.CreateBlockType
 	if err := c.ShouldBindBodyWithJSON(&inputCreateBlock); err != nil {
 		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
 		return
@@ -121,8 +120,8 @@ func CreateBlock(
 // @accept json
 // @produce json
 // @param blockId path int true "Block ID"
-// @param request body dto.SwaggerCreateBlockType true "Block payload"
-// @success 200 {object} dto.SwaggerBlockType
+// @param request body blocks.SwaggerCreateBlockType true "Block payload"
+// @success 200 {object} blocks.SwaggerBlockType
 // @failure 400 {object} apierr.ApiError "Invalid ID"
 // @failure 404 {object} apierr.ApiError "Parameter not found"
 // @failure 404 {object} apierr.ApiError "Block not found"
@@ -134,7 +133,7 @@ func PatchBlock(
 	logger *zap.Logger,
 ) {
 
-	var inputUpdateBlock dto.UpdateBlockType
+	var inputUpdateBlock blocks.UpdateBlockType
 	if err := c.ShouldBindBodyWithJSON(&inputUpdateBlock); err != nil {
 		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
 		return
