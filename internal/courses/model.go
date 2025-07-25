@@ -3,9 +3,12 @@ package courses
 import (
 	"time"
 
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/google/uuid"
 )
+
+type CourseID struct {
+	ID uuid.UUID `path:"course_id" validate:"required"`
+}
 
 type CourseType struct {
 	Id           uuid.UUID
@@ -21,7 +24,12 @@ type CreateCourseType struct {
 }
 
 type UpdateCourseType struct {
-	dto.CourseIDModel
+	CourseID
 	OwnerId uuid.UUID
 	Name    string
+}
+
+type CoursePagination struct {
+	Limit  int `query:"limit"`
+	Offset int `query:"offset"`
 }

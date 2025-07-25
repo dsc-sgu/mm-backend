@@ -3,6 +3,7 @@ package blocks
 import (
 	"encoding/json"
 
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +27,7 @@ type BlockType struct {
 }
 
 type CreateBlockType struct {
-	CourseID
+	courses.CourseID
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
 }
@@ -35,9 +36,6 @@ type BlockID struct {
 	ID uuid.UUID `path:"block_id" validate:"required"`
 }
 
-type CourseID struct {
-	ID uuid.UUID `path:"course_id" validate:"required"`
-}
 type UpdateBlockType struct {
 	BlockID
 	Data     json.RawMessage `json:"data" swaggertype:"object"`
@@ -45,6 +43,6 @@ type UpdateBlockType struct {
 }
 
 type DeleteBlockFromCourse struct {
-	CourseID
+	courses.CourseID
 	BlockID
 }

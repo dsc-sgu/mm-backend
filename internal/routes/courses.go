@@ -3,7 +3,6 @@ package routes
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -44,7 +43,7 @@ func GetCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m *dto.CourseIDModel,
+	m *courses.CourseID,
 ) (*courses.CourseType, error) {
 
 	course, err := courseRepo.GetById(m.ID)
@@ -71,7 +70,7 @@ func GetCourselistPage(
 	c *gin.Context,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m *dto.CoursePagination,
+	m *courses.CoursePagination,
 ) ([]*courses.CourseType, error) {
 
 	coursePage, err := courseRepo.GetCourselistPage(m.Limit, m.Offset)
@@ -126,7 +125,7 @@ func DeleteCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m *dto.CourseIDModel,
+	m *courses.CourseID,
 ) (*struct{}, error) {
 
 	//If course is deleted it might possible have

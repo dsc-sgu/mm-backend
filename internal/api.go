@@ -8,7 +8,6 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
-	"github.com/MergeMinds/mm-backend-go/internal/routes/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/loopfz/gadgeto/tonic"
 	"github.com/wI2L/fizz"
@@ -77,7 +76,7 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.BlockIDMODEL) (*dto.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.BlockID) (*blocks.BlockType, error) {
 			return routes.GetBlock(c, blockRepo, m)
 		}, 201))
 
@@ -88,7 +87,7 @@ func SetupRoutes(
 		fizz.Response("403", "Нет прав", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.CreateBlockType) (*blocks.BlockType, error) {
 			return routes.CreateBlock(c, blockRepo, m)
 		}, 201))
 
@@ -99,7 +98,7 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.UpdateBlockType) (*dto.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.UpdateBlockType) (*blocks.BlockType, error) {
 			return routes.PatchBlock(c, blockRepo, m)
 		}, 200))
 
@@ -110,7 +109,7 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CourseIDModel) ([]*dto.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *courses.CourseID) ([]*blocks.BlockType, error) {
 			return routes.GetAllBlocks(c, blockRepo, m)
 		}, 200))
 	r.POST("/courses/:course_id/blocks", []fizz.OperationOption{
@@ -120,7 +119,7 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CreateBlockType) (*dto.BlockType, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.CreateBlockType) (*blocks.BlockType, error) {
 			return routes.CreateBlock(c, blockRepo, m)
 		}, 200))
 
@@ -131,7 +130,7 @@ func SetupRoutes(
 		fizz.Response("404", "Параметр не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.BlockIDMODEL) (*struct{}, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.BlockID) (*blocks.BlockType, error) {
 			return routes.DeleteBlock(c, blockRepo, m)
 		}, 200))
 
@@ -142,7 +141,7 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.DeleteBlockFromCourse) (*struct{}, error) {
+		tonic.Handler(func(c *gin.Context, m *blocks.DeleteBlockFromCourse) (*struct{}, error) {
 			// return routes.UnlinkBlock(c, blockRepo, m)
 			return &struct{}{}, nil
 		}, 204))
@@ -165,7 +164,7 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CourseIDModel) (*courses.CourseType, error) {
+		tonic.Handler(func(c *gin.Context, m *courses.CourseID) (*courses.CourseType, error) {
 			return routes.GetCourse(c, courseRepo, logger, m)
 		}, 204))
 
@@ -176,7 +175,7 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CoursePagination) ([]*courses.CourseType, error) {
+		tonic.Handler(func(c *gin.Context, m *courses.CoursePagination) ([]*courses.CourseType, error) {
 			return routes.GetCourselistPage(c, courseRepo, logger, m)
 		}, 204))
 
@@ -198,7 +197,7 @@ func SetupRoutes(
 		fizz.Response("404", "Блок не найден", apierr.ApiError{}, nil, apierr.ApiError{}),
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
-		tonic.Handler(func(c *gin.Context, m *dto.CourseIDModel) (*struct{}, error) {
+		tonic.Handler(func(c *gin.Context, m *courses.CourseID) (*struct{}, error) {
 			return routes.DeleteCourse(c, courseRepo, logger, m)
 		}, 204))
 

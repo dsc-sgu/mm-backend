@@ -1,6 +1,0 @@
-package blocks
-
-type CoursePagination struct {
-	Limit  int `query:"limit"`
-	Offset int `query:"offset"`
-}
