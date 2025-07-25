@@ -15,58 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/blocks": {
-            "post": {
-                "description": "Register a new account",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "blocks"
-                ],
-                "summary": "Register a new account",
-                "parameters": [
-                    {
-                        "description": "Block payload",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.SwaggerCreateBlockType"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/dto.SwaggerBlockType"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid JSON",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    },
-                    "403": {
-                        "description": "No permission",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/apierr.ApiError"
-                        }
-                    }
-                }
-            }
-        },
         "/blocks/:id": {
             "get": {
                 "description": "Get block data",
@@ -90,7 +38,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/dto.SwaggerBlockType"
+                            "$ref": "#/definitions/blocks.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -181,7 +129,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.SwaggerCreateBlockType"
+                            "$ref": "#/definitions/blocks.SwaggerCreateBlockType"
                         }
                     }
                 ],
@@ -189,7 +137,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.SwaggerBlockType"
+                            "$ref": "#/definitions/blocks.SwaggerBlockType"
                         }
                     },
                     "400": {
@@ -200,6 +148,560 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Block not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/courses": {
+            "get": {
+                "description": "From course list get page of limited number of courses with custom offset",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course list page",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Number of courses on the page",
+                        "name": "limit",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "List offset",
+                        "name": "offset",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/courses.CourseType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid limit or offset",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Courses not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/courses/": {
+            "post": {
+                "description": "Create new course",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Create new course",
+                "parameters": [
+                    {
+                        "description": "Course payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/courses.CreateCourseType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/courses.CourseType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/courses/:id": {
+            "get": {
+                "description": "Get course data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Get course data",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Course ID",
+                        "name": "courseId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/courses.CourseType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Course not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Will permanently delete course",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Delete course",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Course ID",
+                        "name": "courseId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Course not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Change single or multiple parameters of the course",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "courses"
+                ],
+                "summary": "Modify course",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Course ID",
+                        "name": "courseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Course payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/courses.UpdateCourseType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/courses.CourseType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Course not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/courses/{course_id}/blocks": {
+            "get": {
+                "description": "Get all blocks related to course",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "blocks"
+                ],
+                "summary": "Get All block data",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Course ID",
+                        "name": "courseId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/blocks.SwaggerBlockType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Block not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Add new block",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "blocks"
+                ],
+                "summary": "Add new block",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Course ID",
+                        "name": "courseId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Block payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/blocks.SwaggerCreateBlockType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/blocks.SwaggerBlockType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/disciplines/": {
+            "post": {
+                "description": "Create new discipline",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "disciplines"
+                ],
+                "summary": "Create new discipline",
+                "parameters": [
+                    {
+                        "description": "Discipline payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/disciplines.CreateDisciplineType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/disciplines.DisciplineType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "403": {
+                        "description": "No permission",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            }
+        },
+        "/disciplines/:id": {
+            "get": {
+                "description": "Get discipline data",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "disciplines"
+                ],
+                "summary": "Get discipline data",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Discipline ID",
+                        "name": "disciplineId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/disciplines.DisciplineType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Discipline not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Will permanently delete discipline",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "disciplines"
+                ],
+                "summary": "Delete discipline",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Discipline ID",
+                        "name": "disciplineId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Discipline not found",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Change single or multiple parameters of the discipline",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "disciplines"
+                ],
+                "summary": "Modify discipline",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Discipline ID",
+                        "name": "disciplineId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Discipline payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/disciplines.CreateDisciplineType"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/disciplines.DisciplineType"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/apierr.ApiError"
+                        }
+                    },
+                    "404": {
+                        "description": "Discipline not found",
                         "schema": {
                             "$ref": "#/definitions/apierr.ApiError"
                         }
@@ -403,7 +905,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SwaggerBlockType": {
+        "blocks.SwaggerBlockType": {
             "description": "For swagger use only. Use BlockType instead",
             "type": "object",
             "required": [
@@ -427,7 +929,7 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SwaggerCreateBlockType": {
+        "blocks.SwaggerCreateBlockType": {
             "description": "For swagger use only. Use CreateBlockType instead",
             "type": "object",
             "required": [
@@ -439,6 +941,83 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "data": {}
+            }
+        },
+        "courses.CourseType": {
+            "type": "object",
+            "required": [
+                "createdAt",
+                "id",
+                "name",
+                "ownerId"
+            ],
+            "properties": {
+                "createdAt": {
+                    "type": "string"
+                },
+                "disciplineId": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ownerId": {
+                    "type": "string"
+                }
+            }
+        },
+        "courses.CreateCourseType": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "disciplineId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "courses.UpdateCourseType": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "ownerId": {
+                    "type": "string"
+                }
+            }
+        },
+        "disciplines.CreateDisciplineType": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "disciplines.DisciplineType": {
+            "type": "object",
+            "required": [
+                "id",
+                "name"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
             }
         },
         "routes.LoginModel": {
