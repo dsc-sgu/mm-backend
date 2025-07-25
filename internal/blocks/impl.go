@@ -102,7 +102,6 @@ const getAllByCourseIdSql = `
 func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var block BlockType
 	var blockList []*BlockType
 	rows, err := r.db.Query(getAllByCourseIdSql, id)
 	if err != nil {
@@ -114,6 +113,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
 	defer rows.Close()
 
 	for rows.Next() {
+		var block BlockType
 		if err := rows.Scan(
 			&block.Id,
 			&block.BlockType,
@@ -170,10 +170,11 @@ const UnlinkFromCourseByIdSql = `
 	UPDATE block
 	SET course_id = $1
 	WHERE id = $2
+	RETURNING id, block_type, data, course_id, position 
 `
 
 func (r *PGRepo) UnlinkFromCourseById(id uuid.UUID) (*BlockType, error) {
-	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+	r.logger.Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
 
 	row := r.db.QueryRow(
 		UnlinkFromCourseByIdSql,
