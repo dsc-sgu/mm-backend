@@ -19,6 +19,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/cors"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
+	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/MergeMinds/mm-backend-go/internal/swagger"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
@@ -95,12 +96,22 @@ func main() {
 	sessionRepo := session.NewRedisRepo(redisClient, logger)
 	blockRepo := blocks.NewPGRepo(dbConn, logger)
 	courseRepo := courses.NewPGRepo(dbConn, logger)
+	disciplineRepo := disciplines.NewPGRepo(dbConn, logger)
 
 	f := swagger.NewFizzEngine(config)
 	swagger.RegisterDocRoutes(f, config)
 
 	v1 := f.Group("", "Aboba", "Aboba2")
-	api.SetupRoutes(v1, userRepo, sessionRepo, blockRepo, courseRepo, logger, cookieConfig)
+	api.SetupRoutes(
+		v1,
+		userRepo,
+		sessionRepo,
+		blockRepo,
+		courseRepo,
+		disciplineRepo,
+		logger,
+		cookieConfig,
+	)
 
 	server := &http.Server{
 		Handler: f,
