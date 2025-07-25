@@ -166,6 +166,38 @@ func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
 	return &block, nil
 }
 
+const UnlinkFromCourseByIdSql = `
+	UPDATE block
+	SET course_id = $1
+	WHERE id = $2
+`
+
+func (r *PGRepo) UnlinkFromCourseById(id uuid.UUID) (*BlockType, error) {
+	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+
+	row := r.db.QueryRow(
+		UnlinkFromCourseByIdSql,
+		nil,
+		id,
+	)
+
+	var unlinkedBlock BlockType
+
+	err := row.Scan(
+		&unlinkedBlock.Id,
+		&unlinkedBlock.BlockType,
+		&unlinkedBlock.Data,
+		&unlinkedBlock.CourseId,
+		&unlinkedBlock.Position,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &unlinkedBlock, nil
+}
+
 const deleteByIdSql = `
     DELETE FROM block
     WHERE id = $1

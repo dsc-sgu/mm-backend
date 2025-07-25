@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/gin-gonic/gin"
 )
 
@@ -16,7 +17,7 @@ func GetBlock(
 func GetAllBlocks(
 	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *blocks.CourseID,
+	m *courses.CourseID,
 ) ([]*blocks.BlockType, error) {
 
 	return blockRepo.GetAllBlocksByCourseId(m.ID)
@@ -52,8 +53,9 @@ func DeleteBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,
 	m *blocks.BlockID,
-) (*struct{}, error) {
+) (*blocks.BlockType, error) {
 
-	return &struct{}{}, blockRepo.DeleteById(m.ID)
+	unlinkedBlock, err := blockRepo.UnlinkFromCourseById(m.ID)
 
+	return unlinkedBlock, err
 }
