@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -90,16 +91,29 @@ func PatchCourse(
 func DeleteCourse(
 	c *gin.Context,
 	courseRepo courses.Repo,
+	blockRepo blocks.Repo,
 	logger *zap.Logger,
 	m *courses.CourseID,
 ) (*struct{}, error) {
 
-	//If course is deleted it might possible have
-	//linked blocks that should be detached.
+	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(m.ID)
+	if err != nil {
+		return &struct{}{}, err
+	}
 
-	//TODO: implement block detaching logic
+	for _, block := range linkedBlocks {
 
-	err := courseRepo.DeleteById(m.ID)
+		updatedBlock := blocks.UpdateBlockType{
+			Data:     block.Data,
+			Position: block.Position,
+		}
+		_, err := blockRepo.UpdateById(&updatedBlock)
+		if err != nil {
+			return &struct{}{}, err
+		}
+	}
+
+	err = courseRepo.DeleteById(m.ID)
 
 	return &struct{}{}, err
 }

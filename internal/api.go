@@ -200,7 +200,7 @@ func SetupRoutes(
 		fizz.Response("500", "Внутренняя ошибка сервера", apierr.ApiError{}, nil, apierr.ApiError{}),
 	},
 		tonic.Handler(func(c *gin.Context, m *courses.CourseID) (*struct{}, error) {
-			return routes.DeleteCourse(c, courseRepo, logger, m)
+			return routes.DeleteCourse(c, courseRepo, blockRepo, logger, m)
 		}, 204))
 
 	r.POST("/disciplines", []fizz.OperationOption{
