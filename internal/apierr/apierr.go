@@ -1,5 +1,7 @@
 package apierr
 
+import "github.com/gin-gonic/gin"
+
 type ApiError struct {
 	Error string `json:"error"`
 }
@@ -38,4 +40,8 @@ var SessionExpired = ApiError{
 
 var UserNotFound = ApiError{
 	Error: "USER_NOT_FOUND",
+}
+
+func ErrorHook(c *gin.Context, err error) (int, any) {
+	return 400, err
 }

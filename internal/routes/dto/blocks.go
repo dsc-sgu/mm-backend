@@ -33,6 +33,7 @@ type SwaggerBlockType struct {
 }
 
 type CreateBlockType struct {
+	IdBlockModel
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
 }
@@ -41,4 +42,8 @@ type CreateBlockType struct {
 type SwaggerCreateBlockType struct {
 	BlockType string      `json:"blockType" binding:"required"`
 	Data      interface{} `json:"data" binding:"required"`
+}
+
+type IdBlockModel struct {
+	ID *uint32 `path:"id" validate:"required"`
 }
