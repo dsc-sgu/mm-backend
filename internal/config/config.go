@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 
 	"github.com/kelseyhightower/envconfig"
 )
@@ -21,18 +19,13 @@ type Config struct {
 }
 
 func LoadFromEnv() (*Config, error) {
-	var config_env Config
-	err := envconfig.Process("", &config_env)
+	var config Config
+	err := envconfig.Process("", &config)
 
 	if err != nil {
 		fmt.Println("Failed to process env vars: %v", err)
-	}
-
-	sessionCookieSecure, err := strconv.ParseBool(os.Getenv("SESSION_COOKIE_SECURE"))
-	config_env.SessionCookieSecure = sessionCookieSecure
-	if err != nil {
 		return nil, err
 	}
 
-	return &config_env, nil
+	return &config, nil
 }
