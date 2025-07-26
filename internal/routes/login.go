@@ -1,9 +1,8 @@
 package routes
 
 import (
-	"net/http"
+	"errors"
 
-	"github.com/MergeMinds/mm-backend-go/internal/apierr"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
@@ -30,51 +29,28 @@ type LoginSuccessResponse struct {
 	Status string `json:"status"`
 }
 
-// @description Login into account
-// @summary Login into account
-// @tags auth
-// @accept json
-// @produce json
-// @param request body LoginModel true "Login data for some shit"
-// @success 201 {object} LoginSuccessResponse
-// @failure 400 {object} apierr.ApiError "Invalid JsOn"
-// @failure 401 {object} apierr.ApiError "Wrong credentials"
-// @failure 404 {object} apierr.ApiError "User not found"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /login [POST]
 func Login(c *gin.Context, userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig) {
-	var loginJson LoginModel
-	if err := c.ShouldBindBodyWithJSON(&loginJson); err != nil {
-		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
-		return
-	}
+	cookieConfig *cookie.CookieConfig, loginJson *LoginModel) (*struct{}, error) {
 
 	user, err := userRepo.GetByEmail(loginJson.Email)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
-		logger.Error(err.Error())
-		return
+		return nil, err
 	}
 
 	if user == nil {
-		c.JSON(http.StatusNotFound, apierr.NotFound)
-		return
+		return nil, errors.New("user not found")
 	}
 
 	if !password.Valid(loginJson.Password, user.PasswordHash, user.PasswordSalt) {
-		c.JSON(http.StatusUnauthorized, apierr.WrongCredentials)
-		return
+		return nil, errors.New("wrong credentials")
 	}
 
 	s, err := sessionRepo.Create(user.Id, cookieConfig.SessionLifetime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
-		logger.Error(err.Error())
-		return
+		return nil, err
 	}
 
 	c.SetCookie(
@@ -87,29 +63,13 @@ func Login(c *gin.Context, userRepo user.Repo,
 		cookieConfig.HttpOnly,
 	)
 
-	c.JSON(http.StatusCreated, nil)
+	return nil, nil
 }
 
-// @description Register a new account
-// @summary Register a new account
-// @tags auth
-// @accept json
-// @produce json
-// @param request body RegisterModel true "Register payload"
-// @success 201 {object} user.OutModel
-// @failure 400 {object} apierr.ApiError "Invalid JSON"
-// @failure 401 {object} apierr.ApiError "Wrong credentials"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /register [POST]
 func Register(c *gin.Context, userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig) {
-	var registerJson RegisterModel
-	if err := c.ShouldBindBodyWithJSON(&registerJson); err != nil {
-		c.JSON(http.StatusBadRequest, apierr.InvalidJSON)
-		return
-	}
+	cookieConfig *cookie.CookieConfig, registerJson *RegisterModel) (*struct{}, error) {
 
 	createUser := user.CreateModel{
 		FirstName: registerJson.FirstName,
@@ -122,48 +82,34 @@ func Register(c *gin.Context, userRepo user.Repo,
 
 	_, err := userRepo.Create(&createUser)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
-		logger.Error(err.Error())
-		return
+		return nil, err
 	}
 
-	c.JSON(http.StatusCreated, nil)
+	return &struct{}{}, nil
 }
 
-// @description Logout from an account
-// @summary Logout from an account
-// @tags auth
-// @produce json
-// @success 201 {object} LoginSuccessResponse
-// @failure 401 {object} apierr.ApiError "Cookie not exists"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /logout [POST]
 func Logout(c *gin.Context, userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig) {
+	cookieConfig *cookie.CookieConfig) (*struct{}, error) {
 	cookie, err := c.Cookie(session.COOKIE_NAME)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, apierr.CookieNotExists)
-		return
+		return nil, err
 	}
 
 	cookieIdUUID, err := uuid.Parse(cookie)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, apierr.CookieNotExists)
-		return
+		return nil, err
 	}
 
 	err = sessionRepo.DeleteById(cookieIdUUID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
-		logger.Error(err.Error())
-		return
+		return nil, err
 	}
 
 	c.SetCookie(session.COOKIE_NAME, "", -1, "/", "localhost", false, true)
 
-	c.JSON(http.StatusCreated, nil)
+	return &struct{}{}, nil
 }
 
 // @description Get active session
@@ -186,17 +132,13 @@ func Session(c *gin.Context, userRepo user.Repo,
 
 	u, err := userRepo.GetById(session.UserId)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, apierr.InternalServer)
-		logger.Error(err.Error())
 		return
 	}
 
 	if u == nil {
-		c.JSON(http.StatusUnauthorized, apierr.UserNotFound)
 		return
 	}
 
-	c.JSON(http.StatusOK, mapUserToUserOut(u))
 }
 
 func mapUserToUserOut(u *user.Model) *user.OutModel {

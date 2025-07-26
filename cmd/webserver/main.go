@@ -17,6 +17,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/config"
 	"github.com/MergeMinds/mm-backend-go/internal/cors"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
+	"github.com/MergeMinds/mm-backend-go/internal/swagger"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/jmoiron/sqlx"
@@ -91,11 +92,14 @@ func main() {
 	userRepo := user.NewPGRepo(dbConn, logger)
 	sessionRepo := session.NewRedisRepo(redisClient, logger)
 
-	v1 := r.Group("api/v1")
+	f := swagger.NewFizzEngine(config)
+	swagger.RegisterDocRoutes(f, config)
+
+	v1 := f.Group("", "Aboba", "Aboba2")
 	api.SetupRoutes(v1, userRepo, sessionRepo, logger, cookieConfig)
 
 	server := &http.Server{
-		Handler: r,
+		Handler: f,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
