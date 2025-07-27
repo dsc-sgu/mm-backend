@@ -57,7 +57,7 @@ func GetPaginatedCourses(
 	if err != nil {
 		return nil, err
 	}
-	return courseRepo.GetCourselistPage(body.Limit, body.Offset)
+	return courseRepo.GetPaginatedCourses(body.Limit, body.Offset)
 }
 
 func GetCourse(
