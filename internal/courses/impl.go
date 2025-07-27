@@ -78,8 +78,8 @@ const getAllByCourseIdSql = `
     LIMIT :limit OFFSET :offset
 `
 
-func (r *PGRepo) GetCourselistPage(limit int, offset int) ([]*Course, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
+	r.logger.Debug("Executing query", zap.String("query", getAllByCourseIdSql))
 
 	var course Course
 	var courseList []*Course
