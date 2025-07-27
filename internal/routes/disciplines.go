@@ -34,7 +34,7 @@ func GetDiscipline(
 func PatchDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
+	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
 	body, err := ctx.Body()
 	if err != nil {

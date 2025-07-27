@@ -129,7 +129,7 @@ func SetupRoutes(
 	fuego.Patch(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(m fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
+		func(m fuego.ContextWithBody[disciplines.PatchDiscipline]) (*disciplines.Discipline, error) {
 			return routes.PatchDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Update existing discipline"),
