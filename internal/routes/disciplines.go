@@ -9,9 +9,9 @@ import (
 func CreateDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.CreateDiscipline],
+	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
 ) (*disciplines.Discipline, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -27,9 +27,9 @@ func CreateDiscipline(
 func GetDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.DisciplineID],
+	ctx fuego.ContextWithBody[disciplines.DisciplineID],
 ) (*disciplines.Discipline, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +39,9 @@ func GetDiscipline(
 func PatchDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.CreateDiscipline],
+	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
 ) (*disciplines.Discipline, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +52,9 @@ func PatchDiscipline(
 func DeleteDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.DisciplineID],
+	ctx fuego.ContextWithBody[disciplines.DisciplineID],
 ) (struct{}, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return struct{}{}, err
 	}
