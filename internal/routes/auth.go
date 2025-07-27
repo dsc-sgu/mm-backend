@@ -61,7 +61,7 @@ func Login(userRepo user.Repo,
 
 	ctx.SetCookie(
 		http.Cookie{
-			Name:     session.COOKIE_NAME,
+			Name:     session.CookieName,
 			Value:    s.Id.String(),
 			Path:     cookieConfig.Path,
 			MaxAge:   cookieConfig.SessionLifetime,
@@ -107,7 +107,7 @@ func Logout(
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
 ) (*struct{}, error) {
-	cookie, err := ctx.Cookie(session.COOKIE_NAME)
+	cookie, err := ctx.Cookie(session.CookieName)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func Logout(
 	}
 
 	ctx.SetCookie(http.Cookie{
-		Name:     session.COOKIE_NAME,
+		Name:     session.CookieName,
 		MaxAge:   -1,
 		Value:    "",
 		Path:     "/",
@@ -142,7 +142,7 @@ func Session(
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
-	cookie, err := ctx.Cookie(session.COOKIE_NAME)
+	cookie, err := ctx.Cookie(session.CookieName)
 	if err != nil {
 		return nil, err
 	}
