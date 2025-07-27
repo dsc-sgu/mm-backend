@@ -27,10 +27,12 @@ const createDisciplineSql = `
 func (r *PGRepo) Create(model *CreateDiscipline) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", createDisciplineSql))
 
+	u := uuid.New()
+
 	newDiscipline := Discipline{
 		Name: model.Name,
 		DisciplineID: DisciplineID{
-			ID: model.ID,
+			ID: u,
 		},
 	}
 
@@ -77,7 +79,7 @@ const updateByIdSql = `
     RETURNING id, name
 `
 
-func (r *PGRepo) UpdateById(id uuid.UUID, model *CreateDiscipline) (*Discipline, error) {
+func (r *PGRepo) UpdateById(id uuid.UUID, model *PatchDiscipline) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
