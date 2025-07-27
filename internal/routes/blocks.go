@@ -8,17 +8,17 @@ import (
 
 func GetBlock(
 	blockRepo blocks.Repo,
-	m fuego.ContextWithBody[blocks.BlockID],
+	ctx fuego.ContextWithBody[blocks.BlockID],
 ) (*blocks.Block, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
 	return blockRepo.GetById(body.ID)
 }
 
-func GetAllBlocks(blockRepo blocks.Repo, m fuego.ContextWithBody[courses.CourseID]) ([]*blocks.Block, error) {
-	body, err := m.Body()
+func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextWithBody[courses.CourseID]) ([]*blocks.Block, error) {
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -42,16 +42,16 @@ func CreateBlock(
 	return createdBlock, nil
 }
 
-func PatchBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
-	body, err := m.Body()
+func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
 	return blockRepo.UpdateById(&body)
 }
 
-func DeleteBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (struct{}, error) {
-	body, err := m.Body()
+func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (struct{}, error) {
+	body, err := ctx.Body()
 	if err != nil {
 		return struct{}{}, err
 	}

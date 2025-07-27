@@ -13,14 +13,14 @@ func CreateCourse(
 	sessionRepo session.Repo,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.CreateCourse],
+	ctx fuego.ContextWithBody[courses.CreateCourse],
 ) (*courses.Course, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
 
-	sessionID, err := m.Cookie(session.COOKIE_NAME)
+	sessionID, err := ctx.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +52,9 @@ func CreateCourse(
 func GetPaginatedCourses(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.CoursePagination],
+	ctx fuego.ContextWithBody[courses.CoursePagination],
 ) ([]*courses.Course, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +64,9 @@ func GetPaginatedCourses(
 func GetCourse(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.CourseID],
+	ctx fuego.ContextWithBody[courses.CourseID],
 ) (*courses.Course, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -76,9 +76,9 @@ func GetCourse(
 func PatchCourse(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.UpdateCourse],
+	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +93,9 @@ func DeleteCourse(
 	courseRepo courses.Repo,
 	blockRepo blocks.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.CourseID],
+	ctx fuego.ContextWithBody[courses.CourseID],
 ) (struct{}, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return struct{}{}, err
 	}

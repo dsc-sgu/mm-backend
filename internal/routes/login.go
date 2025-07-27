@@ -33,9 +33,10 @@ type LoginSuccessResponse struct {
 func Login(userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, m fuego.ContextWithBody[LoginModel],
+	cookieConfig *cookie.CookieConfig,
+	ctx fuego.ContextWithBody[LoginModel],
 ) (any, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,7 @@ func Login(userRepo user.Repo,
 		return nil, err
 	}
 
-	m.SetCookie(
+	ctx.SetCookie(
 		http.Cookie{
 			Name:     session.COOKIE_NAME,
 			Value:    s.Id.String(),
@@ -77,9 +78,10 @@ func Register(
 	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, registerJson fuego.ContextWithBody[RegisterModel],
+	cookieConfig *cookie.CookieConfig,
+	ctx fuego.ContextWithBody[RegisterModel],
 ) (any, error) {
-	body, err := registerJson.Body()
+	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
@@ -106,9 +108,9 @@ func Logout(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
-	m fuego.ContextNoBody,
+	ctx fuego.ContextNoBody,
 ) (*struct{}, error) {
-	cookie, err := m.Cookie(session.COOKIE_NAME)
+	cookie, err := ctx.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +125,7 @@ func Logout(
 		return nil, err
 	}
 
-	m.SetCookie(http.Cookie{
+	ctx.SetCookie(http.Cookie{
 		Name:     session.COOKIE_NAME,
 		MaxAge:   -1,
 		Value:    "",
@@ -140,9 +142,10 @@ func Session(
 	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, m fuego.ContextNoBody,
+	cookieConfig *cookie.CookieConfig,
+	ctx fuego.ContextNoBody,
 ) (any, error) {
-	cookie, err := m.Cookie(session.COOKIE_NAME)
+	cookie, err := ctx.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err
 	}
