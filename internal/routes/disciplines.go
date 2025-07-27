@@ -16,12 +16,7 @@ func CreateDiscipline(
 		return nil, err
 	}
 
-	createdDiscipline, err := disciplineRepo.Create(&body)
-	if err != nil {
-		return nil, err
-	}
-
-	return createdDiscipline, nil
+	return disciplineRepo.Create(&body)
 }
 
 func GetDiscipline(
@@ -53,10 +48,10 @@ func DeleteDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.DisciplineID],
-) (struct{}, error) {
+) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return struct{}{}, err
+		return nil, err
 	}
 
 	// If discipline is deleted it might possible have
@@ -64,5 +59,5 @@ func DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	return struct{}{}, disciplineRepo.DeleteById(body.ID)
+	return nil, disciplineRepo.DeleteById(body.ID)
 }

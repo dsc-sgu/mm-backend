@@ -96,11 +96,8 @@ func Register(
 	}
 
 	_, err = userRepo.Create(&createUser)
-	if err != nil {
-		return nil, err
-	}
 
-	return nil, nil
+	return nil, err
 }
 
 func Logout(
@@ -155,13 +152,10 @@ func Session(
 	}
 
 	u, err := userRepo.GetById(session.UserId)
-	if err != nil {
-		return nil, err
-	}
 
 	if u == nil {
 		return nil, errors.New("unexpected error related to user")
 	}
 
-	return nil, nil
+	return nil, err
 }
