@@ -27,18 +27,10 @@ import (
 )
 
 func onShutdown(
-	ctx context.Context,
-	server *http.Server,
 	redisClient *redis.Client,
 	dbConn *sqlx.DB,
 	logger *zap.Logger,
 ) error {
-	if err := server.Shutdown(ctx); err != nil {
-		logger.Warn("Failed shutting down web-server: " + err.Error())
-		return err
-	} else {
-		logger.Info("Succesfully shutted down server")
-	}
 
 	logger.Info("Closing Redis client")
 	if err := redisClient.Close(); err != nil {
@@ -82,6 +74,8 @@ func main() {
 	s := fuego.NewServer(fuego.WithAddr("0.0.0.0:80"))
 	fuego.Use(s, cors.Default().Handler)
 
+	// TODO(nrydanov): Return zap logging middleware
+	// https://github.com/MergeMinds/mm-backend-go/issues/26)
 	// r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
 	// r.Use(ginzap.RecoveryWithZap(logger, true))
 
@@ -123,13 +117,9 @@ func main() {
 	<-ctx.Done()
 	logger.Info("Shutting down server. Terminating all active sessions.")
 
-	// shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	// defer cancel()
-
-	// Ждём завершения HTTP-сервера
-	// if err := onShutdown(shutdownCtx, server, redisClient, dbConn, logger); err != nil {
-	// 	logger.Warn("Failed to shutdown gracefully.")
-	// } else {
-	// 	logger.Info("Shutdown gracefully.")
-	// }
+	if err := onShutdown(redisClient, dbConn, logger); err != nil {
+		logger.Warn("Failed to shutdown gracefully.")
+	} else {
+		logger.Info("Shutdown gracefully.")
+	}
 }
