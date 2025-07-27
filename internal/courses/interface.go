@@ -5,9 +5,9 @@ import (
 )
 
 type Repo interface {
-	Create(model *CreateCourseType, ownerId uuid.UUID) (*CourseType, error)
-	GetById(id uuid.UUID) (*CourseType, error)
-	GetCourselistPage(limit int, offset int) ([]*CourseType, error)
-	UpdateById(id uuid.UUID, update *UpdateCourseType) (*CourseType, error)
+	Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error)
+	GetById(id uuid.UUID) (*Course, error)
+	GetCourselistPage(limit int, offset int) ([]*Course, error)
+	UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error)
 	DeleteById(id uuid.UUID) error
 }

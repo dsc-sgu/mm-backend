@@ -25,10 +25,10 @@ const createCourseSql = `
 	RETURNING id
 `
 
-func (r *PGRepo) Create(model *CreateCourseType, ownerId uuid.UUID) (*CourseType, error) {
+func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error) {
 	r.logger.Debug("Executing query", zap.String("query", createCourseSql))
 
-	newCourse := CourseType{
+	newCourse := Course{
 		Id:           uuid.New(),
 		DisciplineId: model.DisciplineId,
 		OwnerId:      ownerId,
@@ -58,10 +58,10 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*CourseType, error) {
+func (r *PGRepo) GetById(id uuid.UUID) (*Course, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var course CourseType
+	var course Course
 	err := r.db.GetContext(context.Background(), &course, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -78,11 +78,11 @@ const getAllByCourseIdSql = `
     LIMIT :limit OFFSET :offset
 `
 
-func (r *PGRepo) GetCourselistPage(limit int, offset int) ([]*CourseType, error) {
+func (r *PGRepo) GetCourselistPage(limit int, offset int) ([]*Course, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var course CourseType
-	var courseList []*CourseType
+	var course Course
+	var courseList []*Course
 	rows, err := r.db.Query(getAllByCourseIdSql, limit, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -117,7 +117,7 @@ const updateByIdSql = `
     RETURNING id, discipline_id, owner_id, name, created_at
 `
 
-func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourseType) (*CourseType, error) {
+func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
@@ -127,7 +127,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourseType) (*CourseType
 		id,
 	)
 
-	var course CourseType
+	var course Course
 
 	err := row.Scan(
 		&course.Id,

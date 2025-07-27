@@ -7,18 +7,18 @@ import (
 	"github.com/google/uuid"
 )
 
-type TextDataType struct {
+type TextData struct {
 	Format string `json:"format"`
 	Text   string `json:"text"`
 }
 
-type QuizDataType struct {
+type QuizData struct {
 	QuestionQuantity int      `json:""`
 	Questions        []string `json:""`
 	Answers          []string `json:""`
 }
 
-type BlockType struct {
+type Block struct {
 	Id        uuid.UUID       `json:"id"        db:"id"         binding:"required"`
 	BlockType string          `json:"blockType" db:"block_type" binding:"required"`
 	Data      json.RawMessage `json:"data"      db:"data"       binding:"required"`
@@ -26,7 +26,7 @@ type BlockType struct {
 	Position  int             `json:"position"  db:"position"   binding:"required"`
 }
 
-type CreateBlockType struct {
+type CreateBlock struct {
 	courses.CourseID
 	BlockType string          `json:"blockType" binding:"required"`
 	Data      json.RawMessage `json:"data"      binding:"required" swaggertype:"object"`
@@ -36,7 +36,7 @@ type BlockID struct {
 	ID uuid.UUID `path:"block_id" validate:"required"`
 }
 
-type UpdateBlockType struct {
+type UpdateBlock struct {
 	BlockID
 	courses.CourseID
 	Data     json.RawMessage `json:"data"     swaggertype:"object"`

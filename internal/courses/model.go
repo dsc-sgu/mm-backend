@@ -10,7 +10,7 @@ type CourseID struct {
 	ID uuid.UUID `path:"course_id" validate:"required"`
 }
 
-type CourseType struct {
+type Course struct {
 	Id           uuid.UUID `json:"id"           db:"id"            binding:"required"`
 	DisciplineId uuid.UUID `json:"disciplineId" db:"discipline_id"`
 	OwnerId      uuid.UUID `json:"ownerId"      db:"owner_id"      binding:"required"`
@@ -18,12 +18,12 @@ type CourseType struct {
 	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
 }
 
-type CreateCourseType struct {
+type CreateCourse struct {
 	DisciplineId uuid.UUID `json:"disciplineId" db:"discipline_id"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
 }
 
-type UpdateCourseType struct {
+type UpdateCourse struct {
 	CourseID
 	OwnerId uuid.UUID `json:"ownerId" db:"owner_id"`
 	Name    string    `json:"name"    db:"name"`
