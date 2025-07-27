@@ -17,6 +17,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/rs/cors"
 
 	"github.com/go-fuego/fuego"
@@ -70,7 +71,15 @@ func main() {
 	}
 	redisClient := redis.NewClient(redisOpts)
 
-	s := fuego.NewServer(fuego.WithAddr("0.0.0.0:80"))
+	s := fuego.NewServer(
+		fuego.WithAddr("0.0.0.0:80"),
+	)
+	s.OpenAPI.Description().Servers = openapi3.Servers{
+		{
+			URL:         "http://localhost:8080",
+			Description: "Docker dev deployment server",
+		},
+	}
 	fuego.Use(s, cors.Default().Handler)
 
 	// TODO(nrydanov): Return zap logging middleware
