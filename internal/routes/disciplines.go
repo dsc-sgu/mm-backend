@@ -29,13 +29,11 @@ func GetDiscipline(
 	logger *zap.Logger,
 	m fuego.ContextWithBody[disciplines.DisciplineID],
 ) (*disciplines.DisciplineType, error) {
-
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
 	return disciplineRepo.GetById(body.ID)
-
 }
 
 func PatchDiscipline(
@@ -49,7 +47,6 @@ func PatchDiscipline(
 	}
 
 	return disciplineRepo.UpdateById(body.ID, &body)
-
 }
 
 func DeleteDiscipline(
@@ -62,11 +59,10 @@ func DeleteDiscipline(
 		return struct{}{}, err
 	}
 
-	//If discipline is deleted it might possible have
-	//linked courses that should be detached.
+	// If discipline is deleted it might possible have
+	// linked courses that should be detached.
 
-	//TODO: implement course detaching logic
+	// TODO: implement course detaching logic
 
 	return struct{}{}, disciplineRepo.DeleteById(body.ID)
-
 }

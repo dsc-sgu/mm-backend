@@ -40,7 +40,6 @@ func CreateBlock(
 	}
 
 	return createdBlock, nil
-
 }
 
 func PatchBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.UpdateBlockType]) (*blocks.BlockType, error) {

@@ -181,5 +181,4 @@ func SetupRoutes(
 			return routes.Session(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 	)
-
 }

@@ -26,7 +26,6 @@ const createCourseSql = `
 `
 
 func (r *PGRepo) Create(model *CreateCourseType, ownerId uuid.UUID) (*CourseType, error) {
-
 	r.logger.Debug("Executing query", zap.String("query", createCourseSql))
 
 	newCourse := CourseType{
@@ -137,7 +136,6 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourseType) (*CourseType
 		&course.Name,
 		&course.CreatedAt,
 	)
-
 	if err != nil {
 		return nil, err
 	}

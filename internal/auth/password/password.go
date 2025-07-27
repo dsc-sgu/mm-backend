@@ -9,10 +9,12 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-const HASH_TIME = 1
-const HASH_MEMORY = 64 * 1024
-const HASH_LEN = 32
-const SALT_LEN = 16
+const (
+	HASH_TIME   = 1
+	HASH_MEMORY = 64 * 1024
+	HASH_LEN    = 32
+	SALT_LEN    = 16
+)
 
 func GenerateSalt() ([]byte, error) {
 	salt := make([]byte, SALT_LEN)

@@ -49,7 +49,11 @@ func CreateCourse(
 }
 
 // Other endpoints rewrote using fuego
-func GetPaginatedCourses(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CoursePagination]) ([]*courses.CourseType, error) {
+func GetPaginatedCourses(
+	courseRepo courses.Repo,
+	logger *zap.Logger,
+	m fuego.ContextWithBody[courses.CoursePagination],
+) ([]*courses.CourseType, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -57,7 +61,11 @@ func GetPaginatedCourses(courseRepo courses.Repo, logger *zap.Logger, m fuego.Co
 	return courseRepo.GetCourselistPage(body.Limit, body.Offset)
 }
 
-func GetCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CourseID]) (*courses.CourseType, error) {
+func GetCourse(
+	courseRepo courses.Repo,
+	logger *zap.Logger,
+	m fuego.ContextWithBody[courses.CourseID],
+) (*courses.CourseType, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -65,7 +73,11 @@ func GetCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithB
 	return courseRepo.GetById(body.ID)
 }
 
-func PatchCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.UpdateCourseType]) (*courses.CourseType, error) {
+func PatchCourse(
+	courseRepo courses.Repo,
+	logger *zap.Logger,
+	m fuego.ContextWithBody[courses.UpdateCourseType],
+) (*courses.CourseType, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -77,7 +89,12 @@ func PatchCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWit
 	return updatedCourse, nil
 }
 
-func DeleteCourse(courseRepo courses.Repo, blockRepo blocks.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CourseID]) (struct{}, error) {
+func DeleteCourse(
+	courseRepo courses.Repo,
+	blockRepo blocks.Repo,
+	logger *zap.Logger,
+	m fuego.ContextWithBody[courses.CourseID],
+) (struct{}, error) {
 	body, err := m.Body()
 	if err != nil {
 		return struct{}{}, err

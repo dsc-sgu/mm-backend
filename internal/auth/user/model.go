@@ -33,11 +33,11 @@ type OutModel struct {
 }
 
 type CreateModel struct {
-	FirstName  string `json:"firstName" binding:"required"`
-	LastName   string `json:"lastName" binding:"required"`
+	FirstName  string `json:"firstName"  binding:"required"`
+	LastName   string `json:"lastName"   binding:"required"`
 	Patronymic string `json:"patronymic" binding:"required"`
-	Username   string `json:"username" binding:"required"`
-	Email      string `json:"email" binding:"required"`
-	Role       string `json:"role" binding:"required"`
-	Password   string `json:"password" binding:"password"`
+	Username   string `json:"username"   binding:"required"`
+	Email      string `json:"email"      binding:"required"`
+	Role       string `json:"role"       binding:"required"`
+	Password   string `json:"password"   binding:"password"`
 }

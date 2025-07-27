@@ -25,6 +25,7 @@ const createBlockSql = `
     VALUES (:id, :block_type, :data, :course_id, :position)
     RETURNING id
 `
+
 const nextPositionSql = `
     SELECT position
     FROM block
@@ -33,7 +34,6 @@ const nextPositionSql = `
 `
 
 func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
-
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
 
 	positions, err := r.db.Query(nextPositionSql, RequestBlock.ID)
@@ -160,7 +160,6 @@ func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
 		&block.CourseId,
 		&block.Position,
 	)
-
 	if err != nil {
 		return nil, err
 	}
