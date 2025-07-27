@@ -7,7 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	_ "github.com/MergeMinds/mm-backend-go/docs"
 	api "github.com/MergeMinds/mm-backend-go/internal"
 	"github.com/MergeMinds/mm-backend-go/internal/applogger"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
