@@ -45,4 +45,4 @@ jobs:
       - name: Setup golines
         run: go install github.com/segmentio/golines@latest
       - name: Run checks
-
+        run: golines --dry-run -m 120 ./cmd ./internal
