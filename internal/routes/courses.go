@@ -22,7 +22,7 @@ func CreateCourse(
 		return nil, err
 	}
 
-	sessionID, err := ctx.Cookie(session.COOKIE_NAME)
+	sessionID, err := ctx.Cookie(session.CookieName)
 	if err != nil {
 		return nil, err
 	}
