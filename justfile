@@ -41,3 +41,11 @@ run-host:
 # Install Git hooks
 precommit-install:
     pre-commit install
+
+format:
+    go tool goimports -l -w cmd internal pkg
+    go tool gofumpt -l -w cmd internal pkg
+    go tool golines -w -m 120 cmd internal pkg
+
+lint:
+    @golangci-lint run ./cmd/... ./internal/... ./pkg/...
