@@ -25,7 +25,6 @@ const createDisciplineSql = `
 `
 
 func (r *PGRepo) Create(model *CreateDisciplineType) (*DisciplineType, error) {
-
 	r.logger.Debug("Executing query", zap.String("query", createDisciplineSql))
 
 	newDiscipline := DisciplineType{
@@ -93,7 +92,6 @@ func (r *PGRepo) UpdateById(id uuid.UUID, model *CreateDisciplineType) (*Discipl
 		&discipline.ID,
 		&discipline.Name,
 	)
-
 	if err != nil {
 		return nil, err
 	}

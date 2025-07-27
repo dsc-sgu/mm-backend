@@ -33,7 +33,6 @@ func onShutdown(
 	dbConn *sqlx.DB,
 	logger *zap.Logger,
 ) error {
-
 	if err := server.Shutdown(ctx); err != nil {
 		logger.Warn("Failed shutting down web-server: " + err.Error())
 		return err

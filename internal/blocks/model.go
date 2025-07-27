@@ -8,7 +8,7 @@ import (
 )
 
 type TextDataType struct {
-	Format string `json:"format" `
+	Format string `json:"format"`
 	Text   string `json:"text"`
 }
 
@@ -19,17 +19,17 @@ type QuizDataType struct {
 }
 
 type BlockType struct {
-	Id        uuid.UUID       `json:"id" db:"id" binding:"required"`
+	Id        uuid.UUID       `json:"id"        db:"id"         binding:"required"`
 	BlockType string          `json:"blockType" db:"block_type" binding:"required"`
-	Data      json.RawMessage `json:"data" db:"data" binding:"required"`
-	CourseId  uuid.UUID       `json:"courseId" db:"course_id" binding:"required"`
-	Position  int             `json:"position" db:"position" binding:"required"`
+	Data      json.RawMessage `json:"data"      db:"data"       binding:"required"`
+	CourseId  uuid.UUID       `json:"courseId"  db:"course_id"  binding:"required"`
+	Position  int             `json:"position"  db:"position"   binding:"required"`
 }
 
 type CreateBlockType struct {
 	courses.CourseID
 	BlockType string          `json:"blockType" binding:"required"`
-	Data      json.RawMessage `json:"data" binding:"required" swaggertype:"object"`
+	Data      json.RawMessage `json:"data"      binding:"required" swaggertype:"object"`
 }
 
 type BlockID struct {
@@ -39,7 +39,7 @@ type BlockID struct {
 type UpdateBlockType struct {
 	BlockID
 	courses.CourseID
-	Data     json.RawMessage `json:"data" swaggertype:"object"`
+	Data     json.RawMessage `json:"data"     swaggertype:"object"`
 	Position int             `json:"position"`
 }
 

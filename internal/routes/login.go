@@ -14,16 +14,16 @@ import (
 )
 
 type LoginModel struct {
-	Email    string `json:"email" binding:"required"`
+	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
 type RegisterModel struct {
 	FirstName string `json:"firstName" binding:"required"`
-	LastName  string `json:"lastName" binding:"required"`
-	Username  string `json:"username" binding:"required"`
-	Email     string `json:"email" binding:"required"`
-	Password  string `json:"password" binding:"required"`
+	LastName  string `json:"lastName"  binding:"required"`
+	Username  string `json:"username"  binding:"required"`
+	Email     string `json:"email"     binding:"required"`
+	Password  string `json:"password"  binding:"required"`
 }
 
 type LoginSuccessResponse struct {
@@ -33,14 +33,14 @@ type LoginSuccessResponse struct {
 func Login(userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, m fuego.ContextWithBody[LoginModel]) (any, error) {
+	cookieConfig *cookie.CookieConfig, m fuego.ContextWithBody[LoginModel],
+) (any, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
 
 	user, err := userRepo.GetByEmail(body.Email)
-
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,8 @@ func Register(
 	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, registerJson fuego.ContextWithBody[RegisterModel]) (any, error) {
+	cookieConfig *cookie.CookieConfig, registerJson fuego.ContextWithBody[RegisterModel],
+) (any, error) {
 	body, err := registerJson.Body()
 	if err != nil {
 		return nil, err
@@ -139,7 +140,8 @@ func Session(
 	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, m fuego.ContextNoBody) (any, error) {
+	cookieConfig *cookie.CookieConfig, m fuego.ContextNoBody,
+) (any, error) {
 	cookie, err := m.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err
