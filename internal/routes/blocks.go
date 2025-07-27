@@ -34,12 +34,7 @@ func CreateBlock(
 		return nil, err
 	}
 
-	createdBlock, err := blockRepo.Create(&body)
-	if err != nil {
-		return nil, err
-	}
-
-	return createdBlock, nil
+	return blockRepo.Create(&body)
 }
 
 func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
@@ -50,14 +45,10 @@ func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBl
 	return blockRepo.UpdateById(&body)
 }
 
-func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (struct{}, error) {
+func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return struct{}{}, err
+		return nil, err
 	}
-	err = blockRepo.DeleteById(body.BlockID.ID)
-	if err != nil {
-		return struct{}{}, err
-	}
-	return struct{}{}, nil
+	return nil, blockRepo.DeleteById(body.BlockID.ID)
 }

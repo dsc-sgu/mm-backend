@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"errors"
+
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
@@ -37,15 +39,12 @@ func CreateCourse(
 	}
 
 	createdCourse, err := courseRepo.Create(&body, session.UserId)
-	if err != nil {
-		return nil, err
-	}
 
 	if createdCourse == nil {
-		return nil, err
+		return nil, errors.New("course not created")
 	}
 
-	return createdCourse, nil
+	return createdCourse, err
 }
 
 // Other endpoints rewrote using fuego
@@ -82,11 +81,7 @@ func PatchCourse(
 	if err != nil {
 		return nil, err
 	}
-	updatedCourse, err := courseRepo.UpdateById(body.ID, &body)
-	if err != nil {
-		return nil, err
-	}
-	return updatedCourse, nil
+	return courseRepo.UpdateById(body.ID, &body)
 }
 
 func DeleteCourse(
@@ -94,18 +89,18 @@ func DeleteCourse(
 	blockRepo blocks.Repo,
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.CourseID],
-) (struct{}, error) {
+) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return struct{}{}, err
+		return nil, err
 	}
 	err = courseRepo.DeleteById(body.ID)
 	if err != nil {
-		return struct{}{}, err
+		return nil, err
 	}
 	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(body.ID)
 	if err != nil {
-		return struct{}{}, err
+		return nil, err
 	}
 
 	for _, block := range linkedBlocks {
@@ -119,9 +114,9 @@ func DeleteCourse(
 		}
 		_, err := blockRepo.UpdateById(&updatedBlock)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 	}
 
-	return struct{}{}, nil
+	return nil, nil
 }
