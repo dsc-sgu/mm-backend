@@ -16,7 +16,6 @@ func CreateCourse(
 	logger *zap.Logger,
 	m *courses.CreateCourseType,
 ) (*courses.CourseType, error) {
-	// Get user id by
 	sessionID, err := c.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err

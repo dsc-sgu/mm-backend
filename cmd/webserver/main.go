@@ -101,14 +101,14 @@ func main() {
 	f := swagger.NewFizzEngine(config)
 	swagger.RegisterDocRoutes(f, config)
 
-	v1 := f.Group("", "Aboba", "Aboba2")
+	v1 := f.Group("/api/v1", "V1 endpoints", "V1")
 	api.SetupRoutes(
 		v1,
-		userRepo,
-		sessionRepo,
 		blockRepo,
 		courseRepo,
 		disciplineRepo,
+		sessionRepo,
+		userRepo,
 		logger,
 		cookieConfig,
 	)

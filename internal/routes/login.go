@@ -97,12 +97,12 @@ func Logout(c *gin.Context, userRepo user.Repo,
 		return nil, err
 	}
 
-	cookieIdUUID, err := uuid.Parse(cookie)
+	u, err := uuid.Parse(cookie)
 	if err != nil {
 		return nil, err
 	}
 
-	err = sessionRepo.DeleteById(cookieIdUUID)
+	err = sessionRepo.DeleteById(u)
 	if err != nil {
 		return nil, err
 	}
@@ -112,15 +112,6 @@ func Logout(c *gin.Context, userRepo user.Repo,
 	return &struct{}{}, nil
 }
 
-// @description Get active session
-// @summary Get active session
-// @tags auth
-// @produce json
-// @success 200 {object} user.OutModel
-// @failure 401 {object} apierr.ApiError "User not found"
-// @failure 404 {object} apierr.ApiError "User not found"
-// @failure 500 {object} apierr.ApiError "Internal server error"
-// @router /session [GET]
 func Session(c *gin.Context, userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
@@ -139,18 +130,4 @@ func Session(c *gin.Context, userRepo user.Repo,
 		return
 	}
 
-}
-
-func mapUserToUserOut(u *user.Model) *user.OutModel {
-	return &user.OutModel{
-		Id:         u.Id,
-		CreatedAt:  u.CreatedAt,
-		FirstName:  u.FirstName,
-		LastName:   u.LastName,
-		Patronymic: u.Patronymic,
-		Username:   u.Username,
-		Email:      u.Email,
-		Role:       u.Role,
-		AvatarUrl:  u.AvatarUrl,
-	}
 }

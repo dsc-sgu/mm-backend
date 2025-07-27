@@ -49,17 +49,6 @@ func PatchBlock(
 
 }
 
-func UnlinkBlock(
-	c *gin.Context,
-	blockRepo blocks.Repo,
-	m *blocks.BlockID,
-) (*blocks.BlockType, error) {
-
-	unlinkedBlock, err := blockRepo.UnlinkFromCourseById(m.ID)
-
-	return unlinkedBlock, err
-}
-
 func DeleteBlock(
 	c *gin.Context,
 	blockRepo blocks.Repo,

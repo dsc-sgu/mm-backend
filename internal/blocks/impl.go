@@ -172,33 +172,34 @@ const UnlinkFromCourseByIdSql = `
 	UPDATE block
 	SET course_id = $1
 	WHERE id = $2
-	RETURNING id, block_type, data, course_id, position 
+	RETURNING id, block_type, data, course_id, position
 `
 
-func (r *PGRepo) UnlinkFromCourseById(id uuid.UUID) (*BlockType, error) {
-	r.logger.Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
+func (r *PGRepo) UnlinkFromCourseById(blockID, courseId uuid.UUID) (*BlockType, error) {
+	panic("Not implemented")
+	// r.logger.Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
 
-	row := r.db.QueryRow(
-		UnlinkFromCourseByIdSql,
-		nil,
-		id,
-	)
+	// row := r.db.QueryRow(
+	// 	UnlinkFromCourseByIdSql,
+	// 	nil,
+	// 	id,
+	// )
 
-	var unlinkedBlock BlockType
+	// var unlinkedBlock BlockType
 
-	err := row.Scan(
-		&unlinkedBlock.Id,
-		&unlinkedBlock.BlockType,
-		&unlinkedBlock.Data,
-		&unlinkedBlock.CourseId,
-		&unlinkedBlock.Position,
-	)
+	// err := row.Scan(
+	// 	&unlinkedBlock.Id,
+	// 	&unlinkedBlock.BlockType,
+	// 	&unlinkedBlock.Data,
+	// 	&unlinkedBlock.CourseId,
+	// 	&unlinkedBlock.Position,
+	// )
 
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	return &unlinkedBlock, nil
+	// return &unlinkedBlock, nil
 }
 
 const deleteByIdSql = `
