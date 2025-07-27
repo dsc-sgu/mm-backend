@@ -3,34 +3,38 @@ package routes
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
-	"github.com/gin-gonic/gin"
+	"github.com/go-fuego/fuego"
 )
 
 func GetBlock(
-	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *blocks.BlockID,
+	m fuego.ContextWithBody[blocks.BlockID],
 ) (*blocks.BlockType, error) {
-	return blockRepo.GetById(m.ID)
+	body, err := m.Body()
+	if err != nil {
+		return nil, err
+	}
+	return blockRepo.GetById(body.ID)
 }
 
-func GetAllBlocks(
-	c *gin.Context,
-	blockRepo blocks.Repo,
-	m *courses.CourseID,
-) ([]*blocks.BlockType, error) {
-
-	return blockRepo.GetAllBlocksByCourseId(m.ID)
-
+func GetAllBlocks(blockRepo blocks.Repo, m fuego.ContextWithBody[courses.CourseID]) ([]*blocks.BlockType, error) {
+	body, err := m.Body()
+	if err != nil {
+		return nil, err
+	}
+	return blockRepo.GetAllBlocksByCourseId(body.ID)
 }
 
 func CreateBlock(
-	c *gin.Context,
 	blockRepo blocks.Repo,
-	m *blocks.CreateBlockType,
+	m fuego.ContextWithBody[blocks.CreateBlockType],
 ) (*blocks.BlockType, error) {
+	body, err := m.Body()
+	if err != nil {
+		return nil, err
+	}
 
-	createdBlock, err := blockRepo.Create(m)
+	createdBlock, err := blockRepo.Create(&body)
 	if err != nil {
 		return nil, err
 	}
@@ -39,21 +43,22 @@ func CreateBlock(
 
 }
 
-func PatchBlock(
-	c *gin.Context,
-	blockRepo blocks.Repo,
-	m *blocks.UpdateBlockType,
-) (*blocks.BlockType, error) {
-
-	return blockRepo.UpdateById(m)
-
+func PatchBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.UpdateBlockType]) (*blocks.BlockType, error) {
+	body, err := m.Body()
+	if err != nil {
+		return nil, err
+	}
+	return blockRepo.UpdateById(&body)
 }
 
-func DeleteBlock(
-	c *gin.Context,
-	blockRepo blocks.Repo,
-	m *blocks.BlockID,
-) (*struct{}, error) {
-
-	return &struct{}{}, blockRepo.DeleteById(m.ID)
+func DeleteBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (struct{}, error) {
+	body, err := m.Body()
+	if err != nil {
+		return struct{}{}, err
+	}
+	err = blockRepo.DeleteById(body.BlockID.ID)
+	if err != nil {
+		return struct{}{}, err
+	}
+	return struct{}{}, nil
 }

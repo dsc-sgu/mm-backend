@@ -2,12 +2,13 @@ package routes
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
-	"github.com/gin-gonic/gin"
+	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -29,12 +30,16 @@ type LoginSuccessResponse struct {
 	Status string `json:"status"`
 }
 
-func Login(c *gin.Context, userRepo user.Repo,
+func Login(userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, loginJson *LoginModel) (*struct{}, error) {
+	cookieConfig *cookie.CookieConfig, m fuego.ContextWithBody[LoginModel]) (any, error) {
+	body, err := m.Body()
+	if err != nil {
+		return nil, err
+	}
 
-	user, err := userRepo.GetByEmail(loginJson.Email)
+	user, err := userRepo.GetByEmail(body.Email)
 
 	if err != nil {
 		return nil, err
@@ -44,7 +49,7 @@ func Login(c *gin.Context, userRepo user.Repo,
 		return nil, errors.New("user not found")
 	}
 
-	if !password.Valid(loginJson.Password, user.PasswordHash, user.PasswordSalt) {
+	if !password.Valid(body.Password, user.PasswordHash, user.PasswordSalt) {
 		return nil, errors.New("wrong credentials")
 	}
 
@@ -53,51 +58,61 @@ func Login(c *gin.Context, userRepo user.Repo,
 		return nil, err
 	}
 
-	c.SetCookie(
-		session.COOKIE_NAME,
-		s.Id.String(),
-		cookieConfig.SessionLifetime,
-		cookieConfig.Path,
-		cookieConfig.Domain,
-		cookieConfig.Secure,
-		cookieConfig.HttpOnly,
+	m.SetCookie(
+		http.Cookie{
+			Name:     session.COOKIE_NAME,
+			Value:    s.Id.String(),
+			Path:     cookieConfig.Path,
+			MaxAge:   cookieConfig.SessionLifetime,
+			Domain:   cookieConfig.Domain,
+			Secure:   cookieConfig.Secure,
+			HttpOnly: cookieConfig.HttpOnly,
+		},
 	)
 
 	return nil, nil
 }
 
-func Register(c *gin.Context, userRepo user.Repo,
+func Register(
+	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig, registerJson *RegisterModel) (*struct{}, error) {
+	cookieConfig *cookie.CookieConfig, registerJson fuego.ContextWithBody[RegisterModel]) (any, error) {
+	body, err := registerJson.Body()
+	if err != nil {
+		return nil, err
+	}
 
 	createUser := user.CreateModel{
-		FirstName: registerJson.FirstName,
-		LastName:  registerJson.LastName,
-		Username:  registerJson.Username,
-		Email:     registerJson.Email,
-		Password:  registerJson.Password,
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+		Username:  body.Username,
+		Email:     body.Email,
+		Password:  body.Password,
 		Role:      "USER",
 	}
 
-	_, err := userRepo.Create(&createUser)
+	_, err = userRepo.Create(&createUser)
 	if err != nil {
 		return nil, err
 	}
 
-	return &struct{}{}, nil
+	return nil, nil
 }
 
-func Logout(c *gin.Context, userRepo user.Repo,
+func Logout(
+	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig) (*struct{}, error) {
-	cookie, err := c.Cookie(session.COOKIE_NAME)
+	cookieConfig *cookie.CookieConfig,
+	m fuego.ContextNoBody,
+) (*struct{}, error) {
+	cookie, err := m.Cookie(session.COOKIE_NAME)
 	if err != nil {
 		return nil, err
 	}
 
-	u, err := uuid.Parse(cookie)
+	u, err := uuid.Parse(cookie.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -107,27 +122,41 @@ func Logout(c *gin.Context, userRepo user.Repo,
 		return nil, err
 	}
 
-	c.SetCookie(session.COOKIE_NAME, "", -1, "/", "localhost", false, true)
+	m.SetCookie(http.Cookie{
+		Name:     session.COOKIE_NAME,
+		MaxAge:   -1,
+		Value:    "",
+		Path:     "/",
+		Domain:   "localhost",
+		Secure:   false,
+		HttpOnly: true,
+	})
 
-	return &struct{}{}, nil
+	return nil, nil
 }
 
-func Session(c *gin.Context, userRepo user.Repo,
+func Session(
+	userRepo user.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
-	cookieConfig *cookie.CookieConfig) {
-	session, err := session.CheckHTTPReq(c, sessionRepo, logger)
+	cookieConfig *cookie.CookieConfig, m fuego.ContextNoBody) (any, error) {
+	cookie, err := m.Cookie(session.COOKIE_NAME)
 	if err != nil {
-		return
+		return nil, err
+	}
+	session, err := session.CheckHTTPReq(cookie, sessionRepo, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	u, err := userRepo.GetById(session.UserId)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if u == nil {
-		return
+		return nil, errors.New("unexpected error related to user")
 	}
 
+	return nil, nil
 }
