@@ -24,10 +24,10 @@ const createDisciplineSql = `
 	RETURNING id
 `
 
-func (r *PGRepo) Create(model *CreateDisciplineType) (*DisciplineType, error) {
+func (r *PGRepo) Create(model *CreateDiscipline) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", createDisciplineSql))
 
-	newDiscipline := DisciplineType{
+	newDiscipline := Discipline{
 		Name: model.Name,
 		DisciplineID: DisciplineID{
 			ID: model.ID,
@@ -56,10 +56,10 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*DisciplineType, error) {
+func (r *PGRepo) GetById(id uuid.UUID) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var discipline DisciplineType
+	var discipline Discipline
 	err := r.db.GetContext(context.Background(), &discipline, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -77,7 +77,7 @@ const updateByIdSql = `
     RETURNING id, name
 `
 
-func (r *PGRepo) UpdateById(id uuid.UUID, model *CreateDisciplineType) (*DisciplineType, error) {
+func (r *PGRepo) UpdateById(id uuid.UUID, model *CreateDiscipline) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
@@ -86,7 +86,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, model *CreateDisciplineType) (*Discipl
 		id,
 	)
 
-	var discipline DisciplineType
+	var discipline Discipline
 
 	err := row.Scan(
 		&discipline.ID,

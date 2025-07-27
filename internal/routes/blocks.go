@@ -9,7 +9,7 @@ import (
 func GetBlock(
 	blockRepo blocks.Repo,
 	m fuego.ContextWithBody[blocks.BlockID],
-) (*blocks.BlockType, error) {
+) (*blocks.Block, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -17,7 +17,7 @@ func GetBlock(
 	return blockRepo.GetById(body.ID)
 }
 
-func GetAllBlocks(blockRepo blocks.Repo, m fuego.ContextWithBody[courses.CourseID]) ([]*blocks.BlockType, error) {
+func GetAllBlocks(blockRepo blocks.Repo, m fuego.ContextWithBody[courses.CourseID]) ([]*blocks.Block, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -27,8 +27,8 @@ func GetAllBlocks(blockRepo blocks.Repo, m fuego.ContextWithBody[courses.CourseI
 
 func CreateBlock(
 	blockRepo blocks.Repo,
-	m fuego.ContextWithBody[blocks.CreateBlockType],
-) (*blocks.BlockType, error) {
+	m fuego.ContextWithBody[blocks.CreateBlock],
+) (*blocks.Block, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func CreateBlock(
 	return createdBlock, nil
 }
 
-func PatchBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.UpdateBlockType]) (*blocks.BlockType, error) {
+func PatchBlock(blockRepo blocks.Repo, m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err

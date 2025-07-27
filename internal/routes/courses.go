@@ -13,8 +13,8 @@ func CreateCourse(
 	sessionRepo session.Repo,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.CreateCourseType],
-) (*courses.CourseType, error) {
+	m fuego.ContextWithBody[courses.CreateCourse],
+) (*courses.Course, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func GetPaginatedCourses(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
 	m fuego.ContextWithBody[courses.CoursePagination],
-) ([]*courses.CourseType, error) {
+) ([]*courses.Course, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func GetCourse(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
 	m fuego.ContextWithBody[courses.CourseID],
-) (*courses.CourseType, error) {
+) (*courses.Course, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -76,8 +76,8 @@ func GetCourse(
 func PatchCourse(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[courses.UpdateCourseType],
-) (*courses.CourseType, error) {
+	m fuego.ContextWithBody[courses.UpdateCourse],
+) (*courses.Course, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func DeleteCourse(
 
 	for _, block := range linkedBlocks {
 
-		updatedBlock := blocks.UpdateBlockType{
+		updatedBlock := blocks.UpdateBlock{
 			CourseID: courses.CourseID{
 				ID: uuid.Nil,
 			},

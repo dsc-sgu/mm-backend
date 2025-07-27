@@ -5,10 +5,10 @@ import (
 )
 
 type Repo interface {
-	Create(model *CreateBlockType) (*BlockType, error)
-	GetById(id uuid.UUID) (*BlockType, error)
-	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*BlockType, error)
-	UpdateById(update *UpdateBlockType) (*BlockType, error)
-	UnlinkFromCourseById(courseID, blockID uuid.UUID) (*BlockType, error)
+	Create(model *CreateBlock) (*Block, error)
+	GetById(id uuid.UUID) (*Block, error)
+	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*Block, error)
+	UpdateById(update *UpdateBlock) (*Block, error)
+	UnlinkFromCourseById(courseID, blockID uuid.UUID) (*Block, error)
 	DeleteById(id uuid.UUID) error
 }

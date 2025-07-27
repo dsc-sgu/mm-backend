@@ -28,7 +28,7 @@ func SetupRoutes(
 	fuego.Get(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextWithBody[blocks.BlockID]) (*blocks.BlockType, error) {
+		func(m fuego.ContextWithBody[blocks.BlockID]) (*blocks.Block, error) {
 			return routes.GetBlock(blockRepo, m)
 		},
 		option.Summary("Get block by id"),
@@ -37,7 +37,7 @@ func SetupRoutes(
 	fuego.Post(
 		blockGroup,
 		"/{course_id}/blocks",
-		func(m fuego.ContextWithBody[blocks.CreateBlockType]) (*blocks.BlockType, error) {
+		func(m fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
 			return routes.CreateBlock(blockRepo, m)
 		},
 		option.Summary("Create new block on course"),
@@ -45,7 +45,7 @@ func SetupRoutes(
 	fuego.Patch(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextWithBody[blocks.UpdateBlockType]) (*blocks.BlockType, error) {
+		func(m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
 			return routes.PatchBlock(blockRepo, m)
 		},
 		option.Summary("Update existing block"),
@@ -65,7 +65,7 @@ func SetupRoutes(
 	fuego.Post(
 		courseGroup,
 		"/",
-		func(m fuego.ContextWithBody[courses.CreateCourseType]) (*courses.CourseType, error) {
+		func(m fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
 			return routes.CreateCourse(sessionRepo, courseRepo, logger, m)
 		},
 		option.Summary("Create new course"),
@@ -74,7 +74,7 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"/{course_id}",
-		func(m fuego.ContextWithBody[courses.CourseID]) (*courses.CourseType, error) {
+		func(m fuego.ContextWithBody[courses.CourseID]) (*courses.Course, error) {
 			return routes.GetCourse(courseRepo, logger, m)
 		},
 		option.Summary("Get existing course by id"),
@@ -83,7 +83,7 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"",
-		func(m fuego.ContextWithBody[courses.CoursePagination]) ([]*courses.CourseType, error) {
+		func(m fuego.ContextWithBody[courses.CoursePagination]) ([]*courses.Course, error) {
 			return routes.GetPaginatedCourses(courseRepo, logger, m)
 		},
 		option.Summary("Get paginated courses"),
@@ -92,7 +92,7 @@ func SetupRoutes(
 	fuego.Patch(
 		courseGroup,
 		"/{course_id}",
-		func(m fuego.ContextWithBody[courses.UpdateCourseType]) (*courses.CourseType, error) {
+		func(m fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
 			return routes.PatchCourse(courseRepo, logger, m)
 		},
 		option.Summary("Update existing course"),
@@ -112,7 +112,7 @@ func SetupRoutes(
 	fuego.Post(
 		disciplineGroup,
 		"",
-		func(m fuego.ContextWithBody[disciplines.CreateDisciplineType]) (*disciplines.DisciplineType, error) {
+		func(m fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
 			return routes.CreateDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Create new discipline"),
@@ -120,7 +120,7 @@ func SetupRoutes(
 	fuego.Get(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(m fuego.ContextWithBody[disciplines.DisciplineID]) (*disciplines.DisciplineType, error) {
+		func(m fuego.ContextWithBody[disciplines.DisciplineID]) (*disciplines.Discipline, error) {
 			return routes.GetDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Get discipline by id"),
@@ -129,7 +129,7 @@ func SetupRoutes(
 	fuego.Patch(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(m fuego.ContextWithBody[disciplines.CreateDisciplineType]) (*disciplines.DisciplineType, error) {
+		func(m fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
 			return routes.PatchDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Update existing discipline"),

@@ -9,8 +9,8 @@ import (
 func CreateDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.CreateDisciplineType],
-) (*disciplines.DisciplineType, error) {
+	m fuego.ContextWithBody[disciplines.CreateDiscipline],
+) (*disciplines.Discipline, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func GetDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
 	m fuego.ContextWithBody[disciplines.DisciplineID],
-) (*disciplines.DisciplineType, error) {
+) (*disciplines.Discipline, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err
@@ -39,8 +39,8 @@ func GetDiscipline(
 func PatchDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	m fuego.ContextWithBody[disciplines.CreateDisciplineType],
-) (*disciplines.DisciplineType, error) {
+	m fuego.ContextWithBody[disciplines.CreateDiscipline],
+) (*disciplines.Discipline, error) {
 	body, err := m.Body()
 	if err != nil {
 		return nil, err

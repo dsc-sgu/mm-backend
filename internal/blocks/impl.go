@@ -33,7 +33,7 @@ const nextPositionSql = `
 	ORDER BY position ASC
 `
 
-func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
+func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
 
 	positions, err := r.db.Query(nextPositionSql, RequestBlock.ID)
@@ -52,7 +52,7 @@ func (r *PGRepo) Create(RequestBlock *CreateBlockType) (*BlockType, error) {
 
 	r.logger.Debug("Executing query", zap.String("query", createBlockSql))
 
-	newBlock := BlockType{
+	newBlock := Block{
 		Id:        uuid.New(),
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
@@ -81,10 +81,10 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*BlockType, error) {
+func (r *PGRepo) GetById(id uuid.UUID) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var block BlockType
+	var block Block
 	err := r.db.GetContext(context.Background(), &block, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -101,10 +101,10 @@ const getAllByCourseIdSql = `
     WHERE course_id = $1
 `
 
-func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
+func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
-	var blockList []*BlockType
+	var blockList []*Block
 	rows, err := r.db.Query(getAllByCourseIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -115,7 +115,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*BlockType, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var block BlockType
+		var block Block
 		if err := rows.Scan(
 			&block.Id,
 			&block.BlockType,
@@ -140,7 +140,7 @@ const updateByIdSql = `
     RETURNING id, block_type, data, course_id, position
 `
 
-func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
+func (r *PGRepo) UpdateById(update *UpdateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
@@ -151,7 +151,7 @@ func (r *PGRepo) UpdateById(update *UpdateBlockType) (*BlockType, error) {
 		update.BlockID.ID,
 	)
 
-	var block BlockType
+	var block Block
 
 	err := row.Scan(
 		&block.Id,
@@ -174,7 +174,7 @@ const UnlinkFromCourseByIdSql = `
 	RETURNING id, block_type, data, course_id, position
 `
 
-func (r *PGRepo) UnlinkFromCourseById(blockID, courseId uuid.UUID) (*BlockType, error) {
+func (r *PGRepo) UnlinkFromCourseById(blockID, courseId uuid.UUID) (*Block, error) {
 	panic("Not implemented")
 	// r.logger.Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
 
