@@ -31,7 +31,6 @@ func onShutdown(
 	dbConn *sqlx.DB,
 	logger *zap.Logger,
 ) error {
-
 	logger.Info("Closing Redis client")
 	if err := redisClient.Close(); err != nil {
 		logger.Warn("Failed closing Redis client: " + err.Error())
