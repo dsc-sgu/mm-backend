@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	_ "github.com/MergeMinds/mm-backend-go/docs"
 	api "github.com/MergeMinds/mm-backend-go/internal"
@@ -16,13 +15,12 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/config"
-	"github.com/MergeMinds/mm-backend-go/internal/cors"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
-	"github.com/MergeMinds/mm-backend-go/internal/swagger"
-	ginzap "github.com/gin-contrib/zap"
-	"github.com/gin-gonic/gin"
+	"github.com/rs/cors"
+
+	"github.com/go-fuego/fuego"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -82,11 +80,11 @@ func main() {
 	}
 	redisClient := redis.NewClient(redisOpts)
 
-	r := gin.New()
+	s := fuego.NewServer(fuego.WithAddr("0.0.0.0:80"))
+	fuego.Use(s, cors.Default().Handler)
 
-	cors.Setup(r, config)
-	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
-	r.Use(ginzap.RecoveryWithZap(logger, true))
+	// r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
+	// r.Use(ginzap.RecoveryWithZap(logger, true))
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
@@ -98,10 +96,8 @@ func main() {
 	courseRepo := courses.NewPGRepo(dbConn, logger)
 	disciplineRepo := disciplines.NewPGRepo(dbConn, logger)
 
-	f := swagger.NewFizzEngine(config)
-	swagger.RegisterDocRoutes(f, config)
+	v1 := fuego.Group(s, "/api/v1")
 
-	v1 := f.Group("/api/v1", "V1 endpoints", "V1")
 	api.SetupRoutes(
 		v1,
 		blockRepo,
@@ -113,17 +109,13 @@ func main() {
 		cookieConfig,
 	)
 
-	server := &http.Server{
-		Handler: f,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	serverShutdown := make(chan struct{})
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.Run(); err != nil && err != http.ErrServerClosed {
 			logger.Error(err.Error())
 		}
 		close(serverShutdown)
@@ -132,13 +124,13 @@ func main() {
 	<-ctx.Done()
 	logger.Info("Shutting down server. Terminating all active sessions.")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
 
 	// Ждём завершения HTTP-сервера
-	if err := onShutdown(shutdownCtx, server, redisClient, dbConn, logger); err != nil {
-		logger.Warn("Failed to shutdown gracefully.")
-	} else {
-		logger.Info("Shutdown gracefully.")
-	}
+	// if err := onShutdown(shutdownCtx, server, redisClient, dbConn, logger); err != nil {
+	// 	logger.Warn("Failed to shutdown gracefully.")
+	// } else {
+	// 	logger.Info("Shutdown gracefully.")
+	// }
 }

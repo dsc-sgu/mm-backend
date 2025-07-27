@@ -4,100 +4,91 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
-	"github.com/gin-gonic/gin"
+	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 func CreateCourse(
-	c *gin.Context,
 	sessionRepo session.Repo,
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	m *courses.CreateCourseType,
+	m fuego.ContextWithBody[courses.CreateCourseType],
 ) (*courses.CourseType, error) {
-	sessionID, err := c.Cookie(session.COOKIE_NAME)
+	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
 
-	u, err := uuid.Parse(sessionID)
+	sessionID, err := m.Cookie(session.COOKIE_NAME)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := uuid.Parse(sessionID.Value)
 	if err != nil {
 		return nil, err
 	}
 
 	session, err := sessionRepo.GetById(u)
 	if err != nil {
+		logger.Error(err.Error())
+		// return nil, err
+	}
+
+	createdCourse, err := courseRepo.Create(&body, session.UserId)
+	if err != nil {
 		return nil, err
 	}
 
-	createdCourse, err := courseRepo.Create(m, session.UserId)
-	if err != nil {
+	if createdCourse == nil {
 		return nil, err
 	}
 
 	return createdCourse, nil
 }
 
-func GetCourse(
-	c *gin.Context,
-	courseRepo courses.Repo,
-	logger *zap.Logger,
-	m *courses.CourseID,
-) (*courses.CourseType, error) {
-
-	course, err := courseRepo.GetById(m.ID)
-
+// Other endpoints rewrote using fuego
+func GetPaginatedCourses(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CoursePagination]) ([]*courses.CourseType, error) {
+	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
-
-	return course, nil
+	return courseRepo.GetCourselistPage(body.Limit, body.Offset)
 }
 
-func GetCourselistPage(
-	c *gin.Context,
-	courseRepo courses.Repo,
-	logger *zap.Logger,
-	m *courses.CoursePagination,
-) ([]*courses.CourseType, error) {
-
-	coursePage, err := courseRepo.GetCourselistPage(m.Limit, m.Offset)
-
+func GetCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CourseID]) (*courses.CourseType, error) {
+	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
-
-	return coursePage, nil
+	return courseRepo.GetById(body.ID)
 }
 
-func PatchCourse(
-	c *gin.Context,
-	courseRepo courses.Repo,
-	logger *zap.Logger,
-	m *courses.UpdateCourseType,
-) (*courses.CourseType, error) {
-
-	updatedCourse, err := courseRepo.UpdateById(m.ID, m)
-
+func PatchCourse(courseRepo courses.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.UpdateCourseType]) (*courses.CourseType, error) {
+	body, err := m.Body()
 	if err != nil {
 		return nil, err
 	}
-
+	updatedCourse, err := courseRepo.UpdateById(body.ID, &body)
+	if err != nil {
+		return nil, err
+	}
 	return updatedCourse, nil
 }
 
-func DeleteCourse(
-	c *gin.Context,
-	courseRepo courses.Repo,
-	blockRepo blocks.Repo,
-	logger *zap.Logger,
-	m *courses.CourseID,
-) (*struct{}, error) {
-
-	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(m.ID)
+func DeleteCourse(courseRepo courses.Repo, blockRepo blocks.Repo, logger *zap.Logger, m fuego.ContextWithBody[courses.CourseID]) (struct{}, error) {
+	body, err := m.Body()
 	if err != nil {
-		return &struct{}{}, err
+		return struct{}{}, err
+	}
+	err = courseRepo.DeleteById(body.ID)
+	if err != nil {
+		return struct{}{}, err
+	}
+	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(body.ID)
+	if err != nil {
+		return struct{}{}, err
 	}
 
 	for _, block := range linkedBlocks {
@@ -111,11 +102,9 @@ func DeleteCourse(
 		}
 		_, err := blockRepo.UpdateById(&updatedBlock)
 		if err != nil {
-			return &struct{}{}, err
+			return struct{}{}, err
 		}
 	}
 
-	err = courseRepo.DeleteById(m.ID)
-
-	return &struct{}{}, err
+	return struct{}{}, nil
 }
