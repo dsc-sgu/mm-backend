@@ -8,25 +8,25 @@ import (
 	"go.uber.org/zap"
 )
 
-const COOKIE_NAME = "SESSION_ID"
+const CookieName = "SESSION_ID"
 
 func CheckHTTPReq(cookie *http.Cookie, sessionRepo Repo, logger *zap.Logger) (*Model, error) {
-	cookieIdUUID, err := uuid.Parse(cookie.Value)
+	u, err := uuid.Parse(cookie.Value)
 	if err != nil {
 		return nil, err
 	}
 
-	session, err := sessionRepo.GetById(cookieIdUUID)
+	session, err := sessionRepo.GetById(u)
 	if err != nil {
 		return nil, err
 	}
 
 	if session == nil {
-		return nil, errors.New("Session not found")
+		return nil, errors.New("session not found")
 	}
 
 	if session.IsExpired() {
-		return nil, errors.New("Session is expired")
+		return nil, errors.New("session is expired")
 	}
 
 	return session, nil
