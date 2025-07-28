@@ -15,10 +15,15 @@ func GetBlock(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
-	return blockRepo.GetById(id)
+	block, err := blockRepo.GetById(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return block, nil
 }
 
 func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Block, error) {
@@ -26,12 +31,12 @@ func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Blo
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 	blockList, err := blockRepo.GetAllBlocksByCourseId(id)
 
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	return blockList, nil
@@ -40,14 +45,20 @@ func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Blo
 
 func CreateBlock(
 	blockRepo blocks.Repo,
-	m fuego.ContextWithBody[blocks.CreateBlock],
+	ctx fuego.ContextWithBody[blocks.CreateBlock],
 ) (*blocks.Block, error) {
-	body, err := m.Body()
+	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return blockRepo.Create(&body)
+	ctx.SetStatus(201)
+	block, err := blockRepo.Create(&body)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return block, nil
 }
 
 func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
@@ -60,9 +71,16 @@ func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBl
 
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
-	return blockRepo.UpdateById(id, &body)
+
+	ctx.SetStatus(201)
+	block, err := blockRepo.UpdateById(id, &body)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return block, nil
 }
 
 func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
@@ -70,7 +88,14 @@ func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
-	return nil, blockRepo.DeleteById(id)
+
+	err = blockRepo.DeleteById(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	ctx.SetStatus(204)
+	return nil, nil
 }

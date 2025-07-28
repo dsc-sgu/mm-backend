@@ -14,10 +14,16 @@ func CreateDiscipline(
 ) (*disciplines.Discipline, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return disciplineRepo.Create(&body)
+	ctx.SetStatus(201)
+	discipline, err := disciplineRepo.Create(&body)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return discipline, nil
 }
 
 func GetDiscipline(
@@ -30,9 +36,14 @@ func GetDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
-	return disciplineRepo.GetById(id)
+	discipline, err := disciplineRepo.GetById(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return discipline, nil
 }
 
 func PatchDiscipline(
@@ -45,15 +56,20 @@ func PatchDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return disciplineRepo.UpdateById(id, &body)
+	discipline, err := disciplineRepo.UpdateById(id, &body)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return discipline, nil
 }
 
 func DeleteDiscipline(
@@ -66,7 +82,7 @@ func DeleteDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	// If discipline is deleted it might possible have
@@ -74,5 +90,11 @@ func DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	return nil, disciplineRepo.DeleteById(id)
+	err = disciplineRepo.DeleteById(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	ctx.SetStatus(204)
+	return nil, nil
 }
