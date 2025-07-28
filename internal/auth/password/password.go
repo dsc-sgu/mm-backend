@@ -19,7 +19,7 @@ const (
 func GenerateSalt() ([]byte, error) {
 	salt := make([]byte, SALT_LEN)
 	if _, err := rand.Read(salt); err != nil {
-		return nil, fmt.Errorf("Error generating salt: %w", err)
+		return nil, fmt.Errorf("error generating salt: %w", err)
 	}
 	return salt, nil
 }

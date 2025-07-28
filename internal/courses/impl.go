@@ -40,7 +40,11 @@ func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	var returnedId uuid.UUID
 	if rows.Next() {
@@ -90,7 +94,11 @@ func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
 		}
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	for rows.Next() {
 		if err := rows.Scan(
