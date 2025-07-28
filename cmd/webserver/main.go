@@ -72,6 +72,7 @@ func main() {
 
 	s := fuego.NewServer(
 		fuego.WithAddr("0.0.0.0:80"),
+		fuego.WithGlobalMiddlewares(applogger.ZapMiddleware(logger)),
 	)
 	s.OpenAPI.Description().Servers = openapi3.Servers{
 		{
