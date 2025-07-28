@@ -40,9 +40,14 @@ func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer positions.Close()
 
-	var position int = 0
+	defer func() {
+		if err := positions.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
+
+	var position = 0
 
 	if positions.Next() {
 		if err := positions.Scan(&position); err != nil {
@@ -64,7 +69,12 @@ func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	if rows.Next() {
 		if err := rows.Scan(&newBlock.Id); err != nil {
@@ -112,7 +122,12 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 		}
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	for rows.Next() {
 		var block Block

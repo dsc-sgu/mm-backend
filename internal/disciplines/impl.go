@@ -38,7 +38,12 @@ func (r *PGRepo) Create(model *CreateDiscipline) (*Discipline, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	var returnedId uuid.UUID
 	if rows.Next() {
@@ -60,7 +65,6 @@ func (r *PGRepo) GetById(id uuid.UUID) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
 	var discipline Discipline
-	//r.logger.Debug("ID HERE", zap.String("id", id.String()))
 	err := r.db.GetContext(context.Background(), &discipline, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {

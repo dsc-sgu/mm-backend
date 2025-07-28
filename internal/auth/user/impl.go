@@ -50,7 +50,12 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			r.logger.Error(err.Error())
+		}
+	}()
 
 	if rows.Next() {
 		if err := rows.Scan(&newUser.Id, &newUser.CreatedAt); err != nil {

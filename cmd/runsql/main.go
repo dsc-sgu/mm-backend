@@ -23,7 +23,12 @@ func main() {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
-	defer dbConn.Close()
+
+	defer func() {
+		if err := dbConn.Close(); err != nil {
+			logger.Error(err.Error())
+		}
+	}()
 
 	if strings.ToLower(os.Getenv("CREATE_ADMIN")) == "true" {
 		userRepo := user.NewPGRepo(dbConn, logger)

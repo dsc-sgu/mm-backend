@@ -28,7 +28,7 @@ func LoadFromEnv() (*Config, error) {
 	var config Config
 	err := envconfig.Process("", &config)
 	if err != nil {
-		fmt.Println("Failed to process env vars: %v", err)
+		fmt.Printf("Failed to process env vars: %v", err)
 		return nil, err
 	}
 

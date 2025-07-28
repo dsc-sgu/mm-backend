@@ -157,6 +157,10 @@ func Session(
 
 	u, err := userRepo.GetById(session.UserId)
 
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
 	if u == nil {
 		return nil, fuego.NotFoundError{Title: "Unrelated to user error"}
 	}
