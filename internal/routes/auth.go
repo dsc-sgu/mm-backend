@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
@@ -38,25 +37,25 @@ func Login(userRepo user.Repo,
 ) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
 	user, err := userRepo.GetByEmail(body.Email)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	if user == nil {
-		return nil, errors.New("user not found")
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
 	if !password.Valid(body.Password, user.PasswordHash, user.PasswordSalt) {
-		return nil, errors.New("wrong credentials")
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
 	s, err := sessionRepo.Create(user.Id, cookieConfig.SessionLifetime)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	ctx.SetCookie(
@@ -83,7 +82,7 @@ func Register(
 ) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
 	createUser := user.CreateModel{
@@ -97,7 +96,12 @@ func Register(
 
 	_, err = userRepo.Create(&createUser)
 
-	return nil, err
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
+	}
+
+	ctx.SetStatus(201)
+	return nil, nil
 }
 
 func Logout(
@@ -109,17 +113,17 @@ func Logout(
 ) (*struct{}, error) {
 	cookie, err := ctx.Cookie(session.CookieName)
 	if err != nil {
-		return nil, err
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
 	u, err := uuid.Parse(cookie.Value)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	err = sessionRepo.DeleteById(u)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	ctx.SetCookie(http.Cookie{
@@ -144,18 +148,18 @@ func Session(
 ) (any, error) {
 	cookie, err := ctx.Cookie(session.CookieName)
 	if err != nil {
-		return nil, err
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 	session, err := session.CheckHTTPReq(cookie, sessionRepo, logger)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	u, err := userRepo.GetById(session.UserId)
 
 	if u == nil {
-		return nil, errors.New("unexpected error related to user")
+		return nil, fuego.NotFoundError{Title: "Unrelated to user error"}
 	}
 
-	return nil, err
+	return u, nil
 }

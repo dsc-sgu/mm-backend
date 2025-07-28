@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
@@ -20,31 +19,31 @@ func CreateCourse(
 ) (*courses.Course, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
 	sessionID, err := ctx.Cookie(session.CookieName)
 	if err != nil {
-		return nil, err
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
 	u, err := uuid.Parse(sessionID.Value)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	session, err := sessionRepo.GetById(u)
 	if err != nil {
-		logger.Error(err.Error())
-		return nil, err
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
 	createdCourse, err := courseRepo.Create(&body, session.UserId)
 
 	if createdCourse == nil {
-		return nil, errors.New("course not created")
+		return nil, fuego.InternalServerError{Title: "Course wasn't created"}
 	}
 
+	ctx.SetStatus(201)
 	return createdCourse, err
 }
 
@@ -60,15 +59,20 @@ func GetPaginatedCourses(
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	offset, err := strconv.Atoi(pathOffset)
 
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
-	return courseRepo.GetPaginatedCourses(limit, offset)
+	courseList, err := courseRepo.GetPaginatedCourses(limit, offset)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return courseList, nil
 }
 
 func GetCourse(
@@ -81,9 +85,14 @@ func GetCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
-	return courseRepo.GetById(id)
+	course, err := courseRepo.GetById(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return course, nil
 }
 
 func PatchCourse(
@@ -96,14 +105,19 @@ func PatchCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, err
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
-	return courseRepo.UpdateById(id, &body)
+	course, err := courseRepo.UpdateById(id, &body)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	return course, nil
 }
 
 func DeleteCourse(
@@ -116,16 +130,16 @@ func DeleteCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	err = courseRepo.DeleteById(id)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(id)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{}
 	}
 
 	for _, block := range linkedBlocks {
@@ -137,9 +151,10 @@ func DeleteCourse(
 		}
 		_, err := blockRepo.UpdateById(block.Id, &updatedBlock)
 		if err != nil {
-			return nil, err
+			return nil, fuego.InternalServerError{}
 		}
 	}
 
+	ctx.SetStatus(204)
 	return nil, nil
 }
