@@ -28,7 +28,7 @@ func SetupRoutes(
 	fuego.Get(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextWithBody[blocks.BlockID]) (*blocks.Block, error) {
+		func(m fuego.ContextNoBody) (*blocks.Block, error) {
 			return routes.GetBlock(blockRepo, m)
 		},
 		option.Summary("Get block by id"),
@@ -54,7 +54,7 @@ func SetupRoutes(
 	fuego.Delete(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (any, error) {
+		func(m fuego.ContextNoBody) (any, error) {
 			return routes.DeleteBlock(blockRepo, m)
 		},
 		option.Summary("Delete block from course"),
@@ -74,7 +74,7 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"/{course_id}",
-		func(m fuego.ContextWithBody[courses.CourseID]) (*courses.Course, error) {
+		func(m fuego.ContextNoBody) (*courses.Course, error) {
 			return routes.GetCourse(courseRepo, logger, m)
 		},
 		option.Summary("Get existing course by id"),
@@ -83,10 +83,12 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"",
-		func(m fuego.ContextWithBody[courses.CoursePagination]) ([]*courses.Course, error) {
+		func(m fuego.ContextNoBody) ([]*courses.Course, error) {
 			return routes.GetPaginatedCourses(courseRepo, logger, m)
 		},
 		option.Summary("Get paginated courses"),
+		option.QueryInt("limit", "Number of courses in response"),
+		option.QueryInt("offset", "Offset from list beginning"),
 	)
 
 	fuego.Patch(
@@ -101,7 +103,7 @@ func SetupRoutes(
 	fuego.Delete(
 		courseGroup,
 		"/{course_id}",
-		func(m fuego.ContextWithBody[courses.CourseID]) (any, error) {
+		func(m fuego.ContextNoBody) (any, error) {
 			return routes.DeleteCourse(courseRepo, blockRepo, logger, m)
 		},
 		option.Summary("Delete course"),
@@ -120,7 +122,7 @@ func SetupRoutes(
 	fuego.Get(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(m fuego.ContextWithBody[disciplines.DisciplineID]) (*disciplines.Discipline, error) {
+		func(m fuego.ContextNoBody) (*disciplines.Discipline, error) {
 			return routes.GetDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Get discipline by id"),
@@ -137,7 +139,7 @@ func SetupRoutes(
 	fuego.Delete(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(m fuego.ContextWithBody[disciplines.DisciplineID]) (any, error) {
+		func(m fuego.ContextNoBody) (any, error) {
 			return routes.DeleteDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Delete discipline"),

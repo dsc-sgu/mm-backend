@@ -36,7 +36,7 @@ const nextPositionSql = `
 func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
 
-	positions, err := r.db.Query(nextPositionSql, RequestBlock.ID)
+	positions, err := r.db.Query(nextPositionSql, RequestBlock.CourseId)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +56,7 @@ func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 		Id:        uuid.New(),
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
-		CourseId:  RequestBlock.ID,
+		CourseId:  RequestBlock.CourseId,
 		Position:  position + 1,
 	}
 
@@ -140,15 +140,15 @@ const updateByIdSql = `
     RETURNING id, block_type, data, course_id, position
 `
 
-func (r *PGRepo) UpdateById(update *UpdateBlock) (*Block, error) {
+func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRow(
 		updateByIdSql,
-		update.CourseID.ID,
+		update.CourseId,
 		update.Data,
 		update.Position,
-		update.BlockID.ID,
+		id,
 	)
 
 	var block Block
