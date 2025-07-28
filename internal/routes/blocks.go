@@ -10,7 +10,6 @@ func GetBlock(
 	blockRepo blocks.Repo,
 	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
-
 	pathId := ctx.PathParam("block_id")
 
 	id, err := uuid.Parse(pathId)
@@ -34,13 +33,11 @@ func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Blo
 		return nil, fuego.InternalServerError{}
 	}
 	blockList, err := blockRepo.GetAllBlocksByCourseId(id)
-
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
 
 	return blockList, nil
-
 }
 
 func CreateBlock(

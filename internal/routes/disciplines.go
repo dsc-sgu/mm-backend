@@ -31,7 +31,6 @@ func GetDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
-
 	pathId := ctx.PathParam("discipline_id")
 
 	id, err := uuid.Parse(pathId)
@@ -51,7 +50,6 @@ func PatchDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
-
 	pathId := ctx.PathParam("discipline_id")
 
 	id, err := uuid.Parse(pathId)
@@ -77,7 +75,6 @@ func DeleteDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
-
 	pathId := ctx.PathParam("discipline_id")
 
 	id, err := uuid.Parse(pathId)

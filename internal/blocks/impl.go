@@ -47,7 +47,7 @@ func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
 		}
 	}()
 
-	var position = 0
+	position := 0
 
 	if positions.Next() {
 		if err := positions.Scan(&position); err != nil {

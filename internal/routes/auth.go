@@ -95,7 +95,6 @@ func Register(
 	}
 
 	_, err = userRepo.Create(&createUser)
-
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
@@ -156,7 +155,6 @@ func Session(
 	}
 
 	u, err := userRepo.GetById(session.UserId)
-
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
