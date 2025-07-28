@@ -53,7 +53,6 @@ func GetPaginatedCourses(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) ([]*courses.Course, error) {
-
 	pathLimit := ctx.QueryParam("limit")
 	pathOffset := ctx.QueryParam("offset")
 
@@ -63,7 +62,6 @@ func GetPaginatedCourses(
 	}
 
 	offset, err := strconv.Atoi(pathOffset)
-
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -80,7 +78,6 @@ func GetCourse(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
-
 	pathId := ctx.PathParam("course_id")
 
 	id, err := uuid.Parse(pathId)
@@ -100,7 +97,6 @@ func PatchCourse(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
-
 	pathId := ctx.PathParam("course_id")
 
 	id, err := uuid.Parse(pathId)
