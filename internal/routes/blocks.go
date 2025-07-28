@@ -2,27 +2,40 @@ package routes
 
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
-	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/go-fuego/fuego"
+	"github.com/google/uuid"
 )
 
 func GetBlock(
 	blockRepo blocks.Repo,
-	ctx fuego.ContextWithBody[blocks.BlockID],
+	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
-	body, err := ctx.Body()
+
+	pathId := ctx.PathParam("block_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	return blockRepo.GetById(body.ID)
+
+	return blockRepo.GetById(id)
 }
 
-func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextWithBody[courses.CourseID]) ([]*blocks.Block, error) {
-	body, err := ctx.Body()
+func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Block, error) {
+	pathId := ctx.PathParam("course_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	return blockRepo.GetAllBlocksByCourseId(body.ID)
+	blockList, err := blockRepo.GetAllBlocksByCourseId(id)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return blockList, nil
+
 }
 
 func CreateBlock(
@@ -38,17 +51,26 @@ func CreateBlock(
 }
 
 func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
+	pathId := ctx.PathParam("block_id")
+
+	id, err := uuid.Parse(pathId)
+	if err != nil {
+		return nil, err
+	}
+
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
-	return blockRepo.UpdateById(&body)
+	return blockRepo.UpdateById(id, &body)
 }
 
-func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.DeleteBlockFromCourse]) (any, error) {
-	body, err := ctx.Body()
+func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
+	pathId := ctx.PathParam("block_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	return nil, blockRepo.DeleteById(body.BlockID.ID)
+	return nil, blockRepo.DeleteById(id)
 }

@@ -6,10 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type CourseID struct {
-	ID uuid.UUID `path:"course_id" validate:"required"`
-}
-
 type Course struct {
 	Id           uuid.UUID `json:"id"           db:"id"            binding:"required"`
 	DisciplineId uuid.UUID `json:"disciplineId" db:"discipline_id"`
@@ -24,7 +20,6 @@ type CreateCourse struct {
 }
 
 type UpdateCourse struct {
-	CourseID
 	OwnerId uuid.UUID `json:"ownerId" db:"owner_id"`
 	Name    string    `json:"name"    db:"name"`
 }

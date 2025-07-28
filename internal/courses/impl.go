@@ -75,7 +75,7 @@ func (r *PGRepo) GetById(id uuid.UUID) (*Course, error) {
 const getAllByCourseIdSql = `
     SELECT *
     FROM course
-    LIMIT :limit OFFSET :offset
+    LIMIT $1 OFFSET $2
 `
 
 func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {

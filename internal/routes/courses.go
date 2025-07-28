@@ -2,6 +2,7 @@ package routes
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
@@ -35,7 +36,7 @@ func CreateCourse(
 	session, err := sessionRepo.GetById(u)
 	if err != nil {
 		logger.Error(err.Error())
-		// return nil, err
+		return nil, err
 	}
 
 	createdCourse, err := courseRepo.Create(&body, session.UserId)
@@ -51,25 +52,38 @@ func CreateCourse(
 func GetPaginatedCourses(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[courses.CoursePagination],
+	ctx fuego.ContextNoBody,
 ) ([]*courses.Course, error) {
-	body, err := ctx.Body()
+
+	pathLimit := ctx.QueryParam("limit")
+	pathOffset := ctx.QueryParam("offset")
+
+	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
 		return nil, err
 	}
-	return courseRepo.GetPaginatedCourses(body.Limit, body.Offset)
+
+	offset, err := strconv.Atoi(pathOffset)
+
+	if err != nil {
+		return nil, err
+	}
+	return courseRepo.GetPaginatedCourses(limit, offset)
 }
 
 func GetCourse(
 	courseRepo courses.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[courses.CourseID],
+	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
-	body, err := ctx.Body()
+
+	pathId := ctx.PathParam("course_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	return courseRepo.GetById(body.ID)
+	return courseRepo.GetById(id)
 }
 
 func PatchCourse(
@@ -77,28 +91,39 @@ func PatchCourse(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
+
+	pathId := ctx.PathParam("course_id")
+
+	id, err := uuid.Parse(pathId)
+	if err != nil {
+		return nil, err
+	}
+
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
-	return courseRepo.UpdateById(body.ID, &body)
+	return courseRepo.UpdateById(id, &body)
 }
 
 func DeleteCourse(
 	courseRepo courses.Repo,
 	blockRepo blocks.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[courses.CourseID],
+	ctx fuego.ContextNoBody,
 ) (any, error) {
-	body, err := ctx.Body()
+	pathId := ctx.PathParam("course_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	err = courseRepo.DeleteById(body.ID)
+
+	err = courseRepo.DeleteById(id)
 	if err != nil {
 		return nil, err
 	}
-	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(body.ID)
+	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(id)
 	if err != nil {
 		return nil, err
 	}
@@ -106,13 +131,11 @@ func DeleteCourse(
 	for _, block := range linkedBlocks {
 
 		updatedBlock := blocks.UpdateBlock{
-			CourseID: courses.CourseID{
-				ID: uuid.Nil,
-			},
+			CourseId: uuid.Nil,
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := blockRepo.UpdateById(&updatedBlock)
+		_, err := blockRepo.UpdateById(block.Id, &updatedBlock)
 		if err != nil {
 			return nil, err
 		}

@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/go-fuego/fuego"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -22,13 +23,16 @@ func CreateDiscipline(
 func GetDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[disciplines.DisciplineID],
+	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
-	body, err := ctx.Body()
+
+	pathId := ctx.PathParam("discipline_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
-	return disciplineRepo.GetById(body.ID)
+	return disciplineRepo.GetById(id)
 }
 
 func PatchDiscipline(
@@ -36,20 +40,31 @@ func PatchDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
+
+	pathId := ctx.PathParam("discipline_id")
+
+	id, err := uuid.Parse(pathId)
+	if err != nil {
+		return nil, err
+	}
+
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, err
 	}
 
-	return disciplineRepo.UpdateById(body.ID, &body)
+	return disciplineRepo.UpdateById(id, &body)
 }
 
 func DeleteDiscipline(
 	disciplineRepo disciplines.Repo,
 	logger *zap.Logger,
-	ctx fuego.ContextWithBody[disciplines.DisciplineID],
+	ctx fuego.ContextNoBody,
 ) (any, error) {
-	body, err := ctx.Body()
+
+	pathId := ctx.PathParam("discipline_id")
+
+	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, err
 	}
@@ -59,5 +74,5 @@ func DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	return nil, disciplineRepo.DeleteById(body.ID)
+	return nil, disciplineRepo.DeleteById(id)
 }
