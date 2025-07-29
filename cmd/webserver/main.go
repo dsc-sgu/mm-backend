@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -71,12 +72,12 @@ func main() {
 	redisClient := redis.NewClient(redisOpts)
 
 	s := fuego.NewServer(
-		fuego.WithAddr("0.0.0.0:80"),
+		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.Port)),
 		fuego.WithGlobalMiddlewares(applogger.ZapMiddleware(logger)),
 	)
 	s.OpenAPI.Description().Servers = openapi3.Servers{
 		{
-			URL:         "http://localhost:8080",
+			URL:         fmt.Sprintf("http://%s:%d", config.SwaggerHost, config.SwaggerPort),
 			Description: "Docker dev deployment server",
 		},
 	}
