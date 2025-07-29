@@ -19,6 +19,8 @@ type Config struct {
 	GinMode             string   `envconfig:"GIN_MODE"              default:"debug"`
 	Host                string   `envconfig:"HOST"                  default:"0.0.0.0"`
 	Port                int      `envconfig:"PORT"                  default:"8080"`
+	SwaggerHost         string   `envconfig:"SWAGGER_HOST"          default:"localhost"`
+	SwaggerPort         int      `envconfig:"SWAGGER_PORT"          default:"8080"`
 
 	DocsTitle       string `envconfig:"DOCS_TITLE"       default:"MergeMinds API"`
 	DocsDescription string `envconfig:"DOCS_DESCRIPTION" default:"MergeMinds API documentation"`
