@@ -80,6 +80,30 @@ func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBl
 	return block, nil
 }
 
+func UnlinkFromCourse(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (*blocks.Block, error) {
+	pathBlockId := ctx.PathParam("block_id")
+
+	blockId, err := uuid.Parse(pathBlockId)
+	if err != nil {
+		return nil, err
+	}
+
+	pathCourseId := ctx.PathParam("course_id")
+
+	courseId, err := uuid.Parse(pathCourseId)
+	if err != nil {
+		return nil, err
+	}
+
+	block, err := blockRepo.UnlinkFromCourseById(courseId, blockId)
+
+	if err != nil {
+		return nil, err //fuego.InternalServerError{}
+	}
+
+	return block, nil
+}
+
 func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
 	pathId := ctx.PathParam("block_id")
 
