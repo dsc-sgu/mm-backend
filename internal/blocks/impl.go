@@ -176,7 +176,6 @@ func (r *PGRepo) UnlinkFromCourseById(courseId uuid.UUID, blockId uuid.UUID) (*B
 	var unlinkedBlock Block
 
 	err := row.StructScan(&unlinkedBlock)
-
 	if err != nil {
 		return nil, err
 	}

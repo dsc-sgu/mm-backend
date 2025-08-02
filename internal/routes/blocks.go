@@ -51,7 +51,7 @@ func CreateBlock(
 
 	block, err := blockRepo.Create(ctx.Context(), &body)
 	if err != nil {
-		return nil, err //fuego.InternalServerError{}
+		return nil, err // fuego.InternalServerError{}
 	}
 
 	return block, nil
@@ -94,9 +94,8 @@ func UnlinkFromCourse(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (*blocks.B
 	}
 
 	block, err := blockRepo.UnlinkFromCourseById(courseId, blockId)
-
 	if err != nil {
-		return nil, err //fuego.InternalServerError{}
+		return nil, fuego.InternalServerError{}
 	}
 
 	return block, nil

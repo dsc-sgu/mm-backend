@@ -163,7 +163,6 @@ func SetupRoutes(
 
 			m.SetStatus(204)
 			return course, nil
-
 		},
 		option.Summary("Delete course"),
 	)
