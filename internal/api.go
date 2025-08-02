@@ -53,6 +53,15 @@ func SetupRoutes(
 
 	fuego.Delete(
 		blockGroup,
+		"/{block_id}/{course_id}",
+		func(m fuego.ContextNoBody) (*blocks.Block, error) {
+			return routes.UnlinkFromCourse(blockRepo, m)
+		},
+		option.Summary("Unlink block from course"),
+	)
+
+	fuego.Delete(
+		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextNoBody) (any, error) {
 			return routes.DeleteBlock(blockRepo, m)
