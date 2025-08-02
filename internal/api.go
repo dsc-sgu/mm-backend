@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
@@ -29,11 +31,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			block, err := routes.GetBlock(blockRepo, m)
-			if err != nil {
-				return nil, err
-			}
-			return block, nil
+			return routes.GetBlock(blockRepo, m)
 		},
 		option.Summary("Get block by id"),
 	)
@@ -42,24 +40,16 @@ func SetupRoutes(
 		blockGroup,
 		"/{course_id}/blocks",
 		func(m fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
-			block, err := routes.CreateBlock(blockRepo, m)
-			if err != nil {
-				return nil, err
-			}
-			m.SetStatus(201)
-			return block, nil
+			return routes.CreateBlock(blockRepo, m)
 		},
 		option.Summary("Create new block on course"),
+		option.DefaultStatusCode(http.StatusCreated),
 	)
 	fuego.Patch(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
-			block, err := routes.PatchBlock(blockRepo, m)
-			if err != nil {
-				return nil, err
-			}
-			return block, nil
+			return routes.PatchBlock(blockRepo, m)
 		},
 		option.Summary("Update existing block"),
 	)
@@ -68,12 +58,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}/{course_id}",
 		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			block, err := routes.UnlinkFromCourse(blockRepo, m)
-			if err != nil {
-				return nil, err
-			}
-
-			return block, nil
+			return routes.UnlinkFromCourse(blockRepo, m)
 		},
 		option.Summary("Unlink block from course"),
 	)
@@ -82,14 +67,10 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			block, err := routes.DeleteBlock(blockRepo, m)
-			if err != nil {
-				return nil, err
-			}
-			m.SetStatus(204)
-			return block, nil
+			return routes.DeleteBlock(blockRepo, m)
 		},
 		option.Summary("Delete block from course"),
+		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
 	courseGroup := fuego.Group(g, "/courses", option.Summary("Course API"))
@@ -98,27 +79,17 @@ func SetupRoutes(
 		courseGroup,
 		"/",
 		func(m fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
-			course, err := routes.CreateCourse(sessionRepo, courseRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-
-			m.SetStatus(201)
-			return course, nil
+			return routes.CreateCourse(sessionRepo, courseRepo, logger, m)
 		},
 		option.Summary("Create new course"),
+		option.DefaultStatusCode(http.StatusCreated),
 	)
 
 	fuego.Get(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextNoBody) (*courses.Course, error) {
-			course, err := routes.GetCourse(courseRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-
-			return course, nil
+			return routes.GetCourse(courseRepo, logger, m)
 		},
 		option.Summary("Get existing course by id"),
 	)
@@ -127,12 +98,7 @@ func SetupRoutes(
 		courseGroup,
 		"",
 		func(m fuego.ContextNoBody) ([]*courses.Course, error) {
-			courses, err := routes.GetPaginatedCourses(courseRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-
-			return courses, nil
+			return routes.GetPaginatedCourses(courseRepo, logger, m)
 		},
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
@@ -143,11 +109,7 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			course, err := routes.PatchCourse(courseRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-			return course, nil
+			return routes.PatchCourse(courseRepo, logger, m)
 		},
 		option.Summary("Update existing course"),
 	)
@@ -156,15 +118,10 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			course, err := routes.DeleteCourse(courseRepo, blockRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-
-			m.SetStatus(204)
-			return course, nil
+			return routes.DeleteCourse(courseRepo, blockRepo, logger, m)
 		},
 		option.Summary("Delete course"),
+		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
 	disciplineGroup := fuego.Group(g, "/disciplines", option.Summary("Discipline API"))
@@ -173,26 +130,16 @@ func SetupRoutes(
 		disciplineGroup,
 		"",
 		func(m fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
-			discipline, err := routes.CreateDiscipline(disciplineRepo, logger, m)
-			if err != nil {
-				return &disciplines.Discipline{}, err
-			}
-
-			m.SetStatus(201)
-			return discipline, nil
+			return routes.CreateDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Create new discipline"),
+		option.DefaultStatusCode(http.StatusCreated),
 	)
 	fuego.Get(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextNoBody) (*disciplines.Discipline, error) {
-			discipline, err := routes.GetDiscipline(disciplineRepo, logger, m)
-			if err != nil {
-				return &disciplines.Discipline{}, err
-			}
-
-			return discipline, nil
+			return routes.GetDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Get discipline by id"),
 	)
@@ -201,12 +148,7 @@ func SetupRoutes(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextWithBody[disciplines.PatchDiscipline]) (*disciplines.Discipline, error) {
-			discipline, err := routes.PatchDiscipline(disciplineRepo, logger, m)
-			if err != nil {
-				return &disciplines.Discipline{}, err
-			}
-
-			return discipline, nil
+			return routes.PatchDiscipline(disciplineRepo, logger, m)
 		},
 		option.Summary("Update existing discipline"),
 	)
@@ -214,14 +156,9 @@ func SetupRoutes(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			discipline, err := routes.DeleteDiscipline(disciplineRepo, logger, m)
-			if err != nil {
-				return nil, err
-			}
-
-			m.SetStatus(204)
-			return discipline, nil
+			return routes.DeleteDiscipline(disciplineRepo, logger, m)
 		},
+		option.DefaultStatusCode(http.StatusNoContent),
 		option.Summary("Delete discipline"),
 	)
 
@@ -231,11 +168,7 @@ func SetupRoutes(
 		authGroup,
 		"/login",
 		func(m fuego.ContextWithBody[routes.LoginModel]) (any, error) {
-			user, err := routes.Login(userRepo, sessionRepo, logger, cookieConfig, m)
-			if err != nil {
-				return nil, err
-			}
-			return user, nil
+			return routes.Login(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 		option.Summary("Login user"),
 	)
@@ -244,14 +177,10 @@ func SetupRoutes(
 		authGroup,
 		"/register",
 		func(m fuego.ContextWithBody[routes.RegisterModel]) (any, error) {
-			user, err := routes.Register(userRepo, sessionRepo, logger, cookieConfig, m)
-			if err != nil {
-				return nil, err
-			}
-			m.SetStatus(201)
-			return user, nil
+			return routes.Register(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 		option.Summary("Register new user"),
+		option.DefaultStatusCode(http.StatusCreated),
 	)
 
 	// Logout
@@ -259,11 +188,7 @@ func SetupRoutes(
 		authGroup,
 		"/logout",
 		func(m fuego.ContextNoBody) (any, error) {
-			user, err := routes.Logout(userRepo, sessionRepo, logger, cookieConfig, m)
-			if err != nil {
-				return nil, err
-			}
-			return user, nil
+			return routes.Logout(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 		option.Summary("Logout user"),
 	)
@@ -273,11 +198,7 @@ func SetupRoutes(
 		authGroup,
 		"/session",
 		func(m fuego.ContextNoBody) (any, error) {
-			session, err := routes.Session(userRepo, sessionRepo, logger, cookieConfig, m)
-			if err != nil {
-				return nil, err
-			}
-			return session, nil
+			return routes.Session(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 	)
 }
