@@ -7,7 +7,7 @@ import (
 )
 
 type Repo interface {
-	Create(model *CreateBlock) (*Block, error)
+	Create(ctx context.Context, model *CreateBlock) (*Block, error)
 	GetById(ctx context.Context, id uuid.UUID) (*Block, error)
 	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*Block, error)
 	UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error)

@@ -27,32 +27,19 @@ const createBlockSql = `
 `
 
 const nextPositionSql = `
-    SELECT position
-    FROM block
-    WHERE course_id = $1
-	ORDER BY position ASC
+    SELECT COALESCE(MAX(position), 0)
+	FROM block
+	WHERE course_id = $1
 `
 
-func (r *PGRepo) Create(RequestBlock *CreateBlock) (*Block, error) {
+func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
-
-	positions, err := r.db.Query(nextPositionSql, RequestBlock.CourseId)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := positions.Close(); err != nil {
-			r.logger.Error(err.Error())
-		}
-	}()
 
 	position := 0
 
-	if positions.Next() {
-		if err := positions.Scan(&position); err != nil {
-			return nil, err
-		}
+	err := r.db.GetContext(ctx, &position, nextPositionSql, RequestBlock.CourseId)
+	if err != nil {
+		return nil, err
 	}
 
 	r.logger.Debug("Executing query", zap.String("query", createBlockSql))
