@@ -84,7 +84,7 @@ func GetCourse(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	course, err := courseRepo.GetById(id)
+	course, err := courseRepo.GetById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

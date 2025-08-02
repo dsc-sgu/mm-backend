@@ -17,7 +17,7 @@ func GetBlock(
 		return nil, fuego.InternalServerError{}
 	}
 
-	block, err := blockRepo.GetById(id)
+	block, err := blockRepo.GetById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

@@ -91,11 +91,11 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*Block, error) {
+func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
 	var block Block
-	err := r.db.GetContext(context.Background(), &block, getByIdSql, id)
+	err := r.db.GetContext(ctx, &block, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
