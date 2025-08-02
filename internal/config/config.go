@@ -18,7 +18,7 @@ type Config struct {
 	AdminEmail          string   `envconfig:"ADMIN_EMAIL"           default:"admin@admin.ru"`
 	GinMode             string   `envconfig:"GIN_MODE"              default:"debug"`
 	Host                string   `envconfig:"HOST"                  default:"0.0.0.0"`
-	Port                int      `envconfig:"PORT"                  default:"8080"`
+	Port                int      `envconfig:"PORT"                  default:"80"`
 	SwaggerHost         string   `envconfig:"SWAGGER_HOST"          default:"localhost"`
 	SwaggerPort         int      `envconfig:"SWAGGER_PORT"          default:"8080"`
 
