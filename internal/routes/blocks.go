@@ -49,7 +49,6 @@ func CreateBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	ctx.SetStatus(201)
 	block, err := blockRepo.Create(ctx.Context(), &body)
 	if err != nil {
 		return nil, err //fuego.InternalServerError{}
@@ -71,7 +70,6 @@ func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBl
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	ctx.SetStatus(201)
 	block, err := blockRepo.UpdateById(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
@@ -117,6 +115,5 @@ func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
 		return nil, fuego.InternalServerError{}
 	}
 
-	ctx.SetStatus(204)
 	return nil, nil
 }

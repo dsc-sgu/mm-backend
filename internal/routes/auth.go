@@ -99,7 +99,6 @@ func Register(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	ctx.SetStatus(201)
 	return nil, nil
 }
 

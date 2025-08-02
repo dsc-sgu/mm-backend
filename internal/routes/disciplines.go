@@ -17,7 +17,6 @@ func CreateDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	ctx.SetStatus(201)
 	discipline, err := disciplineRepo.Create(&body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
@@ -92,6 +91,5 @@ func DeleteDiscipline(
 		return nil, fuego.InternalServerError{}
 	}
 
-	ctx.SetStatus(204)
 	return nil, nil
 }
