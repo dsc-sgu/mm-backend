@@ -40,7 +40,7 @@ func Login(userRepo user.Repo,
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	user, err := userRepo.GetByEmail(body.Email)
+	user, err := userRepo.GetByEmail(ctx.Context(), body.Email)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -154,7 +154,7 @@ func Session(
 		return nil, fuego.InternalServerError{}
 	}
 
-	u, err := userRepo.GetById(session.UserId)
+	u, err := userRepo.GetById(ctx.Context(), session.UserId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

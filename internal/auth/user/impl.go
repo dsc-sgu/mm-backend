@@ -72,11 +72,11 @@ const getByIdSql = `
 	WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*Model, error) {
+func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Model, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
 	var user Model
-	err := r.db.GetContext(context.Background(), &user, getByIdSql, id)
+	err := r.db.GetContext(ctx, &user, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -92,11 +92,11 @@ const getByEmailSql = `
 	WHERE email = $1
 `
 
-func (r *PGRepo) GetByEmail(email string) (*Model, error) {
+func (r *PGRepo) GetByEmail(ctx context.Context, email string) (*Model, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByEmailSql))
 
 	var user Model
-	err := r.db.GetContext(context.Background(), &user, getByEmailSql, email)
+	err := r.db.GetContext(ctx, &user, getByEmailSql, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

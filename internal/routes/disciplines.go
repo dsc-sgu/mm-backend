@@ -37,7 +37,7 @@ func GetDiscipline(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	discipline, err := disciplineRepo.GetById(id)
+	discipline, err := disciplineRepo.GetById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

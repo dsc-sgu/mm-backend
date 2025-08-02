@@ -61,11 +61,11 @@ const getByIdSql = `
     WHERE id = $1
 `
 
-func (r *PGRepo) GetById(id uuid.UUID) (*Discipline, error) {
+func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
 	var discipline Discipline
-	err := r.db.GetContext(context.Background(), &discipline, getByIdSql, id)
+	err := r.db.GetContext(ctx, &discipline, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
