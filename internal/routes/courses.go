@@ -43,7 +43,6 @@ func CreateCourse(
 		return nil, fuego.InternalServerError{Title: "Course wasn't created"}
 	}
 
-	ctx.SetStatus(201)
 	return createdCourse, err
 }
 
@@ -151,6 +150,5 @@ func DeleteCourse(
 		}
 	}
 
-	ctx.SetStatus(204)
 	return nil, nil
 }

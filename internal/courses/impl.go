@@ -133,7 +133,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error)
 
 	err := row.StructScan(&course)
 	if err != nil {
-		return nil, err
+		return &course, err
 	}
 
 	return &course, nil
