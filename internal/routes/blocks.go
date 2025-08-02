@@ -50,9 +50,9 @@ func CreateBlock(
 	}
 
 	ctx.SetStatus(201)
-	block, err := blockRepo.Create(&body)
+	block, err := blockRepo.Create(ctx.Context(), &body)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, err //fuego.InternalServerError{}
 	}
 
 	return block, nil
