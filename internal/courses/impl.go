@@ -87,7 +87,7 @@ func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
 
 	var course Course
 	var courseList []*Course
-	rows, err := r.db.Query(getAllByCourseIdSql, limit, offset)
+	rows, err := r.db.Queryx(getAllByCourseIdSql, limit, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -101,13 +101,7 @@ func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
 	}()
 
 	for rows.Next() {
-		if err := rows.Scan(
-			&course.Id,
-			&course.DisciplineId,
-			&course.OwnerId,
-			&course.Name,
-			&course.CreatedAt,
-		); err != nil {
+		if err := rows.StructScan(&course); err != nil {
 			return nil, err
 		}
 		courseList = append(courseList, &course)
@@ -128,7 +122,7 @@ const updateByIdSql = `
 func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
-	row := r.db.QueryRow(
+	row := r.db.QueryRowx(
 		updateByIdSql,
 		update.OwnerId,
 		update.Name,
@@ -137,13 +131,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error)
 
 	var course Course
 
-	err := row.Scan(
-		&course.Id,
-		&course.DisciplineId,
-		&course.OwnerId,
-		&course.Name,
-		&course.CreatedAt,
-	)
+	err := row.StructScan(&course)
 	if err != nil {
 		return nil, err
 	}

@@ -102,7 +102,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
 
 	var blockList []*Block
-	rows, err := r.db.Query(getAllByCourseIdSql, id)
+	rows, err := r.db.Queryx(getAllByCourseIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -118,13 +118,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 
 	for rows.Next() {
 		var block Block
-		if err := rows.Scan(
-			&block.Id,
-			&block.BlockType,
-			&block.Data,
-			&block.CourseId,
-			&block.Position,
-		); err != nil {
+		if err := rows.StructScan(&block); err != nil {
 			return nil, err
 		}
 		blockList = append(blockList, &block)
@@ -145,7 +139,7 @@ const updateByIdSql = `
 func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
-	row := r.db.QueryRow(
+	row := r.db.QueryRowx(
 		updateByIdSql,
 		update.CourseId,
 		update.Data,
@@ -155,13 +149,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
 
 	var block Block
 
-	err := row.Scan(
-		&block.Id,
-		&block.BlockType,
-		&block.Data,
-		&block.CourseId,
-		&block.Position,
-	)
+	err := row.StructScan(&block)
 	if err != nil {
 		return nil, err
 	}
