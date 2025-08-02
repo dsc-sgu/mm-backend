@@ -85,7 +85,7 @@ const updateByIdSql = `
 func (r *PGRepo) UpdateById(id uuid.UUID, model *PatchDiscipline) (*Discipline, error) {
 	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
 
-	row := r.db.QueryRow(
+	row := r.db.QueryRowx(
 		updateByIdSql,
 		model.Name,
 		id,
@@ -93,10 +93,7 @@ func (r *PGRepo) UpdateById(id uuid.UUID, model *PatchDiscipline) (*Discipline, 
 
 	var discipline Discipline
 
-	err := row.Scan(
-		&discipline.Id,
-		&discipline.Name,
-	)
+	err := row.StructScan(&discipline)
 	if err != nil {
 		return nil, err
 	}
