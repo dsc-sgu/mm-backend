@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/MergeMinds/mm-backend-go/internal/attempt"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
@@ -24,6 +25,7 @@ func SetupRoutes(
 	userRepo user.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
+	attemptHeandler routes.AttemptHandler,
 ) {
 	blockGroup := fuego.Group(g, "/blocks", option.Summary("Block API"))
 
@@ -220,9 +222,8 @@ func SetupRoutes(
 	fuego.Get(
 		attemptGroup,
 		"/{id}",
-		func(m fuego.ContextNoBody) (*Attempt, error) {
-			id := m.PathParam("id")
-			attempt, err := routes.GetAttempt(m.Context, id, logger)
+		func(m fuego.ContextNoBody) (*attempt.Attempt, error) {
+			attempt, err := attemptHeandler.GetAttempt(m.Context)
 			if err != nil {
 				return nil, err
 			}
@@ -234,8 +235,8 @@ func SetupRoutes(
 	fuego.Post(
 		attemptGroup,
 		"",
-		func(m fuego.ContextWithBody[*Attempt]) (*Attempt, error) {
-			attempt, err := routes.CreateAttempt(m.Context, logger)
+		func(m fuego.ContextWithBody[*attempt.Attempt]) (*attempt.Attempt, error) {
+			attempt, err := attemptHeandler.CreateAttempt(m.Context)
 			if err != nil {
 				return nil, err
 			}
@@ -247,9 +248,9 @@ func SetupRoutes(
 	fuego.Patch(
 		attemptGroup,
 		"/{id}",
-		func(m fuego.ContextWithBody[*Attempt]) (*Attempt, error) {
-			id := m.Param("id")
-			attempt, err := routes.PatchAttempt(m.Context, id, logger)
+		func(m fuego.ContextWithBody[*attempt.Attempt]) (*attempt.Attempt, error) {
+			id := m.PathParam("id")
+			attempt, err := attemptHeandler.GetAttempt(m.Context, id)
 			if err != nil {
 				return nil, err
 			}
@@ -259,18 +260,18 @@ func SetupRoutes(
 		option.Summary("Update attempt by ID"),
 	)
 
-	fuego.Delete(
-		attemptGroup,
-		"/{id}",
-		func(m fuego.ContextNoBody) (any, error) {
-			id := m.PathParam("id")
-			attempt, err := routes.DeleteAttempt(m.Context, id, logger)
-			if err != nil {
-				return nil, err
-			}
-			return attempt, nil
-		},
-		option.Summary("Delete attempt by ID"),
-	)
+	// fuego.Delete(
+	// 	attemptGroup,
+	// 	"/{id}",
+	// 	func(m fuego.ContextNoBody) (any, error) {
+	// 		id := m.PathParam("id")
+	// 		attempt, err := attemptHeandler.DeleteAttempt(m.Context)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		return attempt, nil
+	// 	},
+	// 	option.Summary("Delete attempt by ID"),
+	// )
 
 }

@@ -2,6 +2,7 @@ package attempt
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -12,7 +13,8 @@ import (
 
 type AttemptRepository interface {
 	CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error)
-	GradeAttempt(ctx context.Context, attempt *Attempt) error // Allows change State in attempt_transition table to Graded
+	GradeAttempt(ctx context.Context, rewAttempt *rewiewAttempt) error // Allows change State in attempt_transition table to Graded
+	// какой смысл в GetAttempt
 	GetLastAttempt(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) (*Attempt, error)
 	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
 
@@ -113,13 +115,15 @@ func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt)
 	return &attempt, nil
 }
 
-func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) error {
+func (a *attemptRepository) GradeAttempt(ctx context.Context, rewAttempt *rewAttempt) error {
 	AttemptTransitDB := AttemptTransitDB{
-		Id:           attempt.Id,
-		State:        AttemptStatusGraded,
-		TransitionAt: time.Now(),
+		Id:             rewAttempt.Id,
+		State:          AttemptStatusGraded,
+		TransitionAt:   time.Now(),
+		TransitionData: json.RawMessage(rewAttempt.json_data),
 	}
 
+	// If grade will contain transition_data in JSON format, add a transaction
 	rows, err := a.db.NamedQuery(addAttemptToAttemptTransit, AttemptTransitDB)
 	if err != nil {
 		return err
@@ -136,6 +140,7 @@ func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) 
 			return err
 		}
 	}
+	//
 
 	return nil
 }

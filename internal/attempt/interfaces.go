@@ -6,7 +6,8 @@ type RepoManager interface {
 	InitRepo(repoID RepoID) error
 	RemoveRepo(repoID RepoID) error
 	MakeAttempt(repoID RepoID, fileInfo []FileInfo) (attempt Attempt, err error)
-	GetAttempts(repoID RepoID) ([]Attempt, error)
+	// Получить
+	GetAttempts(repoID RepoID) ([]AttemptDetails, error)
 	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
 }
 
