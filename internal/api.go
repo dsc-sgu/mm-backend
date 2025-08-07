@@ -201,4 +201,76 @@ func SetupRoutes(
 			return routes.Session(userRepo, sessionRepo, logger, cookieConfig, m)
 		},
 	)
+
+	fuego.Patch(
+		blockGroup,
+		"/{block_id}",
+		func(m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
+			block, err := routes.PatchBlock(blockRepo, m)
+			if err != nil {
+				return nil, err
+			}
+			return block, nil
+		},
+		option.Summary("Update existing block"),
+	)
+
+	attemptGroup := fuego.Group(g, "/attempt", option.Summary("Attempt API"))
+
+	fuego.Get(
+		attemptGroup,
+		"/{id}",
+		func(m fuego.ContextNoBody) (*Attempt, error) {
+			id := m.PathParam("id")
+			attempt, err := routes.GetAttempt(m.Context, id, logger)
+			if err != nil {
+				return nil, err
+			}
+			return attempt, nil
+		},
+		option.Summary("Get attempt by ID"),
+	)
+
+	fuego.Post(
+		attemptGroup,
+		"",
+		func(m fuego.ContextWithBody[*Attempt]) (*Attempt, error) {
+			attempt, err := routes.CreateAttempt(m.Context, logger)
+			if err != nil {
+				return nil, err
+			}
+			return attempt, nil
+		},
+		option.Summary("Create new attempt"),
+	)
+
+	fuego.Patch(
+		attemptGroup,
+		"/{id}",
+		func(m fuego.ContextWithBody[*Attempt]) (*Attempt, error) {
+			id := m.Param("id")
+			attempt, err := routes.PatchAttempt(m.Context, id, logger)
+			if err != nil {
+				return nil, err
+			}
+			return attempt, nil
+
+		},
+		option.Summary("Update attempt by ID"),
+	)
+
+	fuego.Delete(
+		attemptGroup,
+		"/{id}",
+		func(m fuego.ContextNoBody) (any, error) {
+			id := m.PathParam("id")
+			attempt, err := routes.DeleteAttempt(m.Context, id, logger)
+			if err != nil {
+				return nil, err
+			}
+			return attempt, nil
+		},
+		option.Summary("Delete attempt by ID"),
+	)
+
 }
