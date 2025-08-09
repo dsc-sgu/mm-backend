@@ -9,9 +9,8 @@ import (
 
 type AttemptHandler interface {
 	CreateAttempt(c fuego.ContextWithBody[attempt.MakeAttempt]) (*attempt.Attempt, error)
-	GetAttempt(c fuego.ContextNoBody) (attempt.Attempt, error)
-	GradeAttempt(c fuego.ContextWithBody[attempt.Attempt], id uuid.UUID) (*attempt.Attempt, error)
-	// DeleteAttempt(c fuego.ContextNoBody) (any, error)
+	GetAttempt(c fuego.ContextNoBody) (*attempt.AttemptResponse, error)
+	GradeAttempt(c fuego.ContextWithBody[attempt.Attempt]) (*attempt.RewiewAttempt, error)
 }
 
 type attemptHandler struct {
@@ -21,8 +20,7 @@ type attemptHandler struct {
 
 func NewAttemptHandler(repo attempt.AttemptRepository, logger *zap.Logger) AttemptHandler {
 	return &attemptHandler{
-		repo:   repo,
-		logger: logger,
+		repo: repo,
 	}
 }
 
@@ -39,7 +37,7 @@ func (h *attemptHandler) CreateAttempt(c fuego.ContextWithBody[attempt.MakeAttem
 	return attempt, nil
 }
 
-func (h *attemptHandler) GetAttempt(c fuego.ContextNoBody) (*attempt.Attempt, error) {
+func (h *attemptHandler) GetAttempt(c fuego.ContextNoBody) (*attempt.AttemptResponse, error) {
 	id, err := uuid.Parse(c.PathParam("id"))
 	if err != nil {
 		return nil, fuego.InternalServerError{}
@@ -54,38 +52,17 @@ func (h *attemptHandler) GetAttempt(c fuego.ContextNoBody) (*attempt.Attempt, er
 
 }
 
-func (h *attemptHandler) GradeAttempt(c fuego.ContextWithBody[attempt.Attempt], id uuid.UUID) (*attempt.Attempt, error) {
-	id, err := uuid.Parse(c.PathParam("id"))
-	if err != nil {
-		return nil, err
-	}
-
+func (h *attemptHandler) GradeAttempt(c fuego.ContextWithBody[attempt.Attempt]) (*attempt.RewiewAttempt, error) {
 	body, err := c.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	err = h.repo.GradeAttempt(c.Context(), &body)
+	rewiewAttempt, err := h.repo.GradeAttempt(c.Context(), &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
 
-	return nil, nil
+	return rewiewAttempt, nil
 
 }
-
-// func (h *attemptHandler) DeleteAttempt(c fuego.ContextNoBody) (any, error) {
-// 	pathId := c.PathParam("block_id")
-
-// 	id, err := uuid.Parse(pathId)
-// 	if err != nil {
-// 		return nil, fuego.InternalServerError{}
-// 	}
-
-// 	err = h.repo.DeleteAttempt(id)
-// 	if err != nil {
-// 		return nil, fuego.InternalServerError{}
-// 	}
-
-// 	return nil, nil
-// }

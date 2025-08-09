@@ -55,10 +55,10 @@ type AttemptDB struct {
 
 // DB structs
 type AttemptTransitDB struct {
-	Id             uuid.UUID       `db:"attempt_id" binding:"required"`
-	State          AttemptState    `db:"state" binding:"required"`
-	TransitionAt   time.Time       `db:"transition_at" binding:"required"`
-	TransitionData json.RawMessage `db:"transition_at" binding:"required"`
+	Id             uuid.UUID       `json:"id" db:"id" binding:"required"`
+	State          AttemptState    `json:"state" db:"state" binding:"required"`
+	TransitionAt   time.Time       `json:"transitionAt" db:"transition_at" binding:"required"`
+	TransitionData json.RawMessage `json:"transitionData" db:"transition_data" binding:"required"`
 }
 
 type Attempt struct {
@@ -68,11 +68,9 @@ type Attempt struct {
 }
 
 type AttemptDetails struct {
-	Id uuid.UUID `json:"id" binding:"required"`
-
-	RepositoryId uuid.UUID `json:"repositoryId" binding:"required"`
-	BranchName   string    `json:"branchName" binding:"required"`
-	CommitsCount int       `json:"commitsCount" binding:"required"`
+	RepositoryId  uuid.UUID `json:"repositoryId" binding:"required"`
+	RepositoryURL string    `json:"repositoryURL" binding:"required"`
+	BranchName    string    `json:"branchName" binding:"required"`
 
 	CreatedAt time.Time `json:"created_at" binding:"required"`
 	UpdatedAt time.Time `json:"updated_at" binding:"required"`
@@ -80,15 +78,18 @@ type AttemptDetails struct {
 	CommitsList []CommitDetail `json:"commitsList" binding:"required"`
 }
 
-// type ReviewAttempt struct {
-// 	Id        uuid.UUID `json:"id" binding:"required"`
-// 	UserId    uuid.UUID `json:"userId" binding:"required"`
-// 	CourseId  uuid.UUID `json:"courseId" binding:"required"`
-// 	TaskId    uuid.UUID `json:"taskId" binding:"required"`
-// 	AttemptId uuid.UUID `json:"attemptId" binding:"required"`
+type AttemptResponse struct {
+	AttemptTransitDB
+	AttemptDetails
+}
 
-// 	Status     AttemptStatus `json:"status" binding:"required"`
-// 	Grade      int           `json:"grade" binding:"required"`
-// 	ReviewedAt time.Time     `json:"created_at" binding:"required"`
-// 	Comment    string        `json:"created_at" binding:"required"`
-// }
+type ReviewAttempt struct {
+	Id uuid.UUID `json:"id" binding:"required"`
+	RepoID
+	AttemptId uuid.UUID `json:"attemptId" binding:"required"`
+
+	Status     AttemptState `json:"status" binding:"required"`
+	Grade      int          `json:"grade" binding:"required"`
+	ReviewedAt time.Time    `json:"created_at" binding:"required"`
+	Comment    string       `json:"created_at" binding:"required"`
+}

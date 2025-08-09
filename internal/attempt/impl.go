@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,26 +14,21 @@ import (
 
 type AttemptRepository interface {
 	CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error)
-	GradeAttempt(ctx context.Context, rewAttempt *rewiewAttempt) error // Allows change State in attempt_transition table to Graded
-	// какой смысл в GetAttempt
-	GetLastAttempt(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) (*Attempt, error)
+	GetAttempt(ctx context.Context, attemptID uuid.UUID) (*AttemptResponse, error)
 	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
 
-	// ReviewAttempt(ctx context.Context, req ReviewAttemptRequest) (*models.Attempt, error)
-	// DeleteAttempt(attemptID uuid.UUID) error
+	GradeAttempt(ctx context.Context, attempt *Attempt) (*rewiewAttempt, error)
 }
 
 type attemptRepository struct {
 	db      *sqlx.DB
 	manager RepoManager
-	logger  *zap.Logger
 }
 
-func NewAttemptRepository(db *sqlx.DB, manager RepoManager, logger *zap.Logger) AttemptRepository {
+func NewAttemptRepository(db *sqlx.DB, manager RepoManager) AttemptRepository {
 	return &attemptRepository{
 		db:      db,
 		manager: manager,
-		logger:  logger,
 	}
 }
 
@@ -64,8 +60,9 @@ func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt)
 	attempt, err := a.manager.MakeAttempt(req.RepoID, req.Files)
 
 	if err != nil {
-		a.logger.Error("incorrect return from MakeAttempt")
-		return nil, errors.New("incorrect return from MakeAttempt")
+		err := fmt.Errorf("attempt creation: %w", err)
+		zap.S().Error(err)
+		return nil, err
 	}
 
 	AttemptDB := AttemptDB{
@@ -99,7 +96,6 @@ func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt)
 		return nil, err
 	}
 	if rows == 0 {
-		a.logger.Error("no rows affected in attempts")
 		return nil, errors.New("no rows affected in addAttemptToAttempts")
 	}
 
@@ -108,61 +104,34 @@ func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt)
 		return nil, err
 	}
 	if rows == 0 {
-		a.logger.Error("no rows affected in AttemptTransition")
 		return nil, errors.New("no rows affected in addAttemptToAttemptTransit")
 	}
 
 	return &attempt, nil
 }
 
-func (a *attemptRepository) GradeAttempt(ctx context.Context, rewAttempt *rewAttempt) error {
-	AttemptTransitDB := AttemptTransitDB{
-		Id:             rewAttempt.Id,
-		State:          AttemptStatusGraded,
-		TransitionAt:   time.Now(),
-		TransitionData: json.RawMessage(rewAttempt.json_data),
-	}
-
-	// If grade will contain transition_data in JSON format, add a transaction
-	rows, err := a.db.NamedQuery(addAttemptToAttemptTransit, AttemptTransitDB)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := rows.Close(); err != nil {
-			a.logger.Error(err.Error())
-		}
-	}()
-
-	if rows.Next() {
-		if err := rows.Scan(&AttemptTransitDB.Id); err != nil {
-			return err
-		}
-	}
-	//
-
-	return nil
-}
-
-const getLastAttempt = `
-   SELECT attempt.id, attempt.user_id, 
-	 attempt.task_id, attempt_transitions.state, 
+const getAttempt = `
+   SELECT attempt.id, attempt_transitions.state, 
 	 attempt_transitions.transition_at, attempt_transitions.transition_data
 	 FROM attempt
 	 JOIN attempt_transitions ON attempt_transitions.attempt_id = attempt.id
-	 WHERE attempt.user_id = $1 AND attempt.task_id = $2 AND attempt.course_id = $3
+	 WHERE attempt.id= $1 
 	 ORDER BY attempt.id, attempt_transitions.transition_at DESC
 	 LIMIT 1
 `
 
-func (a *attemptRepository) GetLastAttempt(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) (*Attempt, error) {
-	var attempt Attempt
-	err := a.db.GetContext(ctx, &attempt, getLastAttempt, participantID, taskID, courseID)
+func (a *attemptRepository) GetAttempt(ctx context.Context, attemptID uuid.UUID) (*AttemptResponse, error) {
+	var attempt AttemptTransitDB
+	attemptData, err := a.manager.GetAttemptData(attemptID)
+	err = a.db.GetContext(ctx, &attempt, getAttempt)
 	if err != nil {
 		return nil, err
 	}
-	return &attempt, nil
+	attemptResp := AttemptResponse{
+		AttemptTransitDB: attempt,
+		AttemptDetails:   attemptData,
+	}
+	return &attemptResp, nil
 }
 
 const getAllAttempts = `
@@ -183,6 +152,30 @@ func (a *attemptRepository) GetAllAttempts(ctx context.Context, participantID uu
 	return attemptList, nil
 }
 
-// func (a *attemptRepository) DeleteAttempt(id uuid.UUID) error {
-// 	return nil
-// }
+func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) (*rewiewAttempt, error) {
+	AttemptTransitDB := AttemptTransitDB{
+		Id:             attempt.Id,
+		State:          AttemptStatusGraded,
+		TransitionAt:   time.Now(),
+		TransitionData: json.RawMessage(unpredictable_for_now),
+	}
+
+	rows, err := a.db.NamedQuery(addAttemptToAttemptTransit, AttemptTransitDB)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		if err := rows.Close(); err != nil {
+			err = fmt.Errorf("transaction error: %w", err)
+			zap.S().Error(err)
+		}
+	}()
+
+	if rows.Next() {
+		if err := rows.Scan(&AttemptTransitDB.Id); err != nil {
+			return nil, err
+		}
+	}
+	return &rewiewAttempt{}, nil
+}

@@ -152,3 +152,13 @@ CREATE TABLE attempt_transitions (
     -- Can be used to save additional transition data (unpredictable for now)
     transition_data jsonb
 );
+
+CREATE TABLE grade_attempt {
+    attempt_id uuid NOT NULL REFERENCES attempt(id),
+    grade float NOT NULL,
+}
+
+
+CREATE TABLE gitData {
+}
+
