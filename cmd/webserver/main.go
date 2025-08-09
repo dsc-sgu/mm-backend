@@ -47,6 +47,11 @@ func onShutdown(
 	} else {
 		logger.Info("Succesfully closed database connection")
 	}
+
+	logger.Info("Stopping SSH server")
+	if err := s.Shutdown(ctx); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+		logger.Error("Could not stop server", "error", err)
+	}
 	return nil
 }
 
@@ -123,6 +128,8 @@ func main() {
 		close(serverShutdown)
 	}()
 
+	startSsh(ctx)
+
 	<-ctx.Done()
 	logger.Info("Shutting down server. Terminating all active sessions.")
 
@@ -131,4 +138,30 @@ func main() {
 	} else {
 		logger.Info("Shutdown gracefully.")
 	}
+}
+
+func startSsh(ctx context.Context) {
+	a := app{git.ReadWriteAccess}
+
+	s, err := wish.NewServer(
+		wish.WithAddress(net.JoinHostPort(host, port)),
+		wish.WithHostKeyPath(".ssh/id_ed25519"),
+		ssh.PublicKeyAuth(CheckPubkeyAuth),
+		ssh.PasswordAuth(CheckPasswordAuth),
+		wish.WithMiddleware(
+			git.Middleware(repoDir, RepoRename, a),
+			gitListMiddleware,
+			logging.Middleware(),
+		),
+	)
+	if err != nil {
+		log.Error("Could not start server", "error", err)
+	}
+
+	log.Info("Starting SSH server", "host", host, "port", port)
+	go func() {
+		if err = s.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+			log.Error("Could not start server", "error", err)
+		}
+	}()
 }
