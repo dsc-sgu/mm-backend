@@ -15,11 +15,10 @@ const redisSessionPrefix = "SESSION"
 
 type RedisRepo struct {
 	redisClient *redis.Client
-	logger      *zap.Logger
 }
 
-func NewRedisRepo(redisClient *redis.Client, logger *zap.Logger) Repo {
-	return &RedisRepo{redisClient, logger}
+func NewRedisRepo(redisClient *redis.Client) Repo {
+	return &RedisRepo{redisClient}
 }
 
 func (r *RedisRepo) Create(userId uuid.UUID, sessionLifetime Seconds) (*Model, error) {
@@ -43,7 +42,7 @@ func (r *RedisRepo) Create(userId uuid.UUID, sessionLifetime Seconds) (*Model, e
 		return nil, err
 	}
 
-	r.logger.Debug(
+	zap.L().Debug(
 		"Session created",
 		zap.String("session_id", session.Id.String()),
 		zap.String("user_id", userId.String()),
@@ -57,7 +56,7 @@ func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
 	sessionJson, err := r.redisClient.Get(context.Background(), key).Result()
 
 	if err == redis.Nil {
-		r.logger.Debug("Session not found", zap.String("session_id", id.String()))
+		zap.L().Debug("Session not found", zap.String("session_id", id.String()))
 		return nil, nil
 	}
 
@@ -68,10 +67,10 @@ func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
 	var session Model
 	err = json.Unmarshal([]byte(sessionJson), &session)
 	if err != nil {
-		r.logger.Error("Failed to unmarshal session", zap.Error(err))
+		zap.L().Error("Failed to unmarshal session", zap.Error(err))
 		return nil, err
 	}
-	r.logger.Debug("Session retrieved", zap.String("session_id", id.String()))
+	zap.L().Debug("Session retrieved", zap.String("session_id", id.String()))
 
 	return &session, nil
 }
@@ -81,11 +80,11 @@ func (r *RedisRepo) DeleteById(id uuid.UUID) error {
 
 	err := r.redisClient.Del(context.Background(), key).Err()
 	if err != nil {
-		r.logger.Error("Failed to delete session from Redis", zap.Error(err))
+		zap.L().Error("Failed to delete session from Redis", zap.Error(err))
 		return err
 	}
 
-	r.logger.Debug("Session deleted", zap.String("session_id", id.String()))
+	zap.L().Debug("Session deleted", zap.String("session_id", id.String()))
 
 	return nil
 }

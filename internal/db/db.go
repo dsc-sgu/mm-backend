@@ -9,10 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
-func RunSQL(dbUrl string, filePath string, logger *zap.Logger) (*sqlx.DB, error) {
-	db, err := CreateDb(dbUrl, logger)
+func RunSQL(dbUrl string, filePath string) (*sqlx.DB, error) {
+	db, err := CreateDb(dbUrl)
 	if err != nil {
-		logger.Error(err.Error())
+		zap.L().Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -26,15 +26,15 @@ func RunSQL(dbUrl string, filePath string, logger *zap.Logger) (*sqlx.DB, error)
 		return nil, err
 	}
 
-	logger.Info("SQL is done!")
+	zap.L().Info("SQL is done!")
 
 	return db, err
 }
 
-func CreateDb(dbUrl string, logger *zap.Logger) (*sqlx.DB, error) {
+func CreateDb(dbUrl string) (*sqlx.DB, error) {
 	db, err := sqlx.Connect("postgres", dbUrl)
 	if err != nil {
-		logger.Sugar().Errorf("Unable to establish database connection: %s", err.Error())
+		zap.S().Errorf("Unable to establish database connection: %s", err.Error())
 		os.Exit(1)
 	}
 

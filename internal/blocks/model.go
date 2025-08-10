@@ -26,18 +26,18 @@ type Block struct {
 }
 
 type CreateBlock struct {
-	CourseId  uuid.UUID       `json:"courseId"        db:"course_id"         binding:"required"`
-	BlockType string          `json:"blockType" binding:"required"`
-	Data      json.RawMessage `json:"data"      binding:"required" swaggertype:"object"`
+	CourseId  uuid.UUID       `json:"courseId"  db:"course_id" binding:"required"`
+	BlockType string          `json:"blockType"                binding:"required"`
+	Data      json.RawMessage `json:"data"                     binding:"required" swaggertype:"object"`
 }
 
 type UpdateBlock struct {
-	CourseId uuid.UUID       `json:"courseId"        db:"course_id"         binding:"required"`
-	Data     json.RawMessage `json:"data"     swaggertype:"object"`
+	CourseId uuid.UUID       `json:"courseId" db:"course_id" binding:"required"`
+	Data     json.RawMessage `json:"data"                                       swaggertype:"object"`
 	Position int             `json:"position"`
 }
 
 type DeleteBlockFromCourse struct {
-	CourseId uuid.UUID `json:"courseId"        db:"course_id"         binding:"required"`
-	Id       uuid.UUID `json:"id"        db:"id"         binding:"required"`
+	CourseId uuid.UUID `json:"courseId" db:"course_id" binding:"required"`
+	Id       uuid.UUID `json:"id"       db:"id"        binding:"required"`
 }

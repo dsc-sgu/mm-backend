@@ -10,12 +10,11 @@ import (
 )
 
 type PGRepo struct {
-	db     *sqlx.DB
-	logger *zap.Logger
+	db *sqlx.DB
 }
 
-func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
-	return &PGRepo{db, logger}
+func NewPGRepo(db *sqlx.DB) Repo {
+	return &PGRepo{db}
 }
 
 const createDisciplineSql = `
@@ -25,7 +24,7 @@ const createDisciplineSql = `
 `
 
 func (r *PGRepo) Create(model *CreateDiscipline) (*Discipline, error) {
-	r.logger.Debug("Executing query", zap.String("query", createDisciplineSql))
+	zap.L().Debug("Executing query", zap.String("query", createDisciplineSql))
 
 	u := uuid.New()
 
@@ -41,7 +40,7 @@ func (r *PGRepo) Create(model *CreateDiscipline) (*Discipline, error) {
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -62,7 +61,7 @@ const getByIdSql = `
 `
 
 func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Discipline, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
 	var discipline Discipline
 	err := r.db.GetContext(ctx, &discipline, getByIdSql, id)
@@ -83,7 +82,7 @@ const updateByIdSql = `
 `
 
 func (r *PGRepo) UpdateById(id uuid.UUID, model *PatchDiscipline) (*Discipline, error) {
-	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRowx(
 		updateByIdSql,
@@ -107,7 +106,7 @@ const deleteByIdSql = `
 `
 
 func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
 
 	res, err := r.db.Exec(deleteByIdSql, id)
 	if err != nil {
