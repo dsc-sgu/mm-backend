@@ -4,10 +4,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/MergeMinds/mm-backend-go/internal/applogger"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
 	"github.com/MergeMinds/mm-backend-go/internal/config"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
+	"github.com/MergeMinds/mm-backend-go/internal/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -16,35 +17,35 @@ func main() {
 		panic(err)
 	}
 
-	logger := applogger.Create(config.LogLevel)
+	logger.Init(config.LogLevel)
 
-	dbConn, err := db.RunSQL(config.PostgresUrl, os.Getenv("SQL_FILE"), logger)
+	dbConn, err := db.RunSQL(config.Postgres.GetURL(), os.Getenv("SQL_FILE"))
 	if err != nil {
-		logger.Error(err.Error())
+		zap.S().Error(err.Error())
 		os.Exit(1)
 	}
 
 	defer func() {
 		if err := dbConn.Close(); err != nil {
-			logger.Error(err.Error())
+			zap.S().Error(err.Error())
 		}
 	}()
 
 	if strings.ToLower(os.Getenv("CREATE_ADMIN")) == "true" {
-		userRepo := user.NewPGRepo(dbConn, logger)
+		userRepo := user.NewPGRepo(dbConn)
 		_, err = userRepo.Create(&user.CreateModel{
 			FirstName: "Admin",
 			LastName:  "Admin",
-			Username:  config.AdminUsername,
+			Username:  config.Postgres.User,
 			Role:      "ADMIN",
-			Password:  config.AdminPassword,
-			Email:     config.AdminEmail,
+			Password:  config.Postgres.Password,
+			Email:     "drevniyrus@alivetech.org",
 		})
-		logger.Info("Admin created!")
+		zap.L().Info("Admin created!")
 	}
 
 	if err != nil {
-		logger.Error(err.Error())
+		zap.L().Error(err.Error())
 		os.Exit(1)
 	}
 }

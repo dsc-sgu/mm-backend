@@ -11,12 +11,11 @@ import (
 )
 
 type PGRepo struct {
-	db     *sqlx.DB
-	logger *zap.Logger
+	db *sqlx.DB
 }
 
-func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
-	return &PGRepo{db, logger}
+func NewPGRepo(db *sqlx.DB) Repo {
+	return &PGRepo{db}
 }
 
 const createCourseSql = `
@@ -26,7 +25,7 @@ const createCourseSql = `
 `
 
 func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error) {
-	r.logger.Debug("Executing query", zap.String("query", createCourseSql))
+	zap.L().Debug("Executing query", zap.String("query", createCourseSql))
 
 	newCourse := Course{
 		Id:           uuid.New(),
@@ -42,7 +41,7 @@ func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -63,7 +62,7 @@ const getByIdSql = `
 `
 
 func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Course, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
 	var course Course
 	err := r.db.GetContext(ctx, &course, getByIdSql, id)
@@ -83,7 +82,7 @@ const getAllByCourseIdSql = `
 `
 
 func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
-	r.logger.Debug("Executing query", zap.String("query", getAllByCourseIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getAllByCourseIdSql))
 
 	var course Course
 	var courseList []*Course
@@ -96,7 +95,7 @@ func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -120,7 +119,7 @@ const updateByIdSql = `
 `
 
 func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error) {
-	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRowx(
 		updateByIdSql,
@@ -145,7 +144,7 @@ const deleteByIdSql = `
 `
 
 func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
 
 	res, err := r.db.Exec(deleteByIdSql, id)
 	if err != nil {

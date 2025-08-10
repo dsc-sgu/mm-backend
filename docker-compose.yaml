@@ -1,21 +1,9 @@
-x-common-environment: &common_env
-  POSTGRES_URL: postgresql://${DB_USER:-sguhack}@db/${DB_NAME:-sguhack}?sslmode=disable
-  REDIS_URL: redis://dragonfly/0
-  SESSION_COOKIE_SECURE: "false"
-  SESSION_COOKIE_DOMAIN: ${SESSION_COOKIE_DOMAIN:-localhost:5173}
-  ALLOW_ORIGIN: ${ALLOW_ORIGIN:-http://localhost:5173}
-  LOG_LEVEL: ${LOG_LEVEL:-debug}
-  ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-123}
-
 services:
   backend:
     build: .
-    command: ["/app/webserver"]
+    command: ["/app/server"]
     ports:
       - "${PORT:-8080}:80"
-    environment:
-      <<: *common_env
     depends_on:
       - db
       - dragonfly
@@ -28,8 +16,6 @@ services:
       dockerfile: dev.Dockerfile
     ports:
       - "${PORT:-8080}:80"
-    environment:
-      <<: *common_env
     depends_on:
       - db
       - dragonfly
@@ -40,50 +26,20 @@ services:
         source: .
         target: /app
 
-  initdb:
-    build: .
-    command: ["/app/runsql"]
-    environment:
-      <<: *common_env
-      SQL_FILE: /app/db/CreateTables.sql
-      CREATE_ADMIN: true
-    depends_on:
-      - db
-    env_file:
-      - .env
-    volumes:
-      - type: bind
-        source: ./db
-        target: /app/db
-
-  dropdb:
-    build: .
-    command: ["/app/runsql"]
-    environment:
-      <<: *common_env
-      SQL_FILE: /app/db/DropTables.sql
-      CREATE_ADMIN: false
-    depends_on:
-      - db
-    env_file:
-      - .env
-    volumes:
-      - type: bind
-        source: ./db
-        target: /app/db
-
   db:
-    image: postgres:17.1-alpine
-    environment:
-      - POSTGRES_HOST_AUTH_METHOD=trust
-      - POSTGRES_DB=${DB_NAME:-sguhack}
-      - POSTGRES_USER=${DB_USER:-sguhack}
+    image: postgres:17-alpine
     healthcheck:
       test: "pg_isready --username=${DB_USER:-sguhack} --database=${DB_NAME:-sguhack}"
       interval: 5s
       timeout: 5s
       retries: 3
       start_period: 5s
+    volumes:
+      - type: bind
+        source: ./db/CreateTables.sql
+        target: /docker-entrypoint-initdb.d/CreateTables.sql
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     env_file:

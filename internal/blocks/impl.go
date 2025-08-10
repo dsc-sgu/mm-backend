@@ -10,14 +10,13 @@ import (
 )
 
 type PGRepo struct {
-	db     *sqlx.DB
-	logger *zap.Logger
+	db *sqlx.DB
 }
 
 var _ Repo = (*PGRepo)(nil)
 
-func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
-	return &PGRepo{db, logger}
+func NewPGRepo(db *sqlx.DB) Repo {
+	return &PGRepo{db}
 }
 
 const createBlockSql = `
@@ -33,7 +32,7 @@ const nextPositionSql = `
 `
 
 func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block, error) {
-	r.logger.Debug("Executing query", zap.String("query", nextPositionSql))
+	zap.L().Debug("Executing query", zap.String("query", nextPositionSql))
 
 	position := 0
 
@@ -42,7 +41,7 @@ func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block,
 		return nil, err
 	}
 
-	r.logger.Debug("Executing query", zap.String("query", createBlockSql))
+	zap.L().Debug("Executing query", zap.String("query", createBlockSql))
 
 	newBlock := Block{
 		Id:        uuid.New(),
@@ -59,7 +58,7 @@ func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block,
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -79,7 +78,7 @@ const getByIdSql = `
 `
 
 func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Block, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
 	var block Block
 	err := r.db.GetContext(ctx, &block, getByIdSql, id)
@@ -99,7 +98,7 @@ const getAllByCourseIdSql = `
 `
 
 func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
 	var blockList []*Block
 	rows, err := r.db.Queryx(getAllByCourseIdSql, id)
@@ -112,7 +111,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -137,7 +136,7 @@ const updateByIdSql = `
 `
 
 func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
-	r.logger.Debug("Executing query", zap.String("query", updateByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", updateByIdSql))
 
 	row := r.db.QueryRowx(
 		updateByIdSql,
@@ -165,7 +164,7 @@ const UnlinkFromCourseByIdSql = `
 `
 
 func (r *PGRepo) UnlinkFromCourseById(courseId uuid.UUID, blockId uuid.UUID) (*Block, error) {
-	r.logger.Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
 
 	row := r.db.QueryRowx(
 		UnlinkFromCourseByIdSql,
@@ -189,7 +188,7 @@ const deleteByIdSql = `
 `
 
 func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
 
 	res, err := r.db.Exec(deleteByIdSql, id)
 	if err != nil {

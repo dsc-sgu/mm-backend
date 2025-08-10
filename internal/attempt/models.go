@@ -24,17 +24,17 @@ const (
 
 // массив файлов
 type FileInfo struct {
-	FileName string `json:"fileName" binding:"required"`
+	FileName string `json:"fileName"    binding:"required"`
 	// FilePath    string    `json:"-" binding:"required"`
-	FileSize    int64     `json:"fileSize" binding:"required"`
+	FileSize    int64     `json:"fileSize"    binding:"required"`
 	ContentType string    `json:"contentType" binding:"required"`
-	MD5Hash     string    `json:"md5Hash" binding:"required"`
-	UploadedAt  time.Time `json:"uploadedAt" binding:"required"`
+	MD5Hash     string    `json:"md5Hash"     binding:"required"`
+	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
 }
 
 type RepoID struct {
-	CourseId      uuid.UUID `json:"courseId" binding:"required"`
-	TaskId        uuid.UUID `json:"taskId" binding:"required"`
+	CourseId      uuid.UUID `json:"courseId"      binding:"required"`
+	TaskId        uuid.UUID `json:"taskId"        binding:"required"`
 	ParticipantID uuid.UUID `json:"participantId" binding:"required"`
 }
 
@@ -44,7 +44,7 @@ type MakeAttempt struct {
 }
 
 type Attempt struct {
-	Id        uuid.UUID `json:"id" binding:"required"`
+	Id        uuid.UUID `json:"id"         binding:"required"`
 	CreatedAt time.Time `json:"created_at" binding:"required"`
-	Name      string    `json:"name" binding:"required"`
+	Name      string    `json:"name"       binding:"required"`
 }

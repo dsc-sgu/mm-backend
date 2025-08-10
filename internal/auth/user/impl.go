@@ -12,12 +12,11 @@ import (
 )
 
 type PGRepo struct {
-	db     *sqlx.DB
-	logger *zap.Logger
+	db *sqlx.DB
 }
 
-func NewPGRepo(db *sqlx.DB, logger *zap.Logger) Repo {
-	return &PGRepo{db, logger}
+func NewPGRepo(db *sqlx.DB) Repo {
+	return &PGRepo{db}
 }
 
 const createUserSql = `
@@ -33,7 +32,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 	}
 
 	passwordHash := password.Hash(user.Password, passwordSalt)
-	r.logger.Debug("Executing query", zap.String("query", createUserSql))
+	zap.L().Debug("Executing query", zap.String("query", createUserSql))
 
 	newUser := Model{
 		FirstName:    user.FirstName,
@@ -53,7 +52,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			r.logger.Error(err.Error())
+			zap.L().Error(err.Error())
 		}
 	}()
 
@@ -73,7 +72,7 @@ const getByIdSql = `
 `
 
 func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Model, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
 	var user Model
 	err := r.db.GetContext(ctx, &user, getByIdSql, id)
@@ -93,7 +92,7 @@ const getByEmailSql = `
 `
 
 func (r *PGRepo) GetByEmail(ctx context.Context, email string) (*Model, error) {
-	r.logger.Debug("Executing query", zap.String("query", getByEmailSql))
+	zap.L().Debug("Executing query", zap.String("query", getByEmailSql))
 
 	var user Model
 	err := r.db.GetContext(ctx, &user, getByEmailSql, email)
@@ -113,7 +112,7 @@ const deleteByIdSql = `
 `
 
 func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	r.logger.Debug("Executing query", zap.String("query", deleteByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
 	_, err := r.db.ExecContext(context.Background(), deleteByIdSql, id)
 	return err
 }
