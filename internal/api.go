@@ -222,7 +222,7 @@ func SetupRoutes(
 	fuego.Get(
 		attemptGroup,
 		"/{id}",
-		func(m fuego.ContextNoBody) (*attempt.Attempt, error) {
+		func(m fuego.ContextNoBody) (*attempt.AttemptResponse, error) {
 			attempt, err := attemptHeandler.GetAttempt(m)
 			if err != nil {
 				return nil, err
@@ -245,7 +245,7 @@ func SetupRoutes(
 		option.Summary("Create new attempt"),
 	)
 
-	fuego.Patch(
+	fuego.Post(
 		attemptGroup,
 		"/{id}",
 		func(m fuego.ContextWithBody[attempt.Attempt]) (*attempt.Attempt, error) {
@@ -257,5 +257,34 @@ func SetupRoutes(
 
 		},
 		option.Summary("Grade attempt by ID"),
+	)
+
+	fuego.Patch(
+		attemptGroup,
+		"/{id}",
+		func(m fuego.ContextWithBody[attempt.AttemptUpdate]) (*attempt.Attempt, error) {
+			attempt, err := attemptHeandler.UpdatedAttempt(m)
+			if err != nil {
+				return nil, err
+			}
+			return attempt, nil
+
+		},
+		option.Summary("Update attempt"),
+	)
+
+	fuego.Delete(
+		attemptGroup,
+		"/{id}",
+		func(m fuego.ContextNoBody) (any, error) {
+			attempt, err := attemptHeandler.DeleteAttempt(m)
+			if err != nil {
+				return nil, err
+			}
+
+			return attempt, nil
+
+		},
+		option.Summary("Delete attempt by ID"),
 	)
 }

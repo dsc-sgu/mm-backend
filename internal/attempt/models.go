@@ -78,9 +78,15 @@ type AttemptDetails struct {
 	CommitsList []CommitDetail `json:"commitsList" binding:"required"`
 }
 
+// COMMENT(xseniva): i know it may be stupid =)
 type AttemptResponse struct {
 	AttemptTransitDB
 	AttemptDetails
+}
+
+type AttemptUpdate struct {
+	Id    uuid.UUID  `json:"id" binding:"required"`
+	files []FileInfo `json:"files" binding:"required"`
 }
 
 type ReviewAttempt struct {

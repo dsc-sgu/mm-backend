@@ -15,20 +15,25 @@ import (
 type AttemptRepository interface {
 	CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error)
 	GetAttempt(ctx context.Context, attemptID uuid.UUID) (*AttemptResponse, error)
-	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
+	UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error)
+	DeleteAttempt(ctx context.Context, attemptID uuid.UUID) error
 
+	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
+	// TODO(xseniva): define rewiewAttempt
 	GradeAttempt(ctx context.Context, attempt *Attempt) (*rewiewAttempt, error)
 }
 
 type attemptRepository struct {
-	db      *sqlx.DB
-	manager RepoManager
+	db        *sqlx.DB
+	manager   RepoManager
+	fileStore FileStorage
 }
 
-func NewAttemptRepository(db *sqlx.DB, manager RepoManager) AttemptRepository {
+func NewAttemptRepository(db *sqlx.DB, manager RepoManager, fileStore FileStorage) AttemptRepository {
 	return &attemptRepository{
-		db:      db,
-		manager: manager,
+		db:        db,
+		manager:   manager,
+		fileStore: fileStore,
 	}
 }
 
@@ -178,4 +183,62 @@ func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) 
 		}
 	}
 	return &rewiewAttempt{}, nil
+}
+
+func (a *attemptRepository) UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error) {
+	id := attemptUpdate.Id
+	// TODO(xseniva): add method to get FileDescriptor
+	desc := FileDescriptor(id.String())
+
+	err := a.fileStore.RemoveFile(desc)
+	if err != nil {
+		return err
+	}
+
+	fileInfo, err := a.fileStore.StoreFile(attemptUpdate.files)
+	if err != nil {
+		return err
+	}
+
+	attempt, err := a.manager.MakeAttempt(attemptUpdate.repoID, fileInfo)
+	return attempt, nil
+}
+
+const checkStatus = `
+  SELECT state
+  FROM attempt_transitions
+  WHERE attempt_id = $1
+`
+
+// TODO(xseniva): check cascade delete in bd
+const deleteAttempt = `
+  DELETE FROM attempt 
+	WHERE id = :attempt_id;
+`
+
+func (a *attemptRepository) DeleteAttempt(ctx context.Context, attemptID uuid.UUID) error {
+	var state string
+	err := a.db.GetContext(ctx, &state, checkStatus, attemptID)
+	if err != nil {
+		return err
+	}
+	if AttemptState(state) == AttemptStatusGraded {
+		err = fmt.Errorf("deleted error: the attempt was graded")
+		zap.S().Error(err)
+		return err
+	}
+
+	_, err = a.db.NamedExecContext(ctx, deleteAttempt, attemptID)
+	if err != nil {
+		return err
+	}
+
+	desc := FileDescriptor(attemptID.String())
+	err = a.fileStore.RemoveFile(desc)
+	if err != nil {
+		err = fmt.Errorf("deleted error: RemoveFile: %w", err)
+		zap.S().Error(err)
+		return err
+	}
+	return nil
 }

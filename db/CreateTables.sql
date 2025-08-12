@@ -143,6 +143,7 @@ CREATE TABLE attempt (
     id uuid NOT NULL PRIMARY KEY,
     user_id uuid NOT NULL REFERENCES users(id),
     task_id uuid NOT NULL REFERENCES task(block_id)
+    course_id uuid NOT NULL REFERENCES course(id)
 );
 
 CREATE TABLE attempt_transitions (
