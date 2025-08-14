@@ -254,7 +254,6 @@ func SetupRoutes(
 				return nil, err
 			}
 			return attempt, nil
-
 		},
 		option.Summary("Grade attempt by ID"),
 	)
@@ -283,7 +282,6 @@ func SetupRoutes(
 			}
 
 			return attempt, nil
-
 		},
 		option.Summary("Delete attempt by ID"),
 	)

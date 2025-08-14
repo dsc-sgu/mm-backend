@@ -25,52 +25,52 @@ const (
 
 // массив файлов
 type FileInfo struct {
-	FileName string `json:"fileName" binding:"required"`
+	FileName string `json:"fileName"    binding:"required"`
 	// FilePath    string    `json:"-" binding:"required"`
-	FileSize    int64     `json:"fileSize" binding:"required"`
+	FileSize    int64     `json:"fileSize"    binding:"required"`
 	ContentType string    `json:"contentType" binding:"required"`
-	MD5Hash     string    `json:"md5Hash" binding:"required"`
-	UploadedAt  time.Time `json:"uploadedAt" binding:"required"`
+	MD5Hash     string    `json:"md5Hash"     binding:"required"`
+	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
 	Content     []byte
 }
 
 type RepoID struct {
-	CourseId      uuid.UUID `json:"courseId" binding:"required"`
-	TaskId        uuid.UUID `json:"taskId" binding:"required"`
+	CourseId      uuid.UUID `json:"courseId"      binding:"required"`
+	TaskId        uuid.UUID `json:"taskId"        binding:"required"`
 	ParticipantID uuid.UUID `json:"participantId" binding:"required"`
 }
 
 type MakeAttempt struct {
-	RepoID `json:"repoId" binding:"required"`
-	Files  []FileInfo `json:"files" binding:"required"`
+	RepoID `           json:"repoId" binding:"required"`
+	Files  []FileInfo `json:"files"  binding:"required"`
 }
 
 // DB structs
 type AttemptDB struct {
-	Id       uuid.UUID `db:"id" binding:"required"`
-	UserID   uuid.UUID `db:"user_id" binding:"required"`
-	TaskID   uuid.UUID `db:"task_id" binding:"required"`
+	Id       uuid.UUID `db:"id"        binding:"required"`
+	UserID   uuid.UUID `db:"user_id"   binding:"required"`
+	TaskID   uuid.UUID `db:"task_id"   binding:"required"`
 	CourseID uuid.UUID `db:"course_id" binding:"required"`
 }
 
 // DB structs
 type AttemptTransitDB struct {
-	Id             uuid.UUID       `json:"id" db:"id" binding:"required"`
-	State          AttemptState    `json:"state" db:"state" binding:"required"`
-	TransitionAt   time.Time       `json:"transitionAt" db:"transition_at" binding:"required"`
+	Id             uuid.UUID       `json:"id"             db:"id"              binding:"required"`
+	State          AttemptState    `json:"state"          db:"state"           binding:"required"`
+	TransitionAt   time.Time       `json:"transitionAt"   db:"transition_at"   binding:"required"`
 	TransitionData json.RawMessage `json:"transitionData" db:"transition_data" binding:"required"`
 }
 
 type Attempt struct {
-	Id        uuid.UUID `json:"id" binding:"required"`
+	Id        uuid.UUID `json:"id"         binding:"required"`
 	CreatedAt time.Time `json:"created_at" binding:"required"`
-	Name      string    `json:"name" binding:"required"`
+	Name      string    `json:"name"       binding:"required"`
 }
 
 type AttemptDetails struct {
-	RepositoryId  uuid.UUID `json:"repositoryId" binding:"required"`
+	RepositoryId  uuid.UUID `json:"repositoryId"  binding:"required"`
 	RepositoryURL string    `json:"repositoryURL" binding:"required"`
-	BranchName    string    `json:"branchName" binding:"required"`
+	BranchName    string    `json:"branchName"    binding:"required"`
 
 	CreatedAt time.Time `json:"created_at" binding:"required"`
 	UpdatedAt time.Time `json:"updated_at" binding:"required"`
@@ -85,17 +85,17 @@ type AttemptResponse struct {
 }
 
 type AttemptUpdate struct {
-	Id    uuid.UUID  `json:"id" binding:"required"`
+	Id    uuid.UUID  `json:"id"    binding:"required"`
 	files []FileInfo `json:"files" binding:"required"`
 }
 
 type ReviewAttempt struct {
-	Id uuid.UUID `json:"id" binding:"required"`
+	Id uuid.UUID `json:"id"        binding:"required"`
 	RepoID
 	AttemptId uuid.UUID `json:"attemptId" binding:"required"`
 
-	Status     AttemptState `json:"status" binding:"required"`
-	Grade      int          `json:"grade" binding:"required"`
+	Status     AttemptState `json:"status"     binding:"required"`
+	Grade      int          `json:"grade"      binding:"required"`
 	ReviewedAt time.Time    `json:"created_at" binding:"required"`
 	Comment    string       `json:"created_at" binding:"required"`
 }

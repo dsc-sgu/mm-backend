@@ -51,7 +51,6 @@ func (h *attemptHandler) GetAttempt(c fuego.ContextNoBody) (*attempt.AttemptResp
 	}
 
 	return attempt, nil
-
 }
 
 func (h *attemptHandler) GradeAttempt(c fuego.ContextWithBody[attempt.Attempt]) (*struct{}, error) {
@@ -65,7 +64,6 @@ func (h *attemptHandler) GradeAttempt(c fuego.ContextWithBody[attempt.Attempt]) 
 	}
 
 	return &struct{}{}, nil
-
 }
 
 // func (h *attemptHandler) UpdatedAttempt(c fuego.ContextWithBody[attempt.AttemptUpdate]) (*attempt.Attempt, error) {

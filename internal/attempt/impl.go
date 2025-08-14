@@ -17,7 +17,12 @@ type AttemptRepository interface {
 	// UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error)
 	DeleteAttempt(ctx context.Context, attemptID uuid.UUID) error
 
-	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
+	GetAllAttempts(
+		ctx context.Context,
+		participantID uuid.UUID,
+		courseID uuid.UUID,
+		taskID uuid.UUID,
+	) ([]Attempt, error)
 	// TODO(xseniva): define rewiewAttempt
 	GradeAttempt(ctx context.Context, attempt *Attempt) error
 }
@@ -62,7 +67,6 @@ func execWithRowsCheck[T any](tx *sqlx.Tx, query string, args T) (int64, error) 
 
 func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error) {
 	attempt, err := a.manager.MakeAttempt(req.RepoID, req.Files)
-
 	if err != nil {
 		err := fmt.Errorf("attempt creation: %w", err)
 		zap.S().Error(err)
@@ -147,7 +151,12 @@ const getAllAttempts = `
 	 WHERE attempt.user_id = $1 AND attempt.task_id = $2 AND attempt.course_id = $3
 `
 
-func (a *attemptRepository) GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error) {
+func (a *attemptRepository) GetAllAttempts(
+	ctx context.Context,
+	participantID uuid.UUID,
+	courseID uuid.UUID,
+	taskID uuid.UUID,
+) ([]Attempt, error) {
 	var attemptList []Attempt
 	err := a.db.SelectContext(ctx, &attemptList, getAllAttempts, participantID, taskID, courseID)
 	if err != nil {
