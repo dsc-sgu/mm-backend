@@ -66,7 +66,11 @@ func execWithRowsCheck[T any](tx *sqlx.Tx, query string, args T) (int64, error) 
 }
 
 func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error) {
-	attempt, err := a.manager.MakeAttempt(req.RepoID, req.Files)
+	var descs []FileDescriptor
+	for _, file := range req.Files {
+		descs = append(descs, a.fileStore.StoreFile(file))
+	}
+	attempt, err := a.manager.PushCommit(req.RepoID, descs)
 	if err != nil {
 		err := fmt.Errorf("attempt creation: %w", err)
 		zap.S().Error(err)
