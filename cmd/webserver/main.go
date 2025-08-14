@@ -10,6 +10,7 @@ import (
 
 	api "github.com/MergeMinds/mm-backend-go/internal"
 	"github.com/MergeMinds/mm-backend-go/internal/applogger"
+	"github.com/MergeMinds/mm-backend-go/internal/attempt"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
@@ -18,6 +19,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
+	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/rs/cors"
 
@@ -97,8 +99,12 @@ func main() {
 	blockRepo := blocks.NewPGRepo(dbConn, logger)
 	courseRepo := courses.NewPGRepo(dbConn, logger)
 	disciplineRepo := disciplines.NewPGRepo(dbConn, logger)
+	// TODO(xseniva): Replace nil with implementations when they're ready
+	attemptRepo := attempt.NewAttemptRepository(dbConn, nil, nil)
 
 	v1 := fuego.Group(s, "/api/v1")
+
+	attemptHandler := routes.NewAttemptHandler(attemptRepo, logger)
 
 	api.SetupRoutes(
 		v1,
@@ -109,6 +115,7 @@ func main() {
 		userRepo,
 		logger,
 		cookieConfig,
+		attemptHandler,
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

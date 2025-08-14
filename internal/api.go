@@ -25,7 +25,7 @@ func SetupRoutes(
 	userRepo user.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
-	attemptHeandler routes.AttemptHandler,
+	attemptHandler routes.AttemptHandler,
 ) {
 	blockGroup := fuego.Group(g, "/blocks", option.Summary("Block API"))
 
@@ -223,7 +223,7 @@ func SetupRoutes(
 		attemptGroup,
 		"/{id}",
 		func(m fuego.ContextNoBody) (*attempt.AttemptResponse, error) {
-			attempt, err := attemptHeandler.GetAttempt(m)
+			attempt, err := attemptHandler.GetAttempt(m)
 			if err != nil {
 				return nil, err
 			}
@@ -236,7 +236,7 @@ func SetupRoutes(
 		attemptGroup,
 		"",
 		func(m fuego.ContextWithBody[attempt.MakeAttempt]) (*attempt.Attempt, error) {
-			attempt, err := attemptHeandler.CreateAttempt(m)
+			attempt, err := attemptHandler.CreateAttempt(m)
 			if err != nil {
 				return nil, err
 			}
@@ -248,8 +248,8 @@ func SetupRoutes(
 	fuego.Post(
 		attemptGroup,
 		"/{id}",
-		func(m fuego.ContextWithBody[attempt.Attempt]) (*attempt.Attempt, error) {
-			attempt, err := attemptHeandler.GradeAttempt(m)
+		func(m fuego.ContextWithBody[attempt.Attempt]) (any, error) {
+			attempt, err := attemptHandler.GradeAttempt(m)
 			if err != nil {
 				return nil, err
 			}
@@ -259,25 +259,25 @@ func SetupRoutes(
 		option.Summary("Grade attempt by ID"),
 	)
 
-	fuego.Patch(
-		attemptGroup,
-		"/{id}",
-		func(m fuego.ContextWithBody[attempt.AttemptUpdate]) (*attempt.Attempt, error) {
-			attempt, err := attemptHeandler.UpdatedAttempt(m)
-			if err != nil {
-				return nil, err
-			}
-			return attempt, nil
+	// fuego.Patch(
+	// 	attemptGroup,
+	// 	"/{id}",
+	// 	func(m fuego.ContextWithBody[attempt.AttemptUpdate]) (*attempt.Attempt, error) {
+	// 		attempt, err := attemptHeandler.UpdatedAttempt(m)
+	// 		if err != nil {
+	// 			return nil, err
+	// 		}
+	// 		return attempt, nil
 
-		},
-		option.Summary("Update attempt"),
-	)
+	// 	},
+	// 	option.Summary("Update attempt"),
+	// )
 
 	fuego.Delete(
 		attemptGroup,
 		"/{id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			attempt, err := attemptHeandler.DeleteAttempt(m)
+			attempt, err := attemptHandler.DeleteAttempt(m)
 			if err != nil {
 				return nil, err
 			}

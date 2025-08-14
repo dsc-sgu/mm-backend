@@ -2,7 +2,6 @@ package attempt
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -15,12 +14,12 @@ import (
 type AttemptRepository interface {
 	CreateAttempt(ctx context.Context, req *MakeAttempt) (*Attempt, error)
 	GetAttempt(ctx context.Context, attemptID uuid.UUID) (*AttemptResponse, error)
-	UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error)
+	// UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error)
 	DeleteAttempt(ctx context.Context, attemptID uuid.UUID) error
 
 	GetAllAttempts(ctx context.Context, participantID uuid.UUID, courseID uuid.UUID, taskID uuid.UUID) ([]Attempt, error)
 	// TODO(xseniva): define rewiewAttempt
-	GradeAttempt(ctx context.Context, attempt *Attempt) (*rewiewAttempt, error)
+	GradeAttempt(ctx context.Context, attempt *Attempt) error
 }
 
 type attemptRepository struct {
@@ -116,11 +115,11 @@ func (a *attemptRepository) CreateAttempt(ctx context.Context, req *MakeAttempt)
 }
 
 const getAttempt = `
-   SELECT attempt.id, attempt_transitions.state, 
+   SELECT attempt.id, attempt_transitions.state,
 	 attempt_transitions.transition_at, attempt_transitions.transition_data
 	 FROM attempt
 	 JOIN attempt_transitions ON attempt_transitions.attempt_id = attempt.id
-	 WHERE attempt.id= $1 
+	 WHERE attempt.id= $1
 	 ORDER BY attempt.id, attempt_transitions.transition_at DESC
 	 LIMIT 1
 `
@@ -140,8 +139,8 @@ func (a *attemptRepository) GetAttempt(ctx context.Context, attemptID uuid.UUID)
 }
 
 const getAllAttempts = `
-  SELECT attempt.id, attempt.user_id, 
-	 attempt.task_id, attempt_transitions.state, 
+  SELECT attempt.id, attempt.user_id,
+	 attempt.task_id, attempt_transitions.state,
 	 attempt_transitions.transition_at, attempt_transitions.transition_data
 	 FROM attempt
 	 JOIN attempt_transitions ON attempt_transitions.attempt_id = attempt.id
@@ -157,17 +156,18 @@ func (a *attemptRepository) GetAllAttempts(ctx context.Context, participantID uu
 	return attemptList, nil
 }
 
-func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) (*rewiewAttempt, error) {
+func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) error {
 	AttemptTransitDB := AttemptTransitDB{
-		Id:             attempt.Id,
-		State:          AttemptStatusGraded,
-		TransitionAt:   time.Now(),
-		TransitionData: json.RawMessage(unpredictable_for_now),
+		Id:           attempt.Id,
+		State:        AttemptStatusGraded,
+		TransitionAt: time.Now(),
+		// TODO(xseniva): make decisions about unpredictable part of attempt
+		// TransitionData: json.RawMessage(unpredictable_for_now),
 	}
 
 	rows, err := a.db.NamedQuery(addAttemptToAttemptTransit, AttemptTransitDB)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	defer func() {
@@ -179,30 +179,30 @@ func (a *attemptRepository) GradeAttempt(ctx context.Context, attempt *Attempt) 
 
 	if rows.Next() {
 		if err := rows.Scan(&AttemptTransitDB.Id); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &rewiewAttempt{}, nil
+	return nil
 }
 
-func (a *attemptRepository) UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error) {
-	id := attemptUpdate.Id
-	// TODO(xseniva): add method to get FileDescriptor
-	desc := FileDescriptor(id.String())
+// func (a *attemptRepository) UpdatedAttempt(ctx context.Context, attemptUpdate AttemptUpdate) (*Attempt, error) {
+// 	id := attemptUpdate.Id
+// 	// TODO(xseniva): add method to get FileDescriptor
+// 	desc := FileDescriptor(id.String())
 
-	err := a.fileStore.RemoveFile(desc)
-	if err != nil {
-		return err
-	}
+// 	err := a.fileStore.RemoveFile(desc)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	fileInfo, err := a.fileStore.StoreFile(attemptUpdate.files)
-	if err != nil {
-		return err
-	}
+// 	fileInfo, err := a.fileStore.StoreFile(attemptUpdate.files)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	attempt, err := a.manager.MakeAttempt(attemptUpdate.repoID, fileInfo)
-	return attempt, nil
-}
+// 	attempt, err := a.manager.MakeAttempt(attemptUpdate.repoID, fileInfo)
+// 	return attempt, nil
+// }
 
 const checkStatus = `
   SELECT state
@@ -212,7 +212,7 @@ const checkStatus = `
 
 // TODO(xseniva): check cascade delete in bd
 const deleteAttempt = `
-  DELETE FROM attempt 
+  DELETE FROM attempt
 	WHERE id = :attempt_id;
 `
 

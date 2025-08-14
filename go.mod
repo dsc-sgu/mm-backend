@@ -22,6 +22,7 @@ require (
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect
 	github.com/hpcloud/tail v1.0.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
@@ -46,6 +47,7 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect

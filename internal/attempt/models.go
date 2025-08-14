@@ -75,7 +75,7 @@ type AttemptDetails struct {
 	CreatedAt time.Time `json:"created_at" binding:"required"`
 	UpdatedAt time.Time `json:"updated_at" binding:"required"`
 
-	CommitsList []CommitDetail `json:"commitsList" binding:"required"`
+	// CommitsList []CommitDetail `json:"commitsList" binding:"required"`
 }
 
 // COMMENT(xseniva): i know it may be stupid =)
