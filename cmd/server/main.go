@@ -69,7 +69,6 @@ func (app *App) onShutdown(
 		if err := redisClient.Close(); err != nil {
 			zap.S().Warn("Failed closing Redis client: " + err.Error())
 			errCh <- err
-			// return err
 		} else {
 			zap.S().Info("Succesfully closed redis client")
 		}
