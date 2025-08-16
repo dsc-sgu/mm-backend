@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"os/signal"
 	"strconv"
 	"sync"
@@ -53,8 +52,19 @@ func (app *App) onShutdown(
 
 	errCh := make(chan error)
 
-	go func() {
+	wg.Go(func() {
 		defer wg.Done()
+		zap.S().Info("Closing DB connection")
+		if err := dbConn.Close(); err != nil {
+			zap.S().Warn("Failed closing DB connection: " + err.Error())
+			errCh <- err
+			// return err
+		} else {
+			zap.S().Info("Succesfully closed DB connection")
+		}
+	})
+
+	wg.Go(func() {
 		zap.S().Info("Closing Redis client")
 		if err := redisClient.Close(); err != nil {
 			zap.S().Warn("Failed closing Redis client: " + err.Error())
@@ -63,37 +73,23 @@ func (app *App) onShutdown(
 		} else {
 			zap.S().Info("Succesfully closed redis client")
 		}
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
-		zap.S().Info("Closing database connection")
-		if err := dbConn.Close(); err != nil {
-			zap.S().Warn("Failed closing database connection: " + err.Error())
-			errCh <- err
-			// return err
-		} else {
-			zap.S().Info("Succesfully closed database connection")
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		zap.S().Info("Stopping SSH server")
+	wg.Go(func() {
+		zap.S().Info("Closing SSH server")
 		if err := app.sshServer.Shutdown(ctx); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			errCh <- err
 			zap.S().Errorw("Could not stop server", "error", err)
 		}
-	}()
+	})
 
-	go func() {
-		defer wg.Done()
-		zap.S().Info("Stopping HTTP server")
+	wg.Go(func() {
+		zap.S().Info("Closing HTTP server")
 		if err := app.httpServer.Shutdown(ctx); err != nil {
 			errCh <- err
 			zap.S().Errorw("Could not stop server", "error", err)
 		}
-	}()
+	})
 
 	go func() {
 		defer close(errCh)
@@ -197,23 +193,19 @@ func main() {
 	}
 
 	wg := sync.WaitGroup{}
-	wg.Add(2)
 
 	zap.S().Infof("Starting HTTP server on %s:%d", config.Host, config.HTTPPort)
-	go func() {
-		defer wg.Done()
-		if err := httpServer.Run(); err != nil && err != http.ErrServerClosed {
+	wg.Go(func() {
+		if err := httpServer.Run(); err != nil {
 			zap.S().Error(err.Error())
 		}
-	}()
-
+	})
 	zap.S().Infof("Starting SSH server on %s:%d", config.Host, config.SSHPort)
-	go func() {
-		defer wg.Done()
-		if err := sshServer.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+	wg.Go(func() {
+		if err := sshServer.ListenAndServe(); err != nil {
 			zap.S().Errorw("Could not start server", "error", err)
 		}
-	}()
+	})
 
 	done := make(chan struct{})
 
@@ -231,7 +223,7 @@ func main() {
 	defer cancel()
 
 	if err := app.onShutdown(redisClient, dbConn, shutdownCtx); err != nil {
-		zap.L().Warn("Failed to shutdown gracefully.")
+		zap.L().Error("Failed to shutdown gracefully.", zap.Error(err))
 	} else {
 		zap.L().Info("Shutdown complete.")
 	}
