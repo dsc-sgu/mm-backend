@@ -9,25 +9,8 @@ services:
       - dragonfly
     env_file:
       - .env
-
-  backend-dev:
-    build:
-      context: .
-      dockerfile: dev.Dockerfile
-    ports:
-      - "${PORT:-8080}:80"
-    depends_on:
-      - db
-      - dragonfly
-    env_file:
-      - .env
-    volumes:
-      - type: bind
-        source: .
-        target: /app
-
   db:
-    image: postgres:17-alpine
+    image: postgres:latest
     healthcheck:
       test: "pg_isready --username=${DB_USER:-sguhack} --database=${DB_NAME:-sguhack}"
       interval: 5s
