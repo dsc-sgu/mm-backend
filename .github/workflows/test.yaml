@@ -13,7 +13,7 @@ jobs:
       - name: Setup Golang
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
       - name: Run tests
         run: go test ./cmd/... ./internal/...  ./pkg/... -v
   integration-test:
@@ -31,7 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "1.25"
 
       - name: Test with Docker
         run: go test -v ./tests/...
