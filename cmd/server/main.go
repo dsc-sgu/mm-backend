@@ -139,11 +139,6 @@ func main() {
 	}
 	fuego.Use(httpServer, cors.Default().Handler)
 
-	// TODO(nrydanov): Return zap logging middleware
-	// https://github.com/MergeMinds/mm-backend-go/issues/26)
-	// r.Use(ginzap.Ginzap(zap.S(), time.RFC3339, true))
-	// r.Use(ginzap.RecoveryWithZap(zap.S(), true))
-
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
 	cookieConfig.Domain = config.SessionCookieDomain
