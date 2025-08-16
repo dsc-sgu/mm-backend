@@ -188,7 +188,7 @@ func GitListMiddleware(next ssh.Handler) ssh.Handler {
 			log.Error("Invalid repository", "error", err)
 		}
 		if len(dest) > 0 {
-			fmt.Fprintf(sess, "\n### Repo Menu ###\n\n")
+			_, _ = fmt.Fprintf(sess, "\n### Repo Menu ###\n\n")
 		}
 		for _, dir := range dest {
 			wish.Println(sess, fmt.Sprintf("• %s - ", dir.Name()))
