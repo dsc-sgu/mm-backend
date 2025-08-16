@@ -1,6 +1,6 @@
 module github.com/MergeMinds/mm-backend-go
 
-go 1.24.5
+go 1.25
 
 require (
 	github.com/charmbracelet/log v0.4.1
