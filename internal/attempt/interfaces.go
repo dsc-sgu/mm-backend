@@ -13,7 +13,7 @@ type RepoManager interface {
 type FileDescriptor = string
 
 type FileStorage interface {
-	StoreFile(fileInfo FileInfo) (FileInfo, error)
+	StoreFile(fileInfo FileInfo) (FileDescriptor, error)
 	GetFile(desc FileDescriptor) (FileInfo, error)
 	RemoveFile(desc FileDescriptor) error
 }
