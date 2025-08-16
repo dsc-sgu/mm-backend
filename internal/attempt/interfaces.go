@@ -5,8 +5,7 @@ import "github.com/google/uuid"
 type RepoManager interface {
 	InitRepo(repoID RepoID) error
 	RemoveRepo(repoID RepoID) error
-	MakeAttempt(repoID RepoID, fileInfo []FileInfo) (attempt Attempt, err error)
-	GetAttempts(repoID RepoID) ([]Attempt, error)
+	PushAttempt(repoID RepoID, fileInfo []FileInfo) error
 	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
 }
 
