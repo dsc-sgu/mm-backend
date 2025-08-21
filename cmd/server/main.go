@@ -22,9 +22,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/db"
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/MergeMinds/mm-backend-go/internal/gitservice"
-	"github.com/MergeMinds/mm-backend-go/internal/logger"
 	pkggit "github.com/MergeMinds/mm-backend-go/pkg/git"
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/rs/cors"
 
 	"github.com/charmbracelet/ssh"
@@ -128,15 +126,23 @@ func main() {
 
 	httpServer := fuego.NewServer(
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
-		fuego.WithGlobalMiddlewares(logger.ZapMiddleware()),
 	)
-	httpServer.OpenAPI.Description().Servers = openapi3.Servers{
-		{
-			URL:         fmt.Sprintf("http://%s:%d", config.OpenAPI.Host, config.OpenAPI.Port),
-			Description: "Docker dev deployment server",
+	corsMiddleware := cors.New(cors.Options{
+		AllowCredentials: true,
+		AllowedOrigins:   config.AllowOrigins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
 		},
-	}
-	fuego.Use(httpServer, cors.Default().Handler)
+		AllowedHeaders: []string{
+			"Authorization",
+			"Content-Type",
+			"Accept",
+		},
+	})
+	fuego.Use(httpServer, corsMiddleware.Handler)
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
