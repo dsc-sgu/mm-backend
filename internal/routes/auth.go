@@ -80,6 +80,7 @@ func Register(
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextWithBody[RegisterModel],
 ) (any, error) {
+
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
@@ -96,7 +97,7 @@ func Register(
 
 	_, err = userRepo.Create(&createUser)
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
+		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
 	return nil, nil

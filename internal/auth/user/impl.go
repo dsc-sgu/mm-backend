@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
@@ -47,7 +48,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 
 	rows, err := r.db.NamedQuery(createUserSql, newUser)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
 	defer func() {
@@ -58,7 +59,7 @@ func (r *PGRepo) Create(user *CreateModel) (*Model, error) {
 
 	if rows.Next() {
 		if err := rows.Scan(&newUser.Id, &newUser.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create user: %w", err)
 		}
 	}
 
