@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os/signal"
 	"strconv"
 	"sync"
@@ -53,12 +54,10 @@ func (app *App) onShutdown(
 	errCh := make(chan error)
 
 	wg.Go(func() {
-		defer wg.Done()
 		zap.S().Info("Closing DB connection")
 		if err := dbConn.Close(); err != nil {
 			zap.S().Warn("Failed closing DB connection: " + err.Error())
 			errCh <- err
-			// return err
 		} else {
 			zap.S().Info("Succesfully closed DB connection")
 		}
@@ -190,13 +189,13 @@ func main() {
 
 	zap.S().Infof("Starting HTTP server on %s:%d", config.Host, config.HTTPPort)
 	wg.Go(func() {
-		if err := httpServer.Run(); err != nil {
+		if err := httpServer.Run(); err != nil && err != http.ErrServerClosed {
 			zap.S().Error(err.Error())
 		}
 	})
 	zap.S().Infof("Starting SSH server on %s:%d", config.Host, config.SSHPort)
 	wg.Go(func() {
-		if err := sshServer.ListenAndServe(); err != nil {
+		if err := sshServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			zap.S().Errorw("Could not start server", "error", err)
 		}
 	})
