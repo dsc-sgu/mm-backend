@@ -3,9 +3,10 @@ module github.com/MergeMinds/mm-backend-go
 go 1.24.5
 
 require (
+	github.com/getkin/kin-openapi v0.131.0
 	github.com/go-fuego/fuego v0.18.8
 	github.com/google/uuid v1.6.0
-	github.com/redis/go-redis/v9 v9.7.1
+	github.com/redis/go-redis/v9 v9.14.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.37.0
 )
@@ -15,7 +16,6 @@ require (
 	github.com/alecthomas/units v0.0.0-20231202071711-9a357b53e9c9 // indirect
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/getkin/kin-openapi v0.131.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
