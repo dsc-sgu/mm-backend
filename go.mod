@@ -3,7 +3,7 @@ module github.com/dsc-sgu/mm-backend
 go 1.25
 
 require (
-	github.com/charmbracelet/log v0.4.1
+	github.com/charmbracelet/log v0.4.2
 	github.com/charmbracelet/ssh v0.0.0-20250128164007-98fd5ae11894
 	github.com/go-fuego/fuego v0.18.8
 	github.com/go-git/go-git/v5 v5.16.3
