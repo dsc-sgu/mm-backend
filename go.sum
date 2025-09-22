@@ -92,8 +92,8 @@ github.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399 h1:eMj
 github.com/go-git/go-git-fixtures/v4 v4.3.2-0.20231010084843-55a94097c399/go.mod h1:1OCfN199q1Jm3HZlxleg+Dw/mwps2Wbk9frAWm+4FII=
 github.com/go-git/go-git-fixtures/v5 v5.1.0 h1:b8cWxDLTk0s09Ihm9x1HvNGUzxUVlRwIH7EAM0gGDKg=
 github.com/go-git/go-git-fixtures/v5 v5.1.0/go.mod h1:CdmU0oQeDuy4Xh8V0i9Ym+vsTkgDDPKEiofBFEVT+aE=
-github.com/go-git/go-git/v5 v5.14.0 h1:/MD3lCrGjCen5WfEAzKg00MJJffKhC8gzS80ycmCi60=
-github.com/go-git/go-git/v5 v5.14.0/go.mod h1:Z5Xhoia5PcWA3NF8vRLURn9E5FRhSl7dGj9ItW3Wk5k=
+github.com/go-git/go-git/v5 v5.16.2 h1:fT6ZIOjE5iEnkzKyxTHK1W4HGAsPhqEqiSAssSO77hM=
+github.com/go-git/go-git/v5 v5.16.2/go.mod h1:4Ge4alE/5gPs30F2H1esi2gPd69R0C39lolkucHBOp8=
 github.com/go-git/go-git/v6 v6.0.0-20250728093604-6aaf1933ecab h1:PSNQb+b1rfHR5t+F9/xFiFm3EnXwQAnGiHRnEl+Vvcs=
 github.com/go-git/go-git/v6 v6.0.0-20250728093604-6aaf1933ecab/go.mod h1:gI6xSrrkXH4EKP38iovrsY2EYf2XDU3DrIZRshlNDm0=
 github.com/go-logfmt/logfmt v0.6.0 h1:wGYYu3uicYdqXVgoYbvnkrPVXkuLM1p1ifugDMEdRi4=
