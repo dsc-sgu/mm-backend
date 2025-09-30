@@ -109,6 +109,8 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Printf("ALLOW_ORIGINS: %#v\n", config.AllowOrigins)
+
 	conf := zap.NewDevelopmentConfig()
 
 	conf.Level = config.LogLevel
@@ -136,7 +138,24 @@ func main() {
 			Description: "Docker dev deployment server",
 		},
 	}
-	fuego.Use(httpServer, cors.Default().Handler)
+
+	corsMiddleware := cors.New(cors.Options{
+		AllowCredentials: true,
+		AllowedOrigins:   config.AllowOrigins,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+		},
+		AllowedHeaders: []string{
+			"Authorization",
+			"Content-Type",
+			"Accept",
+		},
+	})
+
+	fuego.Use(httpServer, corsMiddleware.Handler)
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
