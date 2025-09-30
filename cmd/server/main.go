@@ -12,6 +12,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/ssh"
+	"github.com/charmbracelet/wish"
+	"github.com/charmbracelet/wish/logging"
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/go-fuego/fuego"
+	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/cors"
+	"go.uber.org/zap"
+
 	api "github.com/dsc-sgu/mm-backend/internal"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
@@ -22,16 +32,8 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/gitservice"
+	"github.com/dsc-sgu/mm-backend/internal/logger"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
-	"github.com/rs/cors"
-
-	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/logging"
-	"github.com/go-fuego/fuego"
-	"github.com/jmoiron/sqlx"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 type App struct {
@@ -126,23 +128,15 @@ func main() {
 
 	httpServer := fuego.NewServer(
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
+		fuego.WithGlobalMiddlewares(logger.ZapMiddleware()),
 	)
-	corsMiddleware := cors.New(cors.Options{
-		AllowCredentials: true,
-		AllowedOrigins:   config.AllowOrigins,
-		AllowedMethods: []string{
-			http.MethodGet,
-			http.MethodPost,
-			http.MethodPut,
-			http.MethodDelete,
+	httpServer.OpenAPI.Description().Servers = openapi3.Servers{
+		{
+			URL:         fmt.Sprintf("http://%s:%d", config.OpenAPI.Host, config.OpenAPI.Port),
+			Description: "Docker dev deployment server",
 		},
-		AllowedHeaders: []string{
-			"Authorization",
-			"Content-Type",
-			"Accept",
-		},
-	})
-	fuego.Use(httpServer, corsMiddleware.Handler)
+	}
+	fuego.Use(httpServer, cors.Default().Handler)
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
