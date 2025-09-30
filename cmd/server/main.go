@@ -109,8 +109,6 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("ALLOW_ORIGINS: %#v\n", config.AllowOrigins)
-
 	conf := zap.NewDevelopmentConfig()
 
 	conf.Level = config.LogLevel
