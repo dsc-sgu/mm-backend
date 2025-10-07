@@ -13,7 +13,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/MergeMinds/mm-backend-go/pkg/git"
+	"github.com/dsc-sgu/mm-backend/pkg/git"
 
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"

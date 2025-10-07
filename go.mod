@@ -1,4 +1,4 @@
-module github.com/MergeMinds/mm-backend-go
+module github.com/dsc-sgu/mm-backend
 
 go 1.25
 

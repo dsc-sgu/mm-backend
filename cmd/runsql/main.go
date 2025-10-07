@@ -4,10 +4,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
-	"github.com/MergeMinds/mm-backend-go/internal/config"
-	"github.com/MergeMinds/mm-backend-go/internal/db"
-	"github.com/MergeMinds/mm-backend-go/internal/logger"
+	"github.com/dsc-sgu/mm-backend/internal/auth/user"
+	"github.com/dsc-sgu/mm-backend/internal/config"
+	"github.com/dsc-sgu/mm-backend/internal/db"
+	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"go.uber.org/zap"
 )
 
