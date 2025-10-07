@@ -7,10 +7,10 @@ import (
 )
 
 type Repo interface {
-	Create(ctx context.Context, model *CreateBlock) (*Block, error)
-	GetById(ctx context.Context, id uuid.UUID) (*Block, error)
+	CreateBlock(ctx context.Context, model *CreateBlock) (*Block, error)
+	GetBlockById(ctx context.Context, id uuid.UUID) (*Block, error)
 	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*Block, error)
-	UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error)
-	UnlinkFromCourseById(courseID, blockID uuid.UUID) (*Block, error)
-	DeleteById(id uuid.UUID) error
+	UpdateBlockById(id uuid.UUID, update *UpdateBlock) (*Block, error)
+	UnlinkBlockFromCourseById(courseID, blockID uuid.UUID) (*Block, error)
+	DeleteBlockById(id uuid.UUID) error
 }
