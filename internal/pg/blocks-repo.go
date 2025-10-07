@@ -105,7 +105,7 @@ func (r *PGRepo) CreateBlock(
 	return &newBlock, nil
 }
 
-func (r *PGRepo) GetById(
+func (r *PGRepo) GetBlockById(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*blocks.Block, error) {
@@ -153,7 +153,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*blocks.Block, error) {
 	return blockList, nil
 }
 
-func (r *PGRepo) UpdateById(
+func (r *PGRepo) UpdateBlockById(
 	id uuid.UUID,
 	update *blocks.UpdateBlock,
 ) (*blocks.Block, error) {
@@ -177,7 +177,7 @@ func (r *PGRepo) UpdateById(
 	return &block, nil
 }
 
-func (r *PGRepo) UnlinkFromCourseById(
+func (r *PGRepo) UnlinkBlockFromCourseById(
 	courseId uuid.UUID,
 	blockId uuid.UUID,
 ) (*blocks.Block, error) {
@@ -200,7 +200,7 @@ func (r *PGRepo) UnlinkFromCourseById(
 	return &unlinkedBlock, nil
 }
 
-func (r *PGRepo) DeleteById(id uuid.UUID) error {
+func (r *PGRepo) DeleteBlockById(id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSql))
 
 	res, err := r.db.Exec(deleteBlockByIdSql, id)
