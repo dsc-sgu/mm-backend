@@ -10,10 +10,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/user"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
 )
 
-var _ user.Repo = (*PGRepo)(nil)
+var _ users.Repo = (*PGRepo)(nil)
 
 const (
 	createUserSql = `
@@ -40,21 +40,21 @@ const (
 	`
 )
 
-func (r *PGRepo) CreateUser(u *user.CreateModel) (*user.Model, error) {
+func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 	passwordSalt, err := password.GenerateSalt()
 	if err != nil {
 		return nil, nil
 	}
 
-	passwordHash := password.Hash(u.Password, passwordSalt)
+	passwordHash := password.Hash(user.Password, passwordSalt)
 	zap.L().Debug("Executing query", zap.String("query", createUserSql))
 
-	newUser := user.Model{
-		FirstName:    u.FirstName,
-		LastName:     u.LastName,
-		Username:     u.Username,
-		Email:        u.Email,
-		Role:         u.Role,
+	newUser := users.Model{
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
+		Username:     user.Username,
+		Email:        user.Email,
+		Role:         user.Role,
 		PasswordHash: passwordHash,
 		PasswordSalt: passwordSalt,
 		CreatedAt:    time.Now(),
@@ -83,10 +83,10 @@ func (r *PGRepo) CreateUser(u *user.CreateModel) (*user.Model, error) {
 func (r *PGRepo) GetUserById(
 	ctx context.Context,
 	id uuid.UUID,
-) (*user.Model, error) {
+) (*users.Model, error) {
 	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
 
-	var u user.Model
+	var u users.Model
 	err := r.db.GetContext(ctx, &u, getByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -100,10 +100,10 @@ func (r *PGRepo) GetUserById(
 func (r *PGRepo) GetUserByEmail(
 	ctx context.Context,
 	email string,
-) (*user.Model, error) {
+) (*users.Model, error) {
 	zap.L().Debug("Executing query", zap.String("query", getUserByEmailSql))
 
-	var u user.Model
+	var u users.Model
 	err := r.db.GetContext(ctx, &u, getUserByEmailSql, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
