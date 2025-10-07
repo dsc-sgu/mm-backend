@@ -6,33 +6,78 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 )
 
-const createBlockSql = `
-    INSERT INTO block (id, block_type, data, course_id, position)
-    VALUES (:id, :block_type, :data, :course_id, :position)
-    RETURNING id
-`
+var _ blocks.Repo = (*PGRepo)(nil)
 
-const nextPositionSql = `
-    SELECT COALESCE(MAX(position), 0)
-	FROM block
-	WHERE course_id = $1
-`
+const (
+	createBlockSql = `
+		INSERT INTO block (id, block_type, data, course_id, position)
+		VALUES (:id, :block_type, :data, :course_id, :position)
+		RETURNING id
+	`
 
-func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block, error) {
+	nextPositionSql = `
+		SELECT COALESCE(MAX(position), 0)
+		FROM block
+		WHERE course_id = $1
+	`
+
+	getBlockByIdSql = `
+		SELECT id, block_type, data, course_id, position
+		FROM block
+		WHERE id = $1
+	`
+
+	getAllBlocksByCourseIdSql = `
+		SELECT *
+		FROM block
+		WHERE course_id = $1
+	`
+
+	updateBlockByIdSql = `
+		UPDATE block
+		SET course_id = $1, data = $2, position = $3
+		WHERE id = $4
+		RETURNING id, block_type, data, course_id, position
+	`
+
+	UnlinkFromCourseByIdSql = `
+		UPDATE block
+		SET course_id = NULL
+		WHERE course_id = $1 AND id = $2
+		RETURNING id, block_type, data, course_id, position
+	`
+
+	deleteBlockByIdSql = `
+		DELETE FROM block
+		WHERE id = $1
+	`
+)
+
+func (r *PGRepo) CreateBlock(
+	ctx context.Context,
+	RequestBlock *blocks.CreateBlock,
+) (*blocks.Block, error) {
 	zap.L().Debug("Executing query", zap.String("query", nextPositionSql))
 
 	position := 0
 
-	err := r.db.GetContext(ctx, &position, nextPositionSql, RequestBlock.CourseId)
+	err := r.db.GetContext(
+		ctx,
+		&position,
+		nextPositionSql,
+		RequestBlock.CourseId,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	zap.L().Debug("Executing query", zap.String("query", createBlockSql))
 
-	newBlock := Block{
+	newBlock := blocks.Block{
 		Id:        uuid.New(),
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
@@ -60,17 +105,14 @@ func (r *PGRepo) Create(ctx context.Context, RequestBlock *CreateBlock) (*Block,
 	return &newBlock, nil
 }
 
-const getByIdSql = `
-    SELECT id, block_type, data, course_id, position
-    FROM block
-    WHERE id = $1
-`
+func (r *PGRepo) GetById(
+	ctx context.Context,
+	id uuid.UUID,
+) (*blocks.Block, error) {
+	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSql))
 
-func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
-
-	var block Block
-	err := r.db.GetContext(ctx, &block, getByIdSql, id)
+	var block blocks.Block
+	err := r.db.GetContext(ctx, &block, getBlockByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -80,17 +122,11 @@ func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Block, error) {
 	return &block, nil
 }
 
-const getAllByCourseIdSql = `
-    SELECT *
-    FROM block
-    WHERE course_id = $1
-`
+func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*blocks.Block, error) {
+	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSql))
 
-func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
-
-	var blockList []*Block
-	rows, err := r.db.Queryx(getAllByCourseIdSql, id)
+	var blockList []*blocks.Block
+	rows, err := r.db.Queryx(getAllBlocksByCourseIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -105,7 +141,7 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 	}()
 
 	for rows.Next() {
-		var block Block
+		var block blocks.Block
 		if err := rows.StructScan(&block); err != nil {
 			return nil, err
 		}
@@ -117,25 +153,21 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*Block, error) {
 	return blockList, nil
 }
 
-const updateByIdSql = `
-    UPDATE block
-    SET course_id = $1, data = $2, position = $3
-    WHERE id = $4
-    RETURNING id, block_type, data, course_id, position
-`
-
-func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateByIdSql))
+func (r *PGRepo) UpdateById(
+	id uuid.UUID,
+	update *blocks.UpdateBlock,
+) (*blocks.Block, error) {
+	zap.L().Debug("Executing query", zap.String("query", updateBlockByIdSql))
 
 	row := r.db.QueryRowx(
-		updateByIdSql,
+		updateBlockByIdSql,
 		update.CourseId,
 		update.Data,
 		update.Position,
 		id,
 	)
 
-	var block Block
+	var block blocks.Block
 
 	err := row.StructScan(&block)
 	if err != nil {
@@ -145,15 +177,12 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateBlock) (*Block, error) {
 	return &block, nil
 }
 
-const UnlinkFromCourseByIdSql = `
-	UPDATE block
-	SET course_id = NULL
-	WHERE course_id = $1 AND id = $2
-	RETURNING id, block_type, data, course_id, position
-`
-
-func (r *PGRepo) UnlinkFromCourseById(courseId uuid.UUID, blockId uuid.UUID) (*Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
+func (r *PGRepo) UnlinkFromCourseById(
+	courseId uuid.UUID,
+	blockId uuid.UUID,
+) (*blocks.Block, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
 
 	row := r.db.QueryRowx(
 		UnlinkFromCourseByIdSql,
@@ -161,7 +190,7 @@ func (r *PGRepo) UnlinkFromCourseById(courseId uuid.UUID, blockId uuid.UUID) (*B
 		blockId,
 	)
 
-	var unlinkedBlock Block
+	var unlinkedBlock blocks.Block
 
 	err := row.StructScan(&unlinkedBlock)
 	if err != nil {
@@ -171,15 +200,10 @@ func (r *PGRepo) UnlinkFromCourseById(courseId uuid.UUID, blockId uuid.UUID) (*B
 	return &unlinkedBlock, nil
 }
 
-const deleteByIdSql = `
-    DELETE FROM block
-    WHERE id = $1
-`
-
 func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSql))
 
-	res, err := r.db.Exec(deleteByIdSql, id)
+	res, err := r.db.Exec(deleteBlockByIdSql, id)
 	if err != nil {
 		return err
 	}
