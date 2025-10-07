@@ -3,9 +3,9 @@ package routes
 import (
 	"strconv"
 
-	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
-	"github.com/MergeMinds/mm-backend-go/internal/blocks"
-	"github.com/MergeMinds/mm-backend-go/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"

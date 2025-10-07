@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
+	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"

@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 )
