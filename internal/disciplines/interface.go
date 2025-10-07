@@ -7,8 +7,11 @@ import (
 )
 
 type Repo interface {
-	Create(model *CreateDiscipline) (*Discipline, error)
-	GetById(ctx context.Context, id uuid.UUID) (*Discipline, error)
-	UpdateById(id uuid.UUID, model *PatchDiscipline) (*Discipline, error)
-	DeleteById(id uuid.UUID) error
+	CreateDiscipline(model *CreateDiscipline) (*Discipline, error)
+	GetDisciplineById(ctx context.Context, id uuid.UUID) (*Discipline, error)
+	UpdateDisciplineById(
+		id uuid.UUID,
+		model *PatchDiscipline,
+	) (*Discipline, error)
+	DeleteDisciplineById(id uuid.UUID) error
 }
