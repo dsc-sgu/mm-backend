@@ -5,20 +5,52 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
-const createCourseSql = `
-	INSERT INTO course (id, discipline_id, owner_id, name, created_at)
-	VALUES (:id, :discipline_id, :owner_id, :name, :created_at)
-	RETURNING id
-`
+var _ courses.Repo = (*PGRepo)(nil)
 
-func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error) {
+const (
+	createCourseSql = `
+		INSERT INTO course (id, discipline_id, owner_id, name, created_at)
+		VALUES (:id, :discipline_id, :owner_id, :name, :created_at)
+		RETURNING id
+	`
+
+	getCourseByIdSql = `
+		SELECT id, discipline_id, owner_id, name, created_at
+		FROM course
+		WHERE id = $1
+	`
+
+	getAllCoursesByCourseIdSql = `
+		SELECT *
+		FROM course
+		LIMIT $1 OFFSET $2
+	`
+
+	updateCourseByIdSql = `
+		UPDATE course
+		SET owner_id = $1, name = $2
+		WHERE id = $3
+		RETURNING id, discipline_id, owner_id, name, created_at
+	`
+
+	deleteCourseByIdSql = `
+		DELETE FROM course
+		WHERE id = $1
+	`
+)
+
+func (r *PGRepo) CreateCourse(
+	model *courses.CreateCourse,
+	ownerId uuid.UUID,
+) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", createCourseSql))
 
-	newCourse := Course{
+	newCourse := courses.Course{
 		Id:           uuid.New(),
 		DisciplineId: model.DisciplineId,
 		OwnerId:      ownerId,
@@ -46,17 +78,11 @@ func (r *PGRepo) Create(model *CreateCourse, ownerId uuid.UUID) (*Course, error)
 	return &newCourse, nil
 }
 
-const getByIdSql = `
-    SELECT id, discipline_id, owner_id, name, created_at
-    FROM course
-    WHERE id = $1
-`
+func (r *PGRepo) GetCourseById(ctx context.Context, id uuid.UUID) (*courses.Course, error) {
+	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSql))
 
-func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
-
-	var course Course
-	err := r.db.GetContext(ctx, &course, getByIdSql, id)
+	var course courses.Course
+	err := r.db.GetContext(ctx, &course, getCourseByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -66,18 +92,12 @@ func (r *PGRepo) GetById(ctx context.Context, id uuid.UUID) (*Course, error) {
 	return &course, nil
 }
 
-const getAllByCourseIdSql = `
-    SELECT *
-    FROM course
-    LIMIT $1 OFFSET $2
-`
+func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*courses.Course, error) {
+	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSql))
 
-func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getAllByCourseIdSql))
-
-	var course Course
-	var courseList []*Course
-	rows, err := r.db.Queryx(getAllByCourseIdSql, limit, offset)
+	var course courses.Course
+	var courseList []*courses.Course
+	rows, err := r.db.Queryx(getAllCoursesByCourseIdSql, limit, offset)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -102,24 +122,20 @@ func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*Course, error) {
 	return courseList, nil
 }
 
-const updateByIdSql = `
-    UPDATE course
-    SET owner_id = $1, name = $2
-    WHERE id = $3
-    RETURNING id, discipline_id, owner_id, name, created_at
-`
-
-func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateByIdSql))
+func (r *PGRepo) UpdateCourseById(
+	id uuid.UUID,
+	update *courses.UpdateCourse,
+) (*courses.Course, error) {
+	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSql))
 
 	row := r.db.QueryRowx(
-		updateByIdSql,
+		updateCourseByIdSql,
 		update.OwnerId,
 		update.Name,
 		id,
 	)
 
-	var course Course
+	var course courses.Course
 
 	err := row.StructScan(&course)
 	if err != nil {
@@ -129,15 +145,10 @@ func (r *PGRepo) UpdateById(id uuid.UUID, update *UpdateCourse) (*Course, error)
 	return &course, nil
 }
 
-const deleteByIdSql = `
-    DELETE FROM course
-    WHERE id = $1
-`
+func (r *PGRepo) DeleteCourseById(id uuid.UUID) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSql))
 
-func (r *PGRepo) DeleteById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteByIdSql))
-
-	res, err := r.db.Exec(deleteByIdSql, id)
+	res, err := r.db.Exec(deleteCourseByIdSql, id)
 	if err != nil {
 		return err
 	}
