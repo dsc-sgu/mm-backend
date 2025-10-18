@@ -6,23 +6,18 @@ import (
 	"github.com/google/uuid"
 )
 
-func GetBlock(
-	blockRepo blocks.Repo,
-	ctx fuego.ContextNoBody,
-) (*blocks.Block, error) {
+type BlockService struct {
+	service blocks.Service
+}
+
+func (svc *BlockService) GetBlock(ctx fuego.ContextNoBody) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-
-	block, err := blockRepo.GetBlockById(ctx.Context(), id)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	return block, nil
+	return svc.service.GetBlock(ctx, id)
 }
 
 func GetAllBlocks(blockRepo blocks.Repo, ctx fuego.ContextNoBody) ([]*blocks.Block, error) {
