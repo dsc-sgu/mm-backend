@@ -17,7 +17,7 @@ func CreateDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := disciplineRepo.Create(&body)
+	discipline, err := disciplineRepo.CreateDiscipline(&body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -36,7 +36,7 @@ func GetDiscipline(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	discipline, err := disciplineRepo.GetById(ctx.Context(), id)
+	discipline, err := disciplineRepo.GetDisciplineById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -61,7 +61,7 @@ func PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := disciplineRepo.UpdateById(id, &body)
+	discipline, err := disciplineRepo.UpdateDisciplineById(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -86,7 +86,7 @@ func DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	err = disciplineRepo.DeleteById(id)
+	err = disciplineRepo.DeleteDisciplineById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

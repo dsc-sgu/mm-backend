@@ -37,7 +37,7 @@ func CreateCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	createdCourse, err := courseRepo.Create(&body, session.UserId)
+	createdCourse, err := courseRepo.CreateCourse(&body, session.UserId)
 
 	if createdCourse == nil {
 		return nil, fuego.InternalServerError{Title: "Course wasn't created"}
@@ -83,7 +83,7 @@ func GetCourse(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	course, err := courseRepo.GetById(ctx.Context(), id)
+	course, err := courseRepo.GetCourseById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -107,7 +107,7 @@ func PatchCourse(
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
-	course, err := courseRepo.UpdateById(id, &body)
+	course, err := courseRepo.UpdateCourseById(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -128,7 +128,7 @@ func DeleteCourse(
 		return nil, fuego.InternalServerError{}
 	}
 
-	err = courseRepo.DeleteById(id)
+	err = courseRepo.DeleteCourseById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -144,7 +144,7 @@ func DeleteCourse(
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := blockRepo.UpdateById(block.Id, &updatedBlock)
+		_, err := blockRepo.UpdateBlockById(block.Id, &updatedBlock)
 		if err != nil {
 			return nil, fuego.InternalServerError{}
 		}

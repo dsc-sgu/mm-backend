@@ -13,8 +13,6 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
 )
 
-var _ users.Repo = (*PGRepo)(nil)
-
 const (
 	createUserSql = `
 		INSERT INTO users (first_name, last_name, username, email, role, password_hash, password_salt, created_at)
@@ -84,10 +82,10 @@ func (r *PGRepo) GetUserById(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*users.Model, error) {
-	zap.L().Debug("Executing query", zap.String("query", getByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getUserByIdSql))
 
 	var u users.Model
-	err := r.db.GetContext(ctx, &u, getByIdSql, id)
+	err := r.db.GetContext(ctx, &u, getUserByIdSql, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
