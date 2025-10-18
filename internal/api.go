@@ -3,13 +3,13 @@ package api
 import (
 	"net/http"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
-	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/dsc-sgu/mm-backend/internal/auth/user"
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
-	"github.com/dsc-sgu/mm-backend/internal/courses"
-	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/routes"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
+	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
+	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/go-fuego/fuego"
 	"github.com/go-fuego/fuego/option"
 	"go.uber.org/zap"
@@ -17,11 +17,11 @@ import (
 
 func SetupRoutes(
 	g *fuego.Server,
-	blockRepo blocks.Repo,
-	courseRepo courses.Repo,
-	disciplineRepo disciplines.Repo,
+	blockService *blocks.Service,
+	courseService *courses.Service,
+	disciplineService *disciplines.Service,
+	userService *users.Service,
 	sessionRepo session.Repo,
-	userRepo user.Repo,
 	cookieConfig *cookie.CookieConfig,
 ) {
 	blockGroup := fuego.Group(g, "/blocks", option.Summary("Block API"))
@@ -30,7 +30,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			return routes.GetBlock(blockRepo, m)
+			return blockService.GetBlock(ctx context.Context, id uuid.UUID)
 		},
 		option.Summary("Get block by id"),
 	)
@@ -39,7 +39,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{course_id}/blocks",
 		func(m fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
-			return routes.CreateBlock(blockRepo, m)
+			return routes.CreateBlock(blockService, m)
 		},
 		option.Summary("Create new block on course"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -48,7 +48,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
-			return routes.PatchBlock(blockRepo, m)
+			return routes.PatchBlock(blockService, m)
 		},
 		option.Summary("Update existing block"),
 	)
@@ -57,7 +57,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}/{course_id}",
 		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			return routes.UnlinkFromCourse(blockRepo, m)
+			return routes.UnlinkFromCourse(blockService, m)
 		},
 		option.Summary("Unlink block from course"),
 	)
@@ -66,7 +66,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			return routes.DeleteBlock(blockRepo, m)
+			return routes.DeleteBlock(blockService, m)
 		},
 		option.Summary("Delete block from course"),
 		option.DefaultStatusCode(http.StatusNoContent),
@@ -78,7 +78,7 @@ func SetupRoutes(
 		courseGroup,
 		"/",
 		func(m fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
-			return routes.CreateCourse(sessionRepo, courseRepo, zap.L(), m)
+			return routes.CreateCourse(sessionRepo, courseService, zap.L(), m)
 		},
 		option.Summary("Create new course"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -88,7 +88,7 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextNoBody) (*courses.Course, error) {
-			return routes.GetCourse(courseRepo, zap.L(), m)
+			return routes.GetCourse(courseService, zap.L(), m)
 		},
 		option.Summary("Get existing course by id"),
 	)
@@ -97,7 +97,7 @@ func SetupRoutes(
 		courseGroup,
 		"",
 		func(m fuego.ContextNoBody) ([]*courses.Course, error) {
-			return routes.GetPaginatedCourses(courseRepo, zap.L(), m)
+			return routes.GetPaginatedCourses(courseService, zap.L(), m)
 		},
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
@@ -108,7 +108,7 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			return routes.PatchCourse(courseRepo, zap.L(), m)
+			return routes.PatchCourse(courseService, zap.L(), m)
 		},
 		option.Summary("Update existing course"),
 	)
@@ -117,7 +117,7 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			return routes.DeleteCourse(courseRepo, blockRepo, zap.L(), m)
+			return routes.DeleteCourse(courseService, blockService, zap.L(), m)
 		},
 		option.Summary("Delete course"),
 		option.DefaultStatusCode(http.StatusNoContent),
@@ -129,7 +129,7 @@ func SetupRoutes(
 		disciplineGroup,
 		"",
 		func(m fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
-			return routes.CreateDiscipline(disciplineRepo, zap.L(), m)
+			return routes.CreateDiscipline(disciplineService, zap.L(), m)
 		},
 		option.Summary("Create new discipline"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -138,7 +138,7 @@ func SetupRoutes(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextNoBody) (*disciplines.Discipline, error) {
-			return routes.GetDiscipline(disciplineRepo, zap.L(), m)
+			return routes.GetDiscipline(disciplineService, zap.L(), m)
 		},
 		option.Summary("Get discipline by id"),
 	)
@@ -147,7 +147,7 @@ func SetupRoutes(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextWithBody[disciplines.PatchDiscipline]) (*disciplines.Discipline, error) {
-			return routes.PatchDiscipline(disciplineRepo, zap.L(), m)
+			return routes.PatchDiscipline(disciplineService, zap.L(), m)
 		},
 		option.Summary("Update existing discipline"),
 	)
@@ -155,7 +155,7 @@ func SetupRoutes(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(m fuego.ContextNoBody) (any, error) {
-			return routes.DeleteDiscipline(disciplineRepo, zap.L(), m)
+			return routes.DeleteDiscipline(disciplineService, zap.L(), m)
 		},
 		option.DefaultStatusCode(http.StatusNoContent),
 		option.Summary("Delete discipline"),
@@ -167,7 +167,7 @@ func SetupRoutes(
 		authGroup,
 		"/login",
 		func(m fuego.ContextWithBody[routes.LoginModel]) (any, error) {
-			return routes.Login(userRepo, sessionRepo, zap.L(), cookieConfig, m)
+			return routes.Login(userService, sessionRepo, zap.L(), cookieConfig, m)
 		},
 		option.Summary("Login user"),
 	)
@@ -176,7 +176,7 @@ func SetupRoutes(
 		authGroup,
 		"/register",
 		func(m fuego.ContextWithBody[routes.RegisterModel]) (any, error) {
-			return routes.Register(userRepo, sessionRepo, zap.L(), cookieConfig, m)
+			return routes.Register(userService, sessionRepo, zap.L(), cookieConfig, m)
 		},
 		option.Summary("Register new user"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -187,7 +187,7 @@ func SetupRoutes(
 		authGroup,
 		"/logout",
 		func(m fuego.ContextNoBody) (any, error) {
-			return routes.Logout(userRepo, sessionRepo, zap.L(), cookieConfig, m)
+			return routes.Logout(userService, sessionRepo, zap.L(), cookieConfig, m)
 		},
 		option.Summary("Logout user"),
 	)
@@ -197,7 +197,7 @@ func SetupRoutes(
 		authGroup,
 		"/session",
 		func(m fuego.ContextNoBody) (any, error) {
-			return routes.Session(userRepo, sessionRepo, zap.L(), cookieConfig, m)
+			return routes.Session(userService, sessionRepo, zap.L(), cookieConfig, m)
 		},
 	)
 }

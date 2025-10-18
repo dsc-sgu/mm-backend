@@ -3,10 +3,10 @@ package routes
 import (
 	"net/http"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
-	"github.com/dsc-sgu/mm-backend/internal/auth/password"
-	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/dsc-sgu/mm-backend/internal/auth/user"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -29,7 +29,7 @@ type LoginSuccessResponse struct {
 	Status string `json:"status"`
 }
 
-func Login(userRepo user.Repo,
+func Login(userRepo users.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -40,7 +40,7 @@ func Login(userRepo user.Repo,
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	user, err := userRepo.GetByEmail(ctx.Context(), body.Email)
+	user, err := userRepo.GetUserByEmail(ctx.Context(), body.Email)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -74,7 +74,7 @@ func Login(userRepo user.Repo,
 }
 
 func Register(
-	userRepo user.Repo,
+	userRepo users.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -85,7 +85,7 @@ func Register(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	createUser := user.CreateModel{
+	createUser := users.CreateModel{
 		FirstName: body.FirstName,
 		LastName:  body.LastName,
 		Username:  body.Username,
@@ -94,7 +94,7 @@ func Register(
 		Role:      "USER",
 	}
 
-	_, err = userRepo.Create(&createUser)
+	_, err = userRepo.CreateUser(&createUser)
 	if err != nil {
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
@@ -103,7 +103,7 @@ func Register(
 }
 
 func Logout(
-	userRepo user.Repo,
+	userRepo users.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -138,7 +138,7 @@ func Logout(
 }
 
 func Session(
-	userRepo user.Repo,
+	userRepo users.Repo,
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -153,7 +153,7 @@ func Session(
 		return nil, fuego.InternalServerError{}
 	}
 
-	u, err := userRepo.GetById(ctx.Context(), session.UserId)
+	u, err := userRepo.GetUserById(ctx.Context(), session.UserId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

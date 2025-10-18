@@ -12,28 +12,27 @@ import (
 	"syscall"
 	"time"
 
+	api "github.com/MergeMinds/mm-backend-go/internal"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
+	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
+	"github.com/MergeMinds/mm-backend-go/internal/pg"
+	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/MergeMinds/mm-backend-go/internal/config"
+	"github.com/MergeMinds/mm-backend-go/internal/courses"
+	"github.com/MergeMinds/mm-backend-go/internal/db"
+	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
+	"github.com/MergeMinds/mm-backend-go/internal/gitservice"
+	pkggit "github.com/MergeMinds/mm-backend-go/pkg/git"
+	"github.com/rs/cors"
+
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/logging"
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-fuego/fuego"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/cors"
 	"go.uber.org/zap"
-
-	api "github.com/dsc-sgu/mm-backend/internal"
-	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
-	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/dsc-sgu/mm-backend/internal/auth/user"
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
-	"github.com/dsc-sgu/mm-backend/internal/config"
-	"github.com/dsc-sgu/mm-backend/internal/courses"
-	"github.com/dsc-sgu/mm-backend/internal/db"
-	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/gitservice"
-	"github.com/dsc-sgu/mm-backend/internal/logger"
-	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type App struct {
@@ -159,21 +158,23 @@ func main() {
 	cookieConfig.Secure = config.SessionCookieSecure
 	cookieConfig.Domain = config.SessionCookieDomain
 
-	userRepo := user.NewPGRepo(dbConn)
+	pgRepo := pg.NewPGRepo(dbConn)
+
+	userService := users.NewService(pgRepo)
+	blockService := blocks.NewService(pgRepo)
+	courseService := courses.NewService(pgRepo)
+	disciplineService := disciplines.NewService(pgRepo)
 	sessionRepo := session.NewRedisRepo(redisClient)
-	blockRepo := blocks.NewPGRepo(dbConn)
-	courseRepo := courses.NewPGRepo(dbConn)
-	disciplineRepo := disciplines.NewPGRepo(dbConn)
 
 	v1 := fuego.Group(httpServer, "/api/v1")
 
 	api.SetupRoutes(
 		v1,
-		blockRepo,
-		courseRepo,
-		disciplineRepo,
+		blockService,
+		courseService,
+		disciplineService,
+		userService,
 		sessionRepo,
-		userRepo,
 		cookieConfig,
 	)
 

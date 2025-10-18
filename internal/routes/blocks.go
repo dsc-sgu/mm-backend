@@ -17,7 +17,7 @@ func GetBlock(
 		return nil, fuego.InternalServerError{}
 	}
 
-	block, err := blockRepo.GetById(ctx.Context(), id)
+	block, err := blockRepo.GetBlockById(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -49,7 +49,7 @@ func CreateBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	block, err := blockRepo.Create(ctx.Context(), &body)
+	block, err := blockRepo.CreateBlock(ctx.Context(), &body)
 	if err != nil {
 		return nil, err // fuego.InternalServerError{}
 	}
@@ -70,7 +70,7 @@ func PatchBlock(blockRepo blocks.Repo, ctx fuego.ContextWithBody[blocks.UpdateBl
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	block, err := blockRepo.UpdateById(id, &body)
+	block, err := blockRepo.UpdateBlockById(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -93,7 +93,7 @@ func UnlinkFromCourse(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (*blocks.B
 		return nil, err
 	}
 
-	block, err := blockRepo.UnlinkFromCourseById(courseId, blockId)
+	block, err := blockRepo.UnlinkBlockFromCourseById(courseId, blockId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -109,7 +109,7 @@ func DeleteBlock(blockRepo blocks.Repo, ctx fuego.ContextNoBody) (any, error) {
 		return nil, fuego.InternalServerError{}
 	}
 
-	err = blockRepo.DeleteById(id)
+	err = blockRepo.DeleteBlockById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
