@@ -44,7 +44,7 @@ const (
 		RETURNING id, block_type, data, course_id, position
 	`
 
-	UnlinkFromCourseByIdSql = `
+	UnlinkByIdSql = `
 		UPDATE block
 		SET course_id = NULL
 		WHERE course_id = $1 AND id = $2
@@ -177,15 +177,15 @@ func (r *PGRepo) UpdateBlockById(
 	return &block, nil
 }
 
-func (r *PGRepo) UnlinkBlockFromCourseById(
+func (r *PGRepo) UnlinkBlockById(
 	courseId uuid.UUID,
 	blockId uuid.UUID,
 ) (*blocks.Block, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", UnlinkFromCourseByIdSql))
+		Debug("Executing query", zap.String("query", UnlinkByIdSql))
 
 	row := r.db.QueryRowx(
-		UnlinkFromCourseByIdSql,
+		UnlinkByIdSql,
 		courseId,
 		blockId,
 	)
