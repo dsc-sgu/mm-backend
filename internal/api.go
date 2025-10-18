@@ -12,6 +12,7 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	"github.com/go-fuego/fuego"
 	"github.com/go-fuego/fuego/option"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -29,8 +30,12 @@ func SetupRoutes(
 	fuego.Get(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			return blockService.GetBlock(ctx context.Context, id uuid.UUID)
+		func(ctx fuego.ContextNoBody) (*blocks.Block, error) {
+			id, err := uuid.Parse(ctx.PathParam("block_id"))
+			if err != nil {
+				return nil, err
+			}
+			return blockService.GetBlock(ctx.Context(), id)
 		},
 		option.Summary("Get block by id"),
 	)
