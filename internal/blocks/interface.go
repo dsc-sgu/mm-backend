@@ -11,6 +11,6 @@ type Repo interface {
 	GetBlockById(ctx context.Context, id uuid.UUID) (*Block, error)
 	GetAllBlocksByCourseId(courseId uuid.UUID) ([]*Block, error)
 	UpdateBlockById(id uuid.UUID, update *UpdateBlock) (*Block, error)
-	UnlinkBlockFromCourseById(courseID, blockID uuid.UUID) (*Block, error)
+	UnlinkBlockById(courseID, blockID uuid.UUID) (*Block, error)
 	DeleteBlockById(id uuid.UUID) error
 }
