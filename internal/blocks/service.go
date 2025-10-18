@@ -15,5 +15,28 @@ func NewService(repo Repo) *Service {
 }
 
 func (s *Service) GetBlock(ctx context.Context, id uuid.UUID) (*Block, error) {
-	return blockRepo.GetBlockById(ctx, id)
+	return Repo.GetBlockById(ctx, id)
+}
+
+func (s *Service) GetAllBlocks(id uuid.UUID) ([]*Block, error) {
+	return Repo.GetAllBlocksByCourseId(id)
+}
+
+func (s *Service) CreateBlock(
+	ctx context.Context,
+	body *CreateBlock,
+) (*Block, error) {
+	return Repo.CreateBlock(ctx, body)
+}
+
+func (s *Service) UpdateBlock(id uuid.UUID, body *UpdateBlock) (*Block, error) {
+	return Repo.UpdateBlockById(id, body)
+}
+
+func (s *Service) UnlinkBlockById(courseID, blockID uuid.UUID) (*Block, error) {
+	return Repo.UnlinkBlockById(courseID, blockID)
+}
+
+func (s *Service) DeleteBlockById(id uuid.UUID) error {
+	return Repo.DeleteBlockById(id)
 }
