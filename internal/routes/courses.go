@@ -11,9 +11,12 @@ import (
 	"go.uber.org/zap"
 )
 
-func CreateCourse(
+type CourseService struct {
+  service courses.Service
+}
+
+func (svc *CourseService) CreateCourse(
 	sessionRepo session.Repo,
-	courseRepo courses.Repo,
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.CreateCourse],
 ) (*courses.Course, error) {
@@ -37,18 +40,11 @@ func CreateCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	createdCourse, err := courseRepo.CreateCourse(&body, session.UserId)
-
-	if createdCourse == nil {
-		return nil, fuego.InternalServerError{Title: "Course wasn't created"}
-	}
-
-	return createdCourse, err
+	return svc.service.CreateCourse(&body, session.UserId)
 }
 
 // Other endpoints rewrote using fuego
-func GetPaginatedCourses(
-	courseRepo courses.Repo,
+func (svc *CourseService) GetPaginatedCourses(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) ([]*courses.Course, error) {
@@ -64,16 +60,11 @@ func GetPaginatedCourses(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	courseList, err := courseRepo.GetPaginatedCourses(limit, offset)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
 
-	return courseList, nil
+	return svc.service.GetPaginatedCourses(limit, offset)
 }
 
-func GetCourse(
-	courseRepo courses.Repo,
+func (svc *CourseService) GetCourse(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
@@ -83,16 +74,11 @@ func GetCourse(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	course, err := courseRepo.GetCourseById(ctx.Context(), id)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
 
-	return course, nil
+  return svc.service.GetCourse(ctx.Context(), id)
 }
 
-func PatchCourse(
-	courseRepo courses.Repo,
+func (svc *CourseService) PatchCourse(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
@@ -107,17 +93,12 @@ func PatchCourse(
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
-	course, err := courseRepo.UpdateCourseById(id, &body)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
 
-	return course, nil
+	return svc.service.PatchCourse(id, &body)
 }
 
-func DeleteCourse(
-	courseRepo courses.Repo,
-	blockRepo blocks.Repo,
+func (svc *CourseService) DeleteCourse(
+	blockService *BlockService,
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
@@ -128,11 +109,11 @@ func DeleteCourse(
 		return nil, fuego.InternalServerError{}
 	}
 
-	err = courseRepo.DeleteCourseById(id)
+	err = svc.service.DeleteCourse(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	linkedBlocks, err := blockRepo.GetAllBlocksByCourseId(id)
+	linkedBlocks, err := blockService.service.GetAllBlocks(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -144,7 +125,7 @@ func DeleteCourse(
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := blockRepo.UpdateBlockById(block.Id, &updatedBlock)
+		_, err := blockService.service.UpdateBlock(block.Id, &updatedBlock)
 		if err != nil {
 			return nil, fuego.InternalServerError{}
 		}
