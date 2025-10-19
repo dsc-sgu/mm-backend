@@ -7,8 +7,11 @@ import (
 	"go.uber.org/zap"
 )
 
-func CreateDiscipline(
-	disciplineRepo disciplines.Repo,
+type DisciplineService struct {
+  service disciplines.Service
+}
+
+func (svc *DisciplineService) CreateDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
 ) (*disciplines.Discipline, error) {
@@ -17,16 +20,10 @@ func CreateDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := disciplineRepo.CreateDiscipline(&body)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	return discipline, nil
+	return svc.service.CreateDiscipline(&body)
 }
 
-func GetDiscipline(
-	disciplineRepo disciplines.Repo,
+func (svc *DisciplineService) GetDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
@@ -36,16 +33,11 @@ func GetDiscipline(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	discipline, err := disciplineRepo.GetDisciplineById(ctx.Context(), id)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
 
-	return discipline, nil
+	return svc.service.GetDiscipline(ctx.Context(), id)
 }
 
-func PatchDiscipline(
-	disciplineRepo disciplines.Repo,
+func (svc *DisciplineService) PatchDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
@@ -61,16 +53,10 @@ func PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := disciplineRepo.UpdateDisciplineById(id, &body)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	return discipline, nil
+	return svc.service.PatchDiscipline(id, &body)
 }
 
-func DeleteDiscipline(
-	disciplineRepo disciplines.Repo,
+func (svc *DisciplineService) DeleteDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
@@ -86,7 +72,7 @@ func DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	err = disciplineRepo.DeleteDisciplineById(id)
+	err = svc.service.DeleteDiscipline(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
