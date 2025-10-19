@@ -3,17 +3,16 @@ package api
 import (
 	"net/http"
 
+	"github.com/go-fuego/fuego"
+	"github.com/go-fuego/fuego/option"
+	"go.uber.org/zap"
+
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/MergeMinds/mm-backend-go/internal/routes"
-	"github.com/go-fuego/fuego"
-	"github.com/go-fuego/fuego/option"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 func SetupRoutes(
