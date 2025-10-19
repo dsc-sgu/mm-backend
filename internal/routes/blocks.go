@@ -17,7 +17,7 @@ func (svc *BlockService) GetBlock(ctx fuego.ContextNoBody) (*blocks.Block, error
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	return svc.service.GetBlock(ctx, id)
+	return svc.service.GetBlock(ctx.Context(), id)
 }
 
 func (svc *BlockService) GetAllBlocks(ctx fuego.ContextNoBody) ([]*blocks.Block, error) {
@@ -38,7 +38,7 @@ func (svc *BlockService) CreateBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return svc.service.CreateBlock(ctx, &body)
+	return svc.service.CreateBlock(ctx.Context(), &body)
 }
 
 func (svc *BlockService) PatchBlock(ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
