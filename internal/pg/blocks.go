@@ -10,8 +10,6 @@ import (
 	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 )
 
-var _ blocks.Repo = (*PGRepo)(nil)
-
 const (
 	createBlockSql = `
 		INSERT INTO block (id, block_type, data, course_id, position)

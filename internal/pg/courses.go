@@ -10,8 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ courses.Repo = (*PGRepo)(nil)
-
 const (
 	createCourseSql = `
 		INSERT INTO course (id, discipline_id, owner_id, name, created_at)
