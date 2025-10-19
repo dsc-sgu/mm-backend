@@ -18,10 +18,10 @@ import (
 
 func SetupRoutes(
 	g *fuego.Server,
-	blockService *blocks.Service,
-	courseService *courses.Service,
-	disciplineService *disciplines.Service,
-	userService *users.Service,
+	blockService *routes.BlockService,
+	courseService *routes.CourseService,
+	disciplineService *routes.DisciplineService,
+	userService *routes.UserService,
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 ) {
@@ -31,11 +31,7 @@ func SetupRoutes(
 		blockGroup,
 		"/{block_id}",
 		func(ctx fuego.ContextNoBody) (*blocks.Block, error) {
-			id, err := uuid.Parse(ctx.PathParam("block_id"))
-			if err != nil {
-				return nil, err
-			}
-			return blockService.GetBlock(ctx.Context(), id)
+			return blockService.GetBlock(ctx)
 		},
 		option.Summary("Get block by id"),
 	)
@@ -43,8 +39,8 @@ func SetupRoutes(
 	fuego.Post(
 		blockGroup,
 		"/{course_id}/blocks",
-		func(m fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
-			return routes.CreateBlock(blockService, m)
+		func(ctx fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
+			return blockService.CreateBlock(ctx)
 		},
 		option.Summary("Create new block on course"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -52,8 +48,8 @@ func SetupRoutes(
 	fuego.Patch(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
-			return routes.PatchBlock(blockService, m)
+		func(ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
+			return blockService.PatchBlock(ctx)
 		},
 		option.Summary("Update existing block"),
 	)
@@ -61,8 +57,8 @@ func SetupRoutes(
 	fuego.Delete(
 		blockGroup,
 		"/{block_id}/{course_id}",
-		func(m fuego.ContextNoBody) (*blocks.Block, error) {
-			return routes.UnlinkFromCourse(blockService, m)
+		func(ctx fuego.ContextNoBody) (*blocks.Block, error) {
+			return blockService.UnlinkFromCourse(ctx)
 		},
 		option.Summary("Unlink block from course"),
 	)
@@ -70,8 +66,8 @@ func SetupRoutes(
 	fuego.Delete(
 		blockGroup,
 		"/{block_id}",
-		func(m fuego.ContextNoBody) (any, error) {
-			return routes.DeleteBlock(blockService, m)
+		func(ctx fuego.ContextNoBody) (any, error) {
+			return blockService.DeleteBlock(ctx)
 		},
 		option.Summary("Delete block from course"),
 		option.DefaultStatusCode(http.StatusNoContent),
