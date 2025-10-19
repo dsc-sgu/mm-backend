@@ -12,6 +12,10 @@ import (
 	"go.uber.org/zap"
 )
 
+type UserService struct {
+  service users.Service
+}
+
 type LoginModel struct {
 	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required"`
@@ -29,7 +33,7 @@ type LoginSuccessResponse struct {
 	Status string `json:"status"`
 }
 
-func Login(userRepo users.Repo,
+func (svc *UserService) Login(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -40,7 +44,7 @@ func Login(userRepo users.Repo,
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	user, err := userRepo.GetUserByEmail(ctx.Context(), body.Email)
+	user, err := svc.service.GetUserByEmail(ctx.Context(), body.Email)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -73,8 +77,7 @@ func Login(userRepo users.Repo,
 	return nil, nil
 }
 
-func Register(
-	userRepo users.Repo,
+func (svc *UserService) Register(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -94,7 +97,7 @@ func Register(
 		Role:      "USER",
 	}
 
-	_, err = userRepo.CreateUser(&createUser)
+	_, err = svc.service.CreateUser(&createUser)
 	if err != nil {
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
@@ -102,8 +105,7 @@ func Register(
 	return nil, nil
 }
 
-func Logout(
-	userRepo users.Repo,
+func (svc *UserService) Logout(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -137,8 +139,7 @@ func Logout(
 	return nil, nil
 }
 
-func Session(
-	userRepo users.Repo,
+func (svc *UserService) GetSession(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
@@ -153,7 +154,7 @@ func Session(
 		return nil, fuego.InternalServerError{}
 	}
 
-	u, err := userRepo.GetUserById(ctx.Context(), session.UserId)
+	u, err := svc.service.GetUserById(ctx.Context(), session.UserId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

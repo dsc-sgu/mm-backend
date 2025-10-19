@@ -167,7 +167,7 @@ func SetupRoutes(
 		authGroup,
 		"/login",
 		func(ctx fuego.ContextWithBody[routes.LoginModel]) (any, error) {
-			return routes.Login(userService, sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Login(sessionRepo, zap.L(), cookieConfig, ctx)
 		},
 		option.Summary("Login user"),
 	)
@@ -176,7 +176,7 @@ func SetupRoutes(
 		authGroup,
 		"/register",
 		func(ctx fuego.ContextWithBody[routes.RegisterModel]) (any, error) {
-			return routes.Register(userService, sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Register(sessionRepo, zap.L(), cookieConfig, ctx)
 		},
 		option.Summary("Register new user"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -187,7 +187,7 @@ func SetupRoutes(
 		authGroup,
 		"/logout",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return routes.Logout(userService, sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Logout(sessionRepo, zap.L(), cookieConfig, ctx)
 		},
 		option.Summary("Logout user"),
 	)
@@ -197,7 +197,7 @@ func SetupRoutes(
 		authGroup,
 		"/session",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return routes.Session(userService, sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.GetSession(sessionRepo, zap.L(), cookieConfig, ctx)
 		},
 	)
 }
