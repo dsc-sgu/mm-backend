@@ -72,7 +72,7 @@ func (svc *BlockService) UnlinkFromCourse(ctx fuego.ContextNoBody) (*blocks.Bloc
 		return nil, err
 	}
 
-  return svc.service.UnlinkBlockById(courseId, blockId)
+  return svc.service.UnlinkBlock(courseId, blockId)
 }
 
 func (svc *BlockService) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
@@ -83,5 +83,5 @@ func (svc *BlockService) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
 		return nil, fuego.InternalServerError{}
 	}
 
-	return nil, svc.service.DeleteBlockById(id)
+	return nil, svc.service.DeleteBlock(id)
 }
