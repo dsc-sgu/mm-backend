@@ -11,6 +11,12 @@ type DisciplineService struct {
   service disciplines.Service
 }
 
+func NewDisciplineService(repo disciplines.Repo) *DisciplineService {
+	return &DisciplineService{
+		service: *disciplines.NewService(repo),
+	}
+}
+
 func (svc *DisciplineService) CreateDiscipline(
 	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],

@@ -15,6 +15,12 @@ type CourseService struct {
   service courses.Service
 }
 
+func NewCourseService(repo courses.Repo) *CourseService {
+	return &CourseService{
+		service: *courses.NewService(repo),
+	}
+}
+
 func (svc *CourseService) CreateCourse(
 	sessionRepo session.Repo,
 	logger *zap.Logger,
