@@ -15,14 +15,11 @@ import (
 	api "github.com/MergeMinds/mm-backend-go/internal"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
 	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
-	"github.com/MergeMinds/mm-backend-go/internal/blocks"
 	"github.com/MergeMinds/mm-backend-go/internal/config"
-	"github.com/MergeMinds/mm-backend-go/internal/courses"
 	"github.com/MergeMinds/mm-backend-go/internal/db"
-	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
 	"github.com/MergeMinds/mm-backend-go/internal/gitservice"
 	"github.com/MergeMinds/mm-backend-go/internal/pg"
+	"github.com/MergeMinds/mm-backend-go/internal/routes"
 	pkggit "github.com/MergeMinds/mm-backend-go/pkg/git"
 	"github.com/rs/cors"
 
@@ -160,10 +157,10 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
-	userService := users.NewService(pgRepo)
-	blockService := blocks.NewService(pgRepo)
-	courseService := courses.NewService(pgRepo)
-	disciplineService := disciplines.NewService(pgRepo)
+	userService := routes.NewUserService(pgRepo)
+	blockService := routes.NewBlockService(pgRepo)
+	courseService := routes.NewCourseService(pgRepo)
+	disciplineService := routes.NewDisciplineService(pgRepo)
 	sessionRepo := session.NewRedisRepo(redisClient)
 
 	v1 := fuego.Group(httpServer, "/api/v1")

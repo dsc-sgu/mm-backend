@@ -10,6 +10,12 @@ type BlockService struct {
 	service blocks.Service
 }
 
+func NewBlockService(repo blocks.Repo) *BlockService {
+	return &BlockService{
+		service: *blocks.NewService(repo),
+	}
+}
+
 func (svc *BlockService) GetBlock(ctx fuego.ContextNoBody) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
 

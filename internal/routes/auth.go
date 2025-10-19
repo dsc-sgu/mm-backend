@@ -16,6 +16,12 @@ type UserService struct {
   service users.Service
 }
 
+func NewUserService(repo users.Repo) *UserService {
+	return &UserService{
+		service: *users.NewService(repo),
+	}
+}
+
 type LoginModel struct {
 	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required"`
