@@ -3,10 +3,10 @@ package routes
 import (
 	"net/http"
 
-	"github.com/MergeMinds/mm-backend-go/internal/auth/cookie"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/session"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
+	"github.com/dsc-sgu/mm-backend/internal/auth/password"
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"

@@ -9,8 +9,8 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/MergeMinds/mm-backend-go/internal/auth/password"
-	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/auth/password"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 )
 
 const (

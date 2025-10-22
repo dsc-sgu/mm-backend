@@ -1,10 +1,10 @@
 package pg
 
 import (
-	"github.com/MergeMinds/mm-backend-go/internal/auth/users"
-	"github.com/MergeMinds/mm-backend-go/internal/blocks"
-	"github.com/MergeMinds/mm-backend-go/internal/courses"
-	"github.com/MergeMinds/mm-backend-go/internal/disciplines"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/jmoiron/sqlx"
 )
 
