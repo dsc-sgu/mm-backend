@@ -12,6 +12,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/ssh"
+	"github.com/charmbracelet/wish"
+	"github.com/charmbracelet/wish/logging"
+	"github.com/go-fuego/fuego"
+	"github.com/jmoiron/sqlx"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/cors"
+	"go.uber.org/zap"
+
 	api "github.com/dsc-sgu/mm-backend/internal"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
@@ -21,15 +30,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
-	"github.com/rs/cors"
-
-	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/logging"
-	"github.com/go-fuego/fuego"
-	"github.com/jmoiron/sqlx"
-	"github.com/redis/go-redis/v9"
-	"go.uber.org/zap"
 )
 
 type App struct {

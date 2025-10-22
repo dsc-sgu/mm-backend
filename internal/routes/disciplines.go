@@ -1,10 +1,11 @@
 package routes
 
 import (
-	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
 
 type DisciplineService struct {
