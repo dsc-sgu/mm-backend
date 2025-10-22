@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/MergeMinds/mm-backend-go/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
 const (
