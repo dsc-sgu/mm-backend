@@ -18,7 +18,9 @@ func NewPGRepo(db *sqlx.DB) *PGRepo {
 }
 
 // Check interfaces
-var _ users.Repo = (*PGRepo)(nil)
-var _ blocks.Repo = (*PGRepo)(nil)
-var _ courses.Repo = (*PGRepo)(nil)
-var _ disciplines.Repo = (*PGRepo)(nil)
+var (
+	_ users.Repo       = (*PGRepo)(nil)
+	_ blocks.Repo      = (*PGRepo)(nil)
+	_ courses.Repo     = (*PGRepo)(nil)
+	_ disciplines.Repo = (*PGRepo)(nil)
+)

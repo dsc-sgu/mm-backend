@@ -71,7 +71,8 @@ func (app *App) onShutdown(
 
 	wg.Go(func() {
 		zap.S().Info("Closing SSH server")
-		if err := app.sshServer.Shutdown(ctx); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
+		if err := app.sshServer.Shutdown(ctx); err != nil &&
+			!errors.Is(err, ssh.ErrServerClosed) {
 			errCh <- err
 			zap.S().Errorw("Could not stop server", "error", err)
 		}
@@ -113,7 +114,8 @@ func main() {
 
 	dbConn, err := db.CreateDb(config.Postgres.GetURL())
 	if err != nil {
-		zap.S().Fatalf("Unable to establish database connection: %s", err.Error())
+		zap.S().
+			Fatalf("Unable to establish database connection: %s", err.Error())
 	}
 
 	redisOpts, err := redis.ParseURL(config.Redis.GetURL())
@@ -175,11 +177,17 @@ func main() {
 		cookieConfig,
 	)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
 	defer stop()
 	a := gitservice.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
-		wish.WithAddress(net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort))),
+		wish.WithAddress(
+			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
+		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
 		ssh.PublicKeyAuth(gitservice.CheckPubkeyAuth),
 		ssh.PasswordAuth(gitservice.CheckPasswordAuth),
@@ -210,7 +218,8 @@ func main() {
 	})
 	zap.S().Infof("Starting SSH server on %s:%d", config.Host, config.SSHPort)
 	wg.Go(func() {
-		if err := sshServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := sshServer.ListenAndServe(); err != nil &&
+			err != http.ErrServerClosed {
 			zap.S().Errorw("Could not start server", "error", err)
 		}
 	})
@@ -227,7 +236,10 @@ func main() {
 	<-ctx.Done()
 	zap.L().Info("Shutting down server. Terminating all active sessions.")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
 	defer cancel()
 
 	if err := app.onShutdown(redisClient, dbConn, shutdownCtx); err != nil {

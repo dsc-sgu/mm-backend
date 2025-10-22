@@ -13,7 +13,7 @@ import (
 )
 
 type CourseService struct {
-  service courses.Service
+	service courses.Service
 }
 
 func NewCourseService(repo courses.Repo) *CourseService {
@@ -82,7 +82,7 @@ func (svc *CourseService) GetCourse(
 		return nil, fuego.InternalServerError{}
 	}
 
-  return svc.service.GetCourse(ctx.Context(), id)
+	return svc.service.GetCourse(ctx.Context(), id)
 }
 
 func (svc *CourseService) PatchCourse(

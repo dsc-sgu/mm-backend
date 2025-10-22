@@ -90,7 +90,8 @@ func (r *PGRepo) UpdateDisciplineById(
 	id uuid.UUID,
 	model *disciplines.PatchDiscipline,
 ) (*disciplines.Discipline, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateDisciplineByIdSql))
+	zap.L().
+		Debug("Executing query", zap.String("query", updateDisciplineByIdSql))
 
 	row := r.db.QueryRowx(
 		updateDisciplineByIdSql,
@@ -109,7 +110,8 @@ func (r *PGRepo) UpdateDisciplineById(
 }
 
 func (r *PGRepo) DeleteDisciplineById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteDisciplineByIdSql))
+	zap.L().
+		Debug("Executing query", zap.String("query", deleteDisciplineByIdSql))
 
 	res, err := r.db.Exec(deleteDisciplineByIdSql, id)
 	if err != nil {
