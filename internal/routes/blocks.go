@@ -17,7 +17,9 @@ func NewBlockService(repo blocks.Repo) *BlockService {
 	}
 }
 
-func (svc *BlockService) GetBlock(ctx fuego.ContextNoBody) (*blocks.Block, error) {
+func (svc *BlockService) GetBlock(
+	ctx fuego.ContextNoBody,
+) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
 
 	id, err := uuid.Parse(pathId)
@@ -27,7 +29,9 @@ func (svc *BlockService) GetBlock(ctx fuego.ContextNoBody) (*blocks.Block, error
 	return svc.service.GetBlock(ctx.Context(), id)
 }
 
-func (svc *BlockService) GetAllBlocks(ctx fuego.ContextNoBody) ([]*blocks.Block, error) {
+func (svc *BlockService) GetAllBlocks(
+	ctx fuego.ContextNoBody,
+) ([]*blocks.Block, error) {
 	pathId := ctx.PathParam("course_id")
 
 	id, err := uuid.Parse(pathId)
@@ -48,7 +52,9 @@ func (svc *BlockService) CreateBlock(
 	return svc.service.CreateBlock(ctx.Context(), &body)
 }
 
-func (svc *BlockService) PatchBlock(ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
+func (svc *BlockService) PatchBlock(
+	ctx fuego.ContextWithBody[blocks.UpdateBlock],
+) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
 
 	id, err := uuid.Parse(pathId)
@@ -64,7 +70,9 @@ func (svc *BlockService) PatchBlock(ctx fuego.ContextWithBody[blocks.UpdateBlock
 	return svc.service.UpdateBlock(id, &body)
 }
 
-func (svc *BlockService) UnlinkFromCourse(ctx fuego.ContextNoBody) (*blocks.Block, error) {
+func (svc *BlockService) UnlinkFromCourse(
+	ctx fuego.ContextNoBody,
+) (*blocks.Block, error) {
 	pathBlockId := ctx.PathParam("block_id")
 
 	blockId, err := uuid.Parse(pathBlockId)
@@ -79,7 +87,7 @@ func (svc *BlockService) UnlinkFromCourse(ctx fuego.ContextNoBody) (*blocks.Bloc
 		return nil, err
 	}
 
-  return svc.service.UnlinkBlock(courseId, blockId)
+	return svc.service.UnlinkBlock(courseId, blockId)
 }
 
 func (svc *BlockService) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {

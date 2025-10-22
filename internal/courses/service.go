@@ -36,14 +36,14 @@ func (s *Service) GetCourse(
 }
 
 func (s *Service) PatchCourse(
-  id uuid.UUID,
-  update *UpdateCourse,
+	id uuid.UUID,
+	update *UpdateCourse,
 ) (*Course, error) {
-  return s.repo.UpdateCourseById(id, update)
+	return s.repo.UpdateCourseById(id, update)
 }
 
 func (s *Service) DeleteCourse(
-  id uuid.UUID,
+	id uuid.UUID,
 ) error {
-  return s.repo.DeleteCourseById(id)
+	return s.repo.DeleteCourseById(id)
 }

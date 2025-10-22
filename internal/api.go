@@ -123,7 +123,11 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
-	disciplineGroup := fuego.Group(g, "/disciplines", option.Summary("Discipline API"))
+	disciplineGroup := fuego.Group(
+		g,
+		"/disciplines",
+		option.Summary("Discipline API"),
+	)
 
 	fuego.Post(
 		disciplineGroup,
@@ -197,7 +201,12 @@ func SetupRoutes(
 		authGroup,
 		"/session",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return userService.GetSession(sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.GetSession(
+				sessionRepo,
+				zap.L(),
+				cookieConfig,
+				ctx,
+			)
 		},
 	)
 }

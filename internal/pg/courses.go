@@ -77,7 +77,10 @@ func (r *PGRepo) CreateCourse(
 	return &newCourse, nil
 }
 
-func (r *PGRepo) GetCourseById(ctx context.Context, id uuid.UUID) (*courses.Course, error) {
+func (r *PGRepo) GetCourseById(
+	ctx context.Context,
+	id uuid.UUID,
+) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSql))
 
 	var course courses.Course
@@ -91,8 +94,12 @@ func (r *PGRepo) GetCourseById(ctx context.Context, id uuid.UUID) (*courses.Cour
 	return &course, nil
 }
 
-func (r *PGRepo) GetPaginatedCourses(limit int, offset int) ([]*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSql))
+func (r *PGRepo) GetPaginatedCourses(
+	limit int,
+	offset int,
+) ([]*courses.Course, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSql))
 
 	var course courses.Course
 	var courseList []*courses.Course

@@ -14,7 +14,7 @@ import (
 )
 
 type UserService struct {
-  service users.Service
+	service users.Service
 }
 
 func NewUserService(repo users.Repo) *UserService {
@@ -161,7 +161,7 @@ func (svc *UserService) GetSession(
 		return nil, fuego.InternalServerError{}
 	}
 
-	u, err := svc.service.GetUserById(ctx.Context(), session.UserId)
+	u, err := svc.service.GetUserByID(ctx.Context(), session.UserId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

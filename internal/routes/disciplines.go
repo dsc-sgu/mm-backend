@@ -9,7 +9,7 @@ import (
 )
 
 type DisciplineService struct {
-  service disciplines.Service
+	service disciplines.Service
 }
 
 func NewDisciplineService(repo disciplines.Repo) *DisciplineService {
