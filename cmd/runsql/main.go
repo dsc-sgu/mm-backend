@@ -4,12 +4,13 @@ import (
 	"os"
 	"strings"
 
+	"go.uber.org/zap"
+
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
-	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
-	"go.uber.org/zap"
+	"github.com/dsc-sgu/mm-backend/internal/pg"
 )
 
 func main() {

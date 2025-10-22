@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/dsc-sgu/mm-backend/internal/courses"
 )
 
 const (

@@ -3,13 +3,14 @@ package routes
 import (
 	"net/http"
 
+	"github.com/go-fuego/fuego"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
-	"github.com/go-fuego/fuego"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 type UserService struct {
