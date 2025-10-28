@@ -27,6 +27,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/gitservice"
+	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
@@ -130,7 +131,11 @@ func main() {
 	)
 	httpServer.OpenAPI.Description().Servers = openapi3.Servers{
 		{
-			URL:         fmt.Sprintf("http://%s:%d", config.OpenAPI.Host, config.OpenAPI.Port),
+			URL: fmt.Sprintf(
+				"http://%s:%d",
+				config.OpenAPI.Host,
+				config.OpenAPI.Port,
+			),
 			Description: "Docker dev deployment server",
 		},
 	}
