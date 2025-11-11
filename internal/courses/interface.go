@@ -8,8 +8,8 @@ import (
 
 type Repo interface {
 	CreateCourse(model *CreateCourse, ownerId uuid.UUID) (*Course, error)
-	GetCourseById(ctx context.Context, id uuid.UUID) (*Course, error)
+	GetCourseById(ctx context.Context, id int) (*Course, error)
 	GetPaginatedCourses(limit int, offset int) ([]*Course, error)
-	UpdateCourseById(id uuid.UUID, update *UpdateCourse) (*Course, error)
-	DeleteCourseById(id uuid.UUID) error
+	UpdateCourseById(id int, update *UpdateCourse) (*Course, error)
+	DeleteCourseById(id int) error
 }
