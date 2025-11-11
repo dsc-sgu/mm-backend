@@ -30,20 +30,20 @@ func (s *Service) GetPaginatedCourses(
 
 func (s *Service) GetCourse(
 	ctx context.Context,
-	id uuid.UUID,
+	id int,
 ) (*Course, error) {
 	return s.repo.GetCourseById(ctx, id)
 }
 
 func (s *Service) PatchCourse(
-	id uuid.UUID,
+	id int,
 	update *UpdateCourse,
 ) (*Course, error) {
 	return s.repo.UpdateCourseById(id, update)
 }
 
 func (s *Service) DeleteCourse(
-	id uuid.UUID,
+	id int,
 ) error {
 	return s.repo.DeleteCourseById(id)
 }

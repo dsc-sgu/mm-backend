@@ -7,7 +7,7 @@ import (
 )
 
 type Course struct {
-	Id           uuid.UUID `json:"id"           db:"id"            binding:"required"`
+	Id           int       `json:"id"           db:"id"            binding:"required"`
 	DisciplineId uuid.UUID `json:"disciplineId" db:"discipline_id"`
 	OwnerId      uuid.UUID `json:"ownerId"      db:"owner_id"      binding:"required"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`

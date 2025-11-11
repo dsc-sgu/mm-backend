@@ -49,7 +49,7 @@ CREATE TABLE discipline (
 
 -- NOTE(mchernigin): for example "Programming languages (2024)"
 CREATE TABLE course (
-    id uuid PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     discipline_id uuid NOT NULL REFERENCES discipline(id),
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
