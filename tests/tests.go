@@ -19,14 +19,10 @@ func initBackend(
 ) (*nat.Port, error) {
 	basePort := "8013/tcp"
 
-	req, err := testcontainers.ContainerRequest{
+	req := testcontainers.ContainerRequest{
 		Image:        "mm-backend",
 		ExposedPorts: []string{basePort},
-		WaitingFor:   wait.ForListeningPort(basePort),
-	}
-
-	if err != nil {
-		return nil, err
+		WaitingFor:   wait.ForListeningPort(nat.Port(basePort)),
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -43,19 +39,25 @@ func initBackend(
 
 	testcontainers.CleanupContainer(t, container)
 
-	return container.MappedPort(ctx, basePort)
+	port, err := container.MappedPort(ctx, nat.Port(basePort))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &port, nil
 }
 
 func initPostgres(
 	ctx context.Context,
 	t *testing.T,
-) (nat.Port, error) {
+) (*nat.Port, error) {
 	dbUser := "sguhack"
 	dbPassword := "postgres"
 	dbName := "sguhack"
 	dbPort := "5432/tcp"
 
-	req, err := testcontainers.ContainerRequest{
+	req := testcontainers.ContainerRequest{
 		Image:        "postgres:latest",
 		ExposedPorts: []string{dbPort},
 		Env: map[string]string{
@@ -63,11 +65,7 @@ func initPostgres(
 			"POSTGRES_PASSWORD": dbPassword,
 			"POSTGRES_DB":       dbName,
 		},
-		WaitingFor: wait.ForListeningPort(dbPort),
-	}
-
-	if err != nil {
-		return nil, err
+		WaitingFor: wait.ForListeningPort(nat.Port(dbPort)),
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -83,14 +81,20 @@ func initPostgres(
 
 	testcontainers.CleanupContainer(t, container)
 
-	return container.MappedPort(ctx, dbPort)
+	port, err := container.MappedPort(ctx, nat.Port(dbPort))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &port, nil
 }
 
-func sendRequest(
-	t *testing.T,
-	net *testcontainers.DockerNetwork,
-	//
-)
+//func sendRequest(
+//	t *testing.T,
+//net *testcontainers.DockerNetwork,
+//	//
+//)
 
 func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
 	body, err := io.ReadAll(rc)
