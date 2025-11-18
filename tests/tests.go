@@ -2,12 +2,14 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 func initBackend(
@@ -15,12 +17,12 @@ func initBackend(
 	t *testing.T,
 	net *testcontainers.DockerNetwork,
 ) (*nat.Port, error) {
-	basePort := "8013"
-	
+	basePort := "8013/tcp"
+
 	req, err := testcontainers.ContainerRequest{
-		Image: "mm-backend",
-		ExposedPorts: []string{basePort + "/tcp"},
-		WaitingFor: wait.ForListeningPort(basePort + "/tcp"),
+		Image:        "mm-backend",
+		ExposedPorts: []string{basePort},
+		WaitingFor:   wait.ForListeningPort(basePort),
 	}
 
 	if err != nil {
@@ -31,8 +33,8 @@ func initBackend(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
-			Started: true,
-		}
+			Started:          true,
+		},
 	)
 
 	if err != nil {
@@ -45,10 +47,44 @@ func initBackend(
 }
 
 func initPostgres(
-// 1. initialize container request
-// 2. create request using GenericContainer
-// 3. call function which will clean up container after test
-) (nat.Port, error)
+	ctx context.Context,
+	t *testing.T,
+) (nat.Port, error) {
+	dbUser := "sguhack"
+	dbPassword := "postgres"
+	dbName := "sguhack"
+	dbPort := "5432/tcp"
+
+	req, err := testcontainers.ContainerRequest{
+		Image:        "postgres:latest",
+		ExposedPorts: []string{dbPort},
+		Env: map[string]string{
+			"POSTGRES_USER":     dbUser,
+			"POSTGRES_PASSWORD": dbPassword,
+			"POSTGRES_DB":       dbName,
+		},
+		WaitingFor: wait.ForListeningPort(dbPort),
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	container, err := testcontainers.GenericContainer(
+		ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	testcontainers.CleanupContainer(t, container)
+
+	return container.MappedPort(ctx, dbPort)
+}
 
 func sendRequest(
 	t *testing.T,
@@ -61,7 +97,8 @@ func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rc.Close()
+	defer func() {
+		_ = rc.Close()
 	}()
 
 	var result map[string]any
