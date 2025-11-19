@@ -43,6 +43,7 @@ type Config struct {
 	Redis    RedisConfig    `env:", prefix=REDIS_"`
 	OpenAPI  OpenAPIConfig  `env:", prefix=OPENAPI_"`
 
+	EnableAuth          bool     `env:"ENABLE_AUTH, default=true"`
 	SessionCookieSecure bool     `env:"SESSION_COOKIE_SECURE, default=false"`
 	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=localhost:5173"`
 	AllowOrigins        []string `env:"ALLOW_ORIGINS,         default=http://localhost:5173"`
