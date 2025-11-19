@@ -42,5 +42,3 @@ func AuthMiddleware(
 		})
 	}
 }
-
-// TODO: add optional middleware enabling to main.go
