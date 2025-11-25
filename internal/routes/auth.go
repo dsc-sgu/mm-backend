@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
@@ -42,7 +41,6 @@ type LoginSuccessResponse struct {
 
 func (svc *UserService) Login(
 	sessionRepo session.Repo,
-	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextWithBody[LoginModel],
 ) (any, error) {
@@ -86,7 +84,6 @@ func (svc *UserService) Login(
 
 func (svc *UserService) Register(
 	sessionRepo session.Repo,
-	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextWithBody[RegisterModel],
 ) (any, error) {
@@ -114,21 +111,15 @@ func (svc *UserService) Register(
 
 func (svc *UserService) Logout(
 	sessionRepo session.Repo,
-	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
 ) (*struct{}, error) {
-	cookie, err := ctx.Cookie(session.CookieName)
-	if err != nil {
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	u, err := uuid.Parse(cookie.Value)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	err = sessionRepo.DeleteById(u)
+	err := sessionRepo.DeleteById(userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -147,21 +138,15 @@ func (svc *UserService) Logout(
 }
 
 func (svc *UserService) GetSession(
-	sessionRepo session.Repo,
-	logger *zap.Logger,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
-	cookie, err := ctx.Cookie(session.CookieName)
-	if err != nil {
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
-	session, err := session.CheckHTTPReq(cookie, sessionRepo, logger)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
 
-	u, err := svc.service.GetUserByID(ctx.Context(), session.UserId)
+	u, err := svc.service.GetUserByID(ctx.Context(), userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

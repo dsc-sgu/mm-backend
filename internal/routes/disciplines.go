@@ -3,7 +3,6 @@ package routes
 import (
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
@@ -19,7 +18,6 @@ func NewDisciplineService(repo disciplines.Repo) *DisciplineService {
 }
 
 func (svc *DisciplineService) CreateDiscipline(
-	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
 ) (*disciplines.Discipline, error) {
 	body, err := ctx.Body()
@@ -31,7 +29,6 @@ func (svc *DisciplineService) CreateDiscipline(
 }
 
 func (svc *DisciplineService) GetDiscipline(
-	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
 	pathId := ctx.PathParam("discipline_id")
@@ -45,7 +42,6 @@ func (svc *DisciplineService) GetDiscipline(
 }
 
 func (svc *DisciplineService) PatchDiscipline(
-	logger *zap.Logger,
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
 	pathId := ctx.PathParam("discipline_id")
@@ -64,7 +60,6 @@ func (svc *DisciplineService) PatchDiscipline(
 }
 
 func (svc *DisciplineService) DeleteDiscipline(
-	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	pathId := ctx.PathParam("discipline_id")
