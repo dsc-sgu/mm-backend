@@ -31,7 +31,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
-	middleware "github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 type App struct {
@@ -172,13 +171,7 @@ func main() {
 	disciplineService := routes.NewDisciplineService(pgRepo)
 	sessionRepo := session.NewRedisRepo(redisClient)
 
-	authMiddleware := middleware.AuthMiddleware(sessionRepo)
-
 	v1 := fuego.Group(httpServer, "/api/v1")
-
-	if config.EnableAuth {
-		fuego.Use(v1, authMiddleware)
-	}
 
 	api.SetupRoutes(
 		v1,
