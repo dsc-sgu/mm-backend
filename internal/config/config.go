@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/joho/godotenv"
 	"github.com/sethvargo/go-envconfig"
 	"go.uber.org/zap"
 )
@@ -57,9 +58,13 @@ type Config struct {
 }
 
 func LoadFromEnv() (*Config, error) {
+	err := godotenv.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading from .env: %w", err)
+	}
 	config := Config{}
 	if err := envconfig.Process(context.Background(), &config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("populating config object from environment: %w", err)
 	}
 
 	return &config, nil
