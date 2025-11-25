@@ -6,9 +6,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type contextKey struct{}
+type (
+	userIDKeyType    struct{}
+	sessionIDKeyType struct{}
+)
 
-var userIDKey = contextKey{}
+var (
+	userIDKey    = userIDKeyType{}
+	sessionIDKey = sessionIDKeyType{}
+)
 
 func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
 	return context.WithValue(ctx, userIDKey, id)
@@ -16,8 +22,16 @@ func WithUserID(ctx context.Context, id uuid.UUID) context.Context {
 
 func UserIDFromContext(ctx context.Context) uuid.UUID {
 	v := ctx.Value(userIDKey)
-	if id, ok := v.(uuid.UUID); ok {
-		return id
-	}
-	return uuid.Nil
+	id, _ := v.(uuid.UUID)
+	return id
+}
+
+func WithSessionID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, sessionIDKey, id)
+}
+
+func SessionIDFromContext(ctx context.Context) uuid.UUID {
+	v := ctx.Value(sessionIDKey)
+	id, _ := v.(uuid.UUID)
+	return id
 }
