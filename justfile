@@ -1,6 +1,6 @@
 # Run the application in Docker Compose without initializing the database. This requires manual initialization via 'just initdb-compose'
 dev:
-    docker compose up db dragonfly -d
+    docker compose up postgres dragonfly -d
 
 # Initialize the database by running the Go executable on the host system
 initdb:
