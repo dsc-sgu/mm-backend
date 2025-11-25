@@ -13,13 +13,13 @@ func AuthMiddleware(
 ) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			sessionID, err := r.Cookie(session.CookieName)
+			cookie, err := r.Cookie(session.CookieName)
 			if err != nil {
 				http.Error(w, "WRONG_CREDENTIALS", http.StatusUnauthorized)
 				return
 			}
 
-			u, err := uuid.Parse(sessionID.Value)
+			sessionID, err := uuid.Parse(cookie.Value)
 			if err != nil {
 				http.Error(
 					w,
@@ -29,13 +29,14 @@ func AuthMiddleware(
 				return
 			}
 
-			s, err := sessionRepo.GetById(u)
+			s, err := sessionRepo.GetById(sessionID)
 			if err != nil {
 				http.Error(w, "WRONG_CREDENTIALS", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := session.WithUserID(r.Context(), s.UserId)
+			ctx := session.WithSessionID(r.Context(), sessionID)
+			ctx = session.WithUserID(ctx, s.UserId)
 			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)
