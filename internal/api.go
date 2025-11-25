@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-fuego/fuego"
 	"github.com/go-fuego/fuego/option"
-	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
@@ -13,6 +12,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
+	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 func SetupRoutes(
@@ -24,6 +24,8 @@ func SetupRoutes(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 ) {
+	authMiddleware := middleware.AuthMiddleware(sessionRepo)
+
 	blockGroup := fuego.Group(g, "/blocks", option.Summary("Block API"))
 
 	fuego.Get(
@@ -33,6 +35,7 @@ func SetupRoutes(
 			return blockService.GetBlock(ctx)
 		},
 		option.Summary("Get block by id"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Post(
@@ -43,6 +46,7 @@ func SetupRoutes(
 		},
 		option.Summary("Create new block on course"),
 		option.DefaultStatusCode(http.StatusCreated),
+		option.Middleware(authMiddleware),
 	)
 	fuego.Patch(
 		blockGroup,
@@ -51,6 +55,7 @@ func SetupRoutes(
 			return blockService.PatchBlock(ctx)
 		},
 		option.Summary("Update existing block"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
@@ -60,6 +65,7 @@ func SetupRoutes(
 			return blockService.UnlinkFromCourse(ctx)
 		},
 		option.Summary("Unlink block from course"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
@@ -70,6 +76,7 @@ func SetupRoutes(
 		},
 		option.Summary("Delete block from course"),
 		option.DefaultStatusCode(http.StatusNoContent),
+		option.Middleware(authMiddleware),
 	)
 
 	courseGroup := fuego.Group(g, "/courses", option.Summary("Course API"))
@@ -78,49 +85,54 @@ func SetupRoutes(
 		courseGroup,
 		"/",
 		func(ctx fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
-			return courseService.CreateCourse(sessionRepo, zap.L(), ctx)
+			return courseService.CreateCourse(ctx)
 		},
 		option.Summary("Create new course"),
 		option.DefaultStatusCode(http.StatusCreated),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Get(
 		courseGroup,
 		"/{course_id}",
 		func(ctx fuego.ContextNoBody) (*courses.Course, error) {
-			return courseService.GetCourse(zap.L(), ctx)
+			return courseService.GetCourse(ctx)
 		},
 		option.Summary("Get existing course by id"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Get(
 		courseGroup,
 		"",
 		func(ctx fuego.ContextNoBody) ([]*courses.Course, error) {
-			return courseService.GetPaginatedCourses(zap.L(), ctx)
+			return courseService.GetPaginatedCourses(ctx)
 		},
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
 		option.QueryInt("offset", "Offset from list beginning"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Patch(
 		courseGroup,
 		"/{course_id}",
 		func(ctx fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			return courseService.PatchCourse(zap.L(), ctx)
+			return courseService.PatchCourse(ctx)
 		},
 		option.Summary("Update existing course"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
 		courseGroup,
 		"/{course_id}",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return courseService.DeleteCourse(blockService, zap.L(), ctx)
+			return courseService.DeleteCourse(blockService, ctx)
 		},
 		option.Summary("Delete course"),
 		option.DefaultStatusCode(http.StatusNoContent),
+		option.Middleware(authMiddleware),
 	)
 
 	disciplineGroup := fuego.Group(
@@ -133,36 +145,40 @@ func SetupRoutes(
 		disciplineGroup,
 		"",
 		func(ctx fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
-			return disciplineService.CreateDiscipline(zap.L(), ctx)
+			return disciplineService.CreateDiscipline(ctx)
 		},
 		option.Summary("Create new discipline"),
 		option.DefaultStatusCode(http.StatusCreated),
+		option.Middleware(authMiddleware),
 	)
 	fuego.Get(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(ctx fuego.ContextNoBody) (*disciplines.Discipline, error) {
-			return disciplineService.GetDiscipline(zap.L(), ctx)
+			return disciplineService.GetDiscipline(ctx)
 		},
 		option.Summary("Get discipline by id"),
+		option.Middleware(authMiddleware),
 	)
 
 	fuego.Patch(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(ctx fuego.ContextWithBody[disciplines.PatchDiscipline]) (*disciplines.Discipline, error) {
-			return disciplineService.PatchDiscipline(zap.L(), ctx)
+			return disciplineService.PatchDiscipline(ctx)
 		},
 		option.Summary("Update existing discipline"),
+		option.Middleware(authMiddleware),
 	)
 	fuego.Delete(
 		disciplineGroup,
 		"/{discipline_id}",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return disciplineService.DeleteDiscipline(zap.L(), ctx)
+			return disciplineService.DeleteDiscipline(ctx)
 		},
 		option.DefaultStatusCode(http.StatusNoContent),
 		option.Summary("Delete discipline"),
+		option.Middleware(authMiddleware),
 	)
 
 	authGroup := fuego.Group(g, "/auth", option.Summary("Auth API"))
@@ -171,7 +187,7 @@ func SetupRoutes(
 		authGroup,
 		"/login",
 		func(ctx fuego.ContextWithBody[routes.LoginModel]) (any, error) {
-			return userService.Login(sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Login(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Login user"),
 	)
@@ -180,7 +196,7 @@ func SetupRoutes(
 		authGroup,
 		"/register",
 		func(ctx fuego.ContextWithBody[routes.RegisterModel]) (any, error) {
-			return userService.Register(sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Register(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Register new user"),
 		option.DefaultStatusCode(http.StatusCreated),
@@ -191,9 +207,10 @@ func SetupRoutes(
 		authGroup,
 		"/logout",
 		func(ctx fuego.ContextNoBody) (any, error) {
-			return userService.Logout(sessionRepo, zap.L(), cookieConfig, ctx)
+			return userService.Logout(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Logout user"),
+		option.Middleware(authMiddleware),
 	)
 
 	// Session
@@ -202,11 +219,10 @@ func SetupRoutes(
 		"/session",
 		func(ctx fuego.ContextNoBody) (any, error) {
 			return userService.GetSession(
-				sessionRepo,
-				zap.L(),
 				cookieConfig,
 				ctx,
 			)
 		},
+		option.Middleware(authMiddleware),
 	)
 }
