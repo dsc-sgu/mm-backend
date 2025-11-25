@@ -131,4 +131,4 @@ func TestInitPostgres(t *testing.T) {
 		t.Fatalf("initPostgres error: %v", err)
 	}
 	t.Logf("Postgres started on port: %v", port.Port())
-}/}
+}
