@@ -46,7 +46,7 @@ func (app *App) onShutdown(
 	ctx context.Context,
 ) error {
 	wg := sync.WaitGroup{}
-wg.Add(4)
+	wg.Add(4)
 
 	errCh := make(chan error)
 
