@@ -181,6 +181,8 @@ func main() {
 		userService,
 		sessionRepo,
 		cookieConfig,
+		config,
+		zap.L(),
 	)
 
 	ctx, stop := signal.NotifyContext(

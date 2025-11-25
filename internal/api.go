@@ -5,10 +5,12 @@ import (
 
 	"github.com/go-fuego/fuego"
 	"github.com/go-fuego/fuego/option"
+	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
@@ -23,10 +25,29 @@ func SetupRoutes(
 	userService *routes.UserService,
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
+	config *config.Config,
+	logger *zap.Logger,
 ) {
 	authMiddleware := middleware.AuthMiddleware(sessionRepo)
 
-	blockGroup := fuego.Group(g, "/blocks", option.Summary("Block API"))
+	var privateGroup *fuego.Server
+	if config.EnableAuth {
+		privateGroup = fuego.Group(
+			g,
+			"/private",
+			option.Middleware(authMiddleware),
+		)
+		zap.L().Info("Authorization is enabled")
+	} else {
+		privateGroup = fuego.Group(g, "/private")
+		zap.L().Info("Authorization is disabled")
+	}
+
+	blockGroup := fuego.Group(
+		privateGroup,
+		"/blocks",
+		option.Summary("Block API"),
+	)
 
 	fuego.Get(
 		blockGroup,
@@ -35,7 +56,6 @@ func SetupRoutes(
 			return blockService.GetBlock(ctx)
 		},
 		option.Summary("Get block by id"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Post(
@@ -46,8 +66,8 @@ func SetupRoutes(
 		},
 		option.Summary("Create new block on course"),
 		option.DefaultStatusCode(http.StatusCreated),
-		option.Middleware(authMiddleware),
 	)
+
 	fuego.Patch(
 		blockGroup,
 		"/{block_id}",
@@ -55,7 +75,6 @@ func SetupRoutes(
 			return blockService.PatchBlock(ctx)
 		},
 		option.Summary("Update existing block"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
@@ -65,7 +84,6 @@ func SetupRoutes(
 			return blockService.UnlinkFromCourse(ctx)
 		},
 		option.Summary("Unlink block from course"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
@@ -76,10 +94,13 @@ func SetupRoutes(
 		},
 		option.Summary("Delete block from course"),
 		option.DefaultStatusCode(http.StatusNoContent),
-		option.Middleware(authMiddleware),
 	)
 
-	courseGroup := fuego.Group(g, "/courses", option.Summary("Course API"))
+	courseGroup := fuego.Group(
+		privateGroup,
+		"/courses",
+		option.Summary("Course API"),
+	)
 
 	fuego.Post(
 		courseGroup,
@@ -89,7 +110,6 @@ func SetupRoutes(
 		},
 		option.Summary("Create new course"),
 		option.DefaultStatusCode(http.StatusCreated),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Get(
@@ -99,7 +119,6 @@ func SetupRoutes(
 			return courseService.GetCourse(ctx)
 		},
 		option.Summary("Get existing course by id"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Get(
@@ -111,7 +130,6 @@ func SetupRoutes(
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
 		option.QueryInt("offset", "Offset from list beginning"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Patch(
@@ -121,7 +139,6 @@ func SetupRoutes(
 			return courseService.PatchCourse(ctx)
 		},
 		option.Summary("Update existing course"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Delete(
@@ -132,11 +149,10 @@ func SetupRoutes(
 		},
 		option.Summary("Delete course"),
 		option.DefaultStatusCode(http.StatusNoContent),
-		option.Middleware(authMiddleware),
 	)
 
 	disciplineGroup := fuego.Group(
-		g,
+		privateGroup,
 		"/disciplines",
 		option.Summary("Discipline API"),
 	)
@@ -149,7 +165,6 @@ func SetupRoutes(
 		},
 		option.Summary("Create new discipline"),
 		option.DefaultStatusCode(http.StatusCreated),
-		option.Middleware(authMiddleware),
 	)
 	fuego.Get(
 		disciplineGroup,
@@ -158,7 +173,6 @@ func SetupRoutes(
 			return disciplineService.GetDiscipline(ctx)
 		},
 		option.Summary("Get discipline by id"),
-		option.Middleware(authMiddleware),
 	)
 
 	fuego.Patch(
@@ -168,7 +182,6 @@ func SetupRoutes(
 			return disciplineService.PatchDiscipline(ctx)
 		},
 		option.Summary("Update existing discipline"),
-		option.Middleware(authMiddleware),
 	)
 	fuego.Delete(
 		disciplineGroup,
@@ -178,10 +191,16 @@ func SetupRoutes(
 		},
 		option.DefaultStatusCode(http.StatusNoContent),
 		option.Summary("Delete discipline"),
-		option.Middleware(authMiddleware),
 	)
 
 	authGroup := fuego.Group(g, "/auth", option.Summary("Auth API"))
+
+	privateAuthGroup := fuego.Group(
+		privateGroup,
+		"/auth",
+		option.Summary("Auth API"),
+		option.Middleware(authMiddleware),
+	)
 
 	fuego.Post(
 		authGroup,
@@ -204,18 +223,17 @@ func SetupRoutes(
 
 	// Logout
 	fuego.Post(
-		authGroup,
+		privateAuthGroup,
 		"/logout",
 		func(ctx fuego.ContextNoBody) (any, error) {
 			return userService.Logout(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Logout user"),
-		option.Middleware(authMiddleware),
 	)
 
 	// Session
 	fuego.Get(
-		authGroup,
+		privateAuthGroup,
 		"/session",
 		func(ctx fuego.ContextNoBody) (any, error) {
 			return userService.GetSession(
@@ -223,6 +241,5 @@ func SetupRoutes(
 				ctx,
 			)
 		},
-		option.Middleware(authMiddleware),
 	)
 }
