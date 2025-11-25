@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
@@ -23,8 +22,6 @@ func NewCourseService(repo courses.Repo) *CourseService {
 }
 
 func (svc *CourseService) CreateCourse(
-	sessionRepo session.Repo,
-	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.CreateCourse],
 ) (*courses.Course, error) {
 	body, err := ctx.Body()
@@ -32,27 +29,16 @@ func (svc *CourseService) CreateCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	sessionID, err := ctx.Cookie(session.CookieName)
-	if err != nil {
-		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
-	}
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+        return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+    }
 
-	u, err := uuid.Parse(sessionID.Value)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	session, err := sessionRepo.GetById(u)
-	if err != nil {
-		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
-	}
-
-	return svc.service.CreateCourse(&body, session.UserId)
+	return svc.service.CreateCourse(&body, userID)
 }
 
 // Other endpoints rewrote using fuego
 func (svc *CourseService) GetPaginatedCourses(
-	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) ([]*courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
@@ -72,7 +58,6 @@ func (svc *CourseService) GetPaginatedCourses(
 }
 
 func (svc *CourseService) GetCourse(
-	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -86,7 +71,6 @@ func (svc *CourseService) GetCourse(
 }
 
 func (svc *CourseService) PatchCourse(
-	logger *zap.Logger,
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -106,7 +90,6 @@ func (svc *CourseService) PatchCourse(
 
 func (svc *CourseService) DeleteCourse(
 	blockService *BlockService,
-	logger *zap.Logger,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	pathId := ctx.PathParam("course_id")
