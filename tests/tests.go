@@ -1,113 +1,113 @@
 // Package tests should contain integration tests for the backend.
 package tests
 
-import (
-	"context"
-	"encoding/json"
-	"io"
-	"testing"
+// import (
+// 	"context"
+// 	"encoding/json"
+// 	"io"
+// 	"testing"
 
-	"github.com/docker/go-connections/nat"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
-)
+// 	"github.com/docker/go-connections/nat"
+// 	"github.com/testcontainers/testcontainers-go"
+// 	"github.com/testcontainers/testcontainers-go/wait"
+// )
 
-func initBackend(
-	ctx context.Context,
-	t *testing.T,
-	net *testcontainers.DockerNetwork,
-) (*nat.Port, error) {
-	basePort := "8013/tcp"
-
-	req := testcontainers.ContainerRequest{
-		Image:        "mm-backend",
-		ExposedPorts: []string{basePort},
-		WaitingFor:   wait.ForListeningPort(nat.Port(basePort)),
-	}
-
-	container, err := testcontainers.GenericContainer(
-		ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
-			Started:          true,
-		},
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	testcontainers.CleanupContainer(t, container)
-
-	port, err := container.MappedPort(ctx, nat.Port(basePort))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &port, nil
-}
-
-func initPostgres(
-	ctx context.Context,
-	t *testing.T,
-) (*nat.Port, error) {
-	dbUser := "sguhack"
-	dbPassword := "postgres"
-	dbName := "sguhack"
-	dbPort := "5432/tcp"
-
-	req := testcontainers.ContainerRequest{
-		Image:        "postgres:latest",
-		ExposedPorts: []string{dbPort},
-		Env: map[string]string{
-			"POSTGRES_USER":     dbUser,
-			"POSTGRES_PASSWORD": dbPassword,
-			"POSTGRES_DB":       dbName,
-		},
-		WaitingFor: wait.ForListeningPort(nat.Port(dbPort)),
-	}
-
-	container, err := testcontainers.GenericContainer(
-		ctx,
-		testcontainers.GenericContainerRequest{
-			ContainerRequest: req,
-			Started:          true,
-		})
-
-	if err != nil {
-		return nil, err
-	}
-
-	testcontainers.CleanupContainer(t, container)
-
-	port, err := container.MappedPort(ctx, nat.Port(dbPort))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &port, nil
-}
-
-//func sendRequest(
+//func initBackend(
+//	ctx context.Context,
 //	t *testing.T,
-//net *testcontainers.DockerNetwork,
-//	//
-//)
+//	net *testcontainers.DockerNetwork,
+//) (*nat.Port, error) {
+//	basePort := "8013/tcp"
 
-func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
-	body, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rc.Close()
-	}()
+//	req := testcontainers.ContainerRequest{
+//		Image:        "mm-backend",
+//		ExposedPorts: []string{basePort},
+//		WaitingFor:   wait.ForListeningPort(nat.Port(basePort)),
+//	}
 
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
+//	container, err := testcontainers.GenericContainer(
+//		ctx,
+//		testcontainers.GenericContainerRequest{
+//			ContainerRequest: req,
+//			Started:          true,
+//		},
+//	)
+
+//	if err != nil {
+//		return nil, err
+//	}
+
+//	testcontainers.CleanupContainer(t, container)
+
+//	port, err := container.MappedPort(ctx, nat.Port(basePort))
+
+//	if err != nil {
+//		return nil, err
+//	}
+
+//	return &port, nil
+//}
+
+//func initPostgres(
+//	ctx context.Context,
+//	t *testing.T,
+//) (*nat.Port, error) {
+//	dbUser := "sguhack"
+//	dbPassword := "postgres"
+//	dbName := "sguhack"
+//	dbPort := "5432/tcp"
+
+//	req := testcontainers.ContainerRequest{
+//		Image:        "postgres:latest",
+//		ExposedPorts: []string{dbPort},
+//		Env: map[string]string{
+//			"POSTGRES_USER":     dbUser,
+//			"POSTGRES_PASSWORD": dbPassword,
+//			"POSTGRES_DB":       dbName,
+//		},
+//		WaitingFor: wait.ForListeningPort(nat.Port(dbPort)),
+//	}
+
+//	container, err := testcontainers.GenericContainer(
+//		ctx,
+//		testcontainers.GenericContainerRequest{
+//			ContainerRequest: req,
+//			Started:          true,
+//		})
+
+//	if err != nil {
+//		return nil, err
+//	}
+
+//	testcontainers.CleanupContainer(t, container)
+
+//	port, err := container.MappedPort(ctx, nat.Port(dbPort))
+
+//	if err != nil {
+//		return nil, err
+//	}
+
+//	return &port, nil
+//}
+
+////func sendRequest(
+////	t *testing.T,
+////net *testcontainers.DockerNetwork,
+////	//
+////)
+
+//func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
+//	body, err := io.ReadAll(rc)
+//	if err != nil {
+//		return nil, err
+//	}
+//	defer func() {
+//		_ = rc.Close()
+//	}()
+
+//	var result map[string]any
+//	if err := json.Unmarshal(body, &result); err != nil {
+//		return nil, err
+//	}
+//	return result, nil
+//}
