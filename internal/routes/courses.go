@@ -31,8 +31,8 @@ func (svc *CourseService) CreateCourse(
 
 	userID := session.UserIDFromContext(ctx.Context())
 	if userID == uuid.Nil {
-        return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
-    }
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+	}
 
 	return svc.service.CreateCourse(&body, userID)
 }
