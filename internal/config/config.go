@@ -10,7 +10,7 @@ import (
 
 type PostgresConfig struct {
 	Host     string `env:"HOST,      default=localhost"`
-	Port     int    `env:"PORT,      default=5432"`
+	Port     int    `env:"PORT,      default=1301"`
 	User     string `env:"USER,      default=postgres"`
 	Password string `env:"PASSWORD,  default=postgres"`
 	Database string `env:"DATABASE,  default=postgres"`
@@ -22,7 +22,7 @@ func (p *PostgresConfig) GetURL() string {
 
 type RedisConfig struct {
 	Host     string `env:"HOST,      default=localhost"`
-	Port     int    `env:"PORT,      default=6379"`
+	Port     int    `env:"PORT,      default=1300"`
 	Password string `env:"PASSWORD"`
 	Database int    `env:"DATABASE,  default=0"`
 }
