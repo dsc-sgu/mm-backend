@@ -26,7 +26,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/config"
-	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/gitservice"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
@@ -47,7 +46,7 @@ func (app *App) onShutdown(
 	ctx context.Context,
 ) error {
 	wg := sync.WaitGroup{}
-	wg.Add(4)
+wg.Add(4)
 
 	errCh := make(chan error)
 
@@ -114,17 +113,18 @@ func main() {
 
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
 
-	dbConn, err := db.CreateDb(config.Postgres.GetURL())
+	var dbConn *sqlx.DB
 	if err != nil {
 		zap.S().
 			Fatalf("Unable to establish database connection: %s", err.Error())
 	}
 
-	redisOpts, err := redis.ParseURL(config.Redis.GetURL())
+	// redisOpts, err := redis.ParseURL(config.Redis.GetURL())
 	if err != nil {
 		zap.S().Fatalf("Unable to establish redis connection: %s", err.Error())
 	}
-	redisClient := redis.NewClient(redisOpts)
+	var redisClient *redis.Client
+	// redisClient := redis.NewClient(redisOpts)
 
 	httpServer := fuego.NewServer(
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),

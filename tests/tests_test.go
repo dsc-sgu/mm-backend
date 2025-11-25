@@ -3,8 +3,8 @@ package tests
 
 import (
 	"context"
-	"encoding/json"
-	"io"
+	// "encoding/json"
+	// "io"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
@@ -19,8 +19,13 @@ func initBackend(
 	basePort := "80/tcp"
 
 	req := testcontainers.ContainerRequest{
-		Image:        "mm-backend",
+		FromDockerfile: testcontainers.FromDockerfile{
+			Context:    "..",
+			Dockerfile: "Dockerfile",
+		},
+		Entrypoint:   []string{"/app/server"},
 		ExposedPorts: []string{basePort},
+		WaitingFor:   wait.ForLog("Server running"),
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -35,7 +40,7 @@ func initBackend(
 		return nil, err
 	}
 
-	defer testcontainers.CleanupContainer(t, container)
+	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, nat.Port(basePort))
 
@@ -77,7 +82,7 @@ func initPostgres(
 		return nil, err
 	}
 
-	defer testcontainers.CleanupContainer(t, container)
+	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, nat.Port(dbPort))
 
@@ -94,37 +99,36 @@ func initPostgres(
 //	//
 //)
 
-func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
-	body, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = rc.Close()
-	}()
+// func readBodyToMap(rc io.ReadCloser) (map[string]any, error) {
+// 	body, err := io.ReadAll(rc)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	defer func() {
+// 		_ = rc.Close()
+// 	}()
 
-	var result map[string]any
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
+// 	var result map[string]any
+// 	if err := json.Unmarshal(body, &result); err != nil {
+// 		return nil, err
+// 	}
+// 	return result, nil
+// }
 
 func TestInitBackend(t *testing.T) {
-    ctx := context.Background()
-    port, err := initBackend(ctx, t)
-    if err != nil {
-        t.Fatalf("initBackend error: %v", err)
-    }
-    t.Logf("Backend started on port: %v", port.Port())
+	ctx := context.Background()
+	port, err := initBackend(ctx, t)
+	if err != nil {
+		t.Fatalf("initBackend error: %v", err)
+	}
+	t.Logf("Backend started on port: %v", port.Port())
 }
 
 func TestInitPostgres(t *testing.T) {
-    ctx := context.Background()
-    port, err := initPostgres(ctx, t)
-    if err != nil {
-        t.Fatalf("initPostgres error: %v", err)
-    }
-    t.Logf("Postgres started on port: %v", port.Port())
+	ctx := context.Background()
+	port, err := initPostgres(ctx, t)
+	if err != nil {
+		t.Fatalf("initPostgres error: %v", err)
+	}
+	t.Logf("Postgres started on port: %v", port.Port())
 }
-
