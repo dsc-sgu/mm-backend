@@ -6,14 +6,15 @@ services:
     ports:
       - "${PORT:-8080}:80"
     depends_on:
-      - db
+      - postgres
       - dragonfly
     env_file:
-      - .env
-  db:
-    image: postgres:latest
+      - path: .env
+        required: false
+  postgres:
+    image: postgres:18.1
     healthcheck:
-      test: "pg_isready --username=${DB_USER:-sguhack} --database=${DB_NAME:-sguhack}"
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 3
@@ -23,11 +24,14 @@ services:
         source: ./db/CreateTables.sql
         target: /docker-entrypoint-initdb.d/CreateTables.sql
     environment:
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     ports:
-      - "5432:5432"
+      - "1301:5432"
     env_file:
-      - .env
+      - path: .env
+        required: false
 
   dragonfly:
     image: docker.dragonflydb.io/dragonflydb/dragonfly
@@ -40,4 +44,5 @@ services:
       retries: 3
       start_period: 5s
     env_file:
-      - .env
+      - path: .env
+        required: false
