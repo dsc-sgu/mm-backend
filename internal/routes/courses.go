@@ -62,7 +62,7 @@ func (svc *CourseService) GetCourse(
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := strconv.Atoi(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -75,7 +75,7 @@ func (svc *CourseService) PatchCourse(
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := strconv.Atoi(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -94,7 +94,12 @@ func (svc *CourseService) DeleteCourse(
 ) (any, error) {
 	pathId := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := strconv.Atoi(pathId)
+	if err != nil {
+		return nil, fuego.InternalServerError{}
+	}
+
+	block_id, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -103,7 +108,7 @@ func (svc *CourseService) DeleteCourse(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	linkedBlocks, err := blockService.service.GetAllBlocks(id)
+	linkedBlocks, err := blockService.service.GetAllBlocks(block_id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

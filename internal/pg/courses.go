@@ -25,9 +25,11 @@ const (
 	`
 
 	getAllCoursesByCourseIdSql = `
-		SELECT *
+		SELECT id, discipline_id, owner_id, name, created_at
 		FROM course
-		LIMIT $1 OFFSET $2
+		WHERE id > $2
+		ORDER BY id
+		LIMIT $1
 	`
 
 	updateCourseByIdSql = `
@@ -50,7 +52,6 @@ func (r *PGRepo) CreateCourse(
 	zap.L().Debug("Executing query", zap.String("query", createCourseSql))
 
 	newCourse := courses.Course{
-		Id:           uuid.New(),
 		DisciplineId: model.DisciplineId,
 		OwnerId:      ownerId,
 		Name:         model.Name,
@@ -67,7 +68,7 @@ func (r *PGRepo) CreateCourse(
 		}
 	}()
 
-	var returnedId uuid.UUID
+	var returnedId int
 	if rows.Next() {
 		if err := rows.Scan(&returnedId); err != nil {
 			return nil, err
@@ -79,7 +80,7 @@ func (r *PGRepo) CreateCourse(
 
 func (r *PGRepo) GetCourseById(
 	ctx context.Context,
-	id uuid.UUID,
+	id int,
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSql))
 
@@ -129,7 +130,7 @@ func (r *PGRepo) GetPaginatedCourses(
 }
 
 func (r *PGRepo) UpdateCourseById(
-	id uuid.UUID,
+	id int,
 	update *courses.UpdateCourse,
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSql))
@@ -151,7 +152,7 @@ func (r *PGRepo) UpdateCourseById(
 	return &course, nil
 }
 
-func (r *PGRepo) DeleteCourseById(id uuid.UUID) error {
+func (r *PGRepo) DeleteCourseById(id int) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSql))
 
 	res, err := r.db.Exec(deleteCourseByIdSql, id)
