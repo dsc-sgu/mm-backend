@@ -11,7 +11,7 @@ CREATE TABLE unit_type (
 );
 
 CREATE TABLE users (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     created_at TIMESTAMPTZ NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE unit (
-    id uuid PRIMARY KEY,
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     name varchar(128) NOT NULL,
     unit_type uuid REFERENCES unit_type(id),
     parent_id uuid REFERENCES unit(id),
@@ -33,7 +33,7 @@ CREATE TABLE unit (
 );
 
 CREATE TABLE block (
-    id uuid PRIMARY KEY,
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
     course_id uuid, -- REFERENCES course(id)
@@ -42,14 +42,14 @@ CREATE TABLE block (
 
 -- NOTE(mchernigin): for example "Programming languages"
 CREATE TABLE discipline (
-    id uuid PRIMARY KEY,
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     name varchar(64) NOT NULL
 );
 
 
 -- NOTE(mchernigin): for example "Programming languages (2024)"
 CREATE TABLE course (
-    id SERIAL PRIMARY KEY,
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     discipline_id uuid NOT NULL REFERENCES discipline(id),
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
@@ -114,7 +114,7 @@ CREATE TABLE milestone_transitions (
 
 
 CREATE TABLE groups (
-    id uuid NOT NULL PRIMARY KEY,
+    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     name varchar(64) NOT NULL
 );
 
@@ -140,7 +140,7 @@ CREATE TABLE task (
 
 
 CREATE TABLE attempt (
-    id uuid NOT NULL PRIMARY KEY,
+    id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
     task_id uuid NOT NULL REFERENCES task(block_id)
 );
