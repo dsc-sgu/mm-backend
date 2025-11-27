@@ -26,6 +26,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/config"
+	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/gitservice"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
@@ -113,18 +114,20 @@ func main() {
 
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
 
-	var dbConn *sqlx.DB
+	dbConn, err := db.CreateDb(config.Postgres.GetURL())
 	if err != nil {
 		zap.S().
-			Fatalf("Unable to establish database connection: %s", err.Error())
+			Fatalf("establishing database connection: %s", err.Error())
+	} else {
+		zap.L().Info("Database connection is established")
 	}
 
-	// redisOpts, err := redis.ParseURL(config.Redis.GetURL())
+	redisOpts, err := redis.ParseURL(config.Redis.GetURL())
 	if err != nil {
-		zap.S().Fatalf("Unable to establish redis connection: %s", err.Error())
+		zap.S().Fatalf("parsing redis url: %s", err.Error())
 	}
-	var redisClient *redis.Client
-	// redisClient := redis.NewClient(redisOpts)
+	redisClient := redis.NewClient(redisOpts)
+	zap.L().Info("Redis connection is established")
 
 	httpServer := fuego.NewServer(
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
