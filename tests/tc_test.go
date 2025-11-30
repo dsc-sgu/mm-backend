@@ -3,8 +3,6 @@ package tests
 
 import (
 	"context"
-	// "encoding/json"
-	// "io"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
@@ -19,7 +17,7 @@ func initBackend(
 	t *testing.T,
 	net *testcontainers.DockerNetwork,
 ) (*nat.Port, error) {
-	basePort := "5432/tcp"
+	basePort := nat.Port("80/tcp")
 
 	req := testcontainers.ContainerRequest{
 		Name: "mm-backend",
@@ -28,8 +26,9 @@ func initBackend(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{basePort},
+		ExposedPorts: []string{string(basePort)},
 		Env: map[string]string{
+			"HTTP_PORT":     basePort.Port(),
 			"POSTGRES_PORT": "5432",
 			"POSTGRES_HOST": "mm-postgres",
 		},
@@ -68,18 +67,18 @@ func initPostgres(
 	dbUser := "postgres"
 	dbPassword := "postgres"
 	dbName := "postgres"
-	dbPort := "5432/tcp"
+	pgPort := nat.Port("5432/tcp")
 
 	req := testcontainers.ContainerRequest{
 		Name:         "mm-postgres",
 		Image:        "postgres:latest",
-		ExposedPorts: []string{dbPort},
+		ExposedPorts: []string{string(pgPort)},
 		Env: map[string]string{
 			"POSTGRES_USER":     dbUser,
 			"POSTGRES_PASSWORD": dbPassword,
 			"POSTGRES_DB":       dbName,
 		},
-		WaitingFor: wait.ForListeningPort(nat.Port(dbPort)),
+		WaitingFor: wait.ForListeningPort(pgPort),
 		Networks:   []string{net.Name},
 	}
 
@@ -96,7 +95,7 @@ func initPostgres(
 
 	testcontainers.CleanupContainer(t, container)
 
-	port, err := container.MappedPort(ctx, nat.Port(dbPort))
+	port, err := container.MappedPort(ctx, pgPort)
 
 	if err != nil {
 		return nil, err
