@@ -51,17 +51,14 @@ type Config struct {
 
 	GinMode  string `env:"GIN_MODE,              default=debug"`
 	Host     string `env:"HOST,                  default=0.0.0.0"`
-	HTTPPort int    `env:"HTTP_PORT,             default=80"`
+	HTTPPort int    `env:"HTTP_PORT,             default=8034"`
 	SSHPort  int    `env:"PORT,                  default=2222"`
 
 	LogLevel zap.AtomicLevel `env:"LOG_LEVEL,             default=debug"`
 }
 
 func LoadFromEnv() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		return nil, fmt.Errorf("loading from .env: %w", err)
-	}
+	_ = godotenv.Load()
 	config := Config{}
 	if err := envconfig.Process(context.Background(), &config); err != nil {
 		return nil, fmt.Errorf("populating config object from environment: %w", err)
