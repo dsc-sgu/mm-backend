@@ -23,7 +23,7 @@ func AuthMiddleware(
 			if err != nil {
 				http.Error(
 					w,
-					"INTERNAL_SERVER_ERROR",
+					"Unexpected error in authorization occured",
 					http.StatusInternalServerError,
 				)
 				return
@@ -47,11 +47,11 @@ func AuthMiddleware(
 func FakeAuthMiddleware() func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			u, err := uuid.Parse(r.URL.Query().Get("fakeUserID"))
+			u, err := uuid.Parse(r.URL.Query().Get("fake_user_id"))
 			if err != nil {
 				http.Error(
 					w,
-					"INTERNAL_SERVER_ERROR",
+					"Unexpected error in authorization occured",
 					http.StatusInternalServerError,
 				)
 				return
