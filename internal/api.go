@@ -28,14 +28,19 @@ func SetupRoutes(
 	config *config.Config,
 	logger *zap.Logger,
 ) {
-	authMiddleware := middleware.AuthMiddleware(sessionRepo)
+	var mws []func(http.Handler) http.Handler
+	if config.EnableAuth {
+		mws = append(mws, middleware.AuthMiddleware(sessionRepo))
+	} else {
+		mws = append(mws, middleware.FakeAuthMiddleware())
+	}
 
 	var privateGroup *fuego.Server
 	if config.EnableAuth {
 		privateGroup = fuego.Group(
 			g,
 			"/private",
-			option.Middleware(authMiddleware),
+			option.Middleware(mws...),
 		)
 		zap.L().Info("Authorization is enabled")
 	} else {
@@ -199,7 +204,7 @@ func SetupRoutes(
 		privateGroup,
 		"/auth",
 		option.Summary("Auth API"),
-		option.Middleware(authMiddleware),
+		option.Middleware(mws...),
 	)
 
 	fuego.Post(
