@@ -43,3 +43,23 @@ func AuthMiddleware(
 		})
 	}
 }
+
+func FakeAuthMiddleware() func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, err := uuid.Parse(r.URL.Query().Get("fakeUserID"))
+			if err != nil {
+				http.Error(
+					w,
+					"INTERNAL_SERVER_ERROR",
+					http.StatusInternalServerError,
+				)
+				return
+			}
+
+			ctx := session.WithUserID(r.Context(), u)
+			r = r.WithContext(ctx)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
