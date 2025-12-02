@@ -39,12 +39,12 @@ func SetupRoutes(
 	if config.EnableAuth {
 		privateGroup = fuego.Group(
 			g,
-			"/private",
+			"",
 			option.Middleware(mws...),
 		)
 		zap.L().Info("Authorization is enabled")
 	} else {
-		privateGroup = fuego.Group(g, "/private")
+		privateGroup = fuego.Group(g, "")
 		zap.L().Info("Authorization is disabled")
 	}
 
