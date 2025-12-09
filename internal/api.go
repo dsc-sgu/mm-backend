@@ -31,22 +31,17 @@ func SetupRoutes(
 	var mws []func(http.Handler) http.Handler
 	if config.EnableAuth {
 		mws = append(mws, middleware.AuthMiddleware(sessionRepo))
-	} else {
-		mws = append(mws, middleware.FakeAuthMiddleware())
-	}
-
-	var privateGroup *fuego.Server
-	if config.EnableAuth {
-		privateGroup = fuego.Group(
-			g,
-			"",
-			option.Middleware(mws...),
-		)
 		zap.L().Info("Authorization is enabled")
 	} else {
-		privateGroup = fuego.Group(g, "")
+		mws = append(mws, middleware.FakeAuthMiddleware())
 		zap.L().Info("Authorization is disabled")
 	}
+
+	privateGroup := fuego.Group(
+		g,
+		"",
+		option.Middleware(mws...),
+	)
 
 	blockGroup := fuego.Group(
 		privateGroup,
@@ -109,7 +104,7 @@ func SetupRoutes(
 
 	fuego.Post(
 		courseGroup,
-		"/",
+		"",
 		func(ctx fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
 			return courseService.CreateCourse(ctx)
 		},
