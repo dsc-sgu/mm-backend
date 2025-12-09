@@ -2,14 +2,22 @@
 package tests
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/dsc-sgu/mm-backend/internal/courses"
 )
 
 func initBackend(
@@ -31,6 +39,7 @@ func initBackend(
 			"HTTP_PORT":     basePort.Port(),
 			"POSTGRES_PORT": "5432",
 			"POSTGRES_HOST": "mm-postgres",
+			"ENABLE_AUTH":   "false",
 		},
 		WaitingFor: wait.ForLog("Server running"),
 		Networks:   []string{net.Name},
@@ -43,7 +52,6 @@ func initBackend(
 			Started:          true,
 		},
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +59,6 @@ func initBackend(
 	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, nat.Port(basePort))
-
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +95,6 @@ func initPostgres(
 			ContainerRequest: req,
 			Started:          true,
 		})
-
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +102,6 @@ func initPostgres(
 	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, pgPort)
-
 	if err != nil {
 		return nil, err
 	}
@@ -147,4 +152,43 @@ func TestInitPostgres(t *testing.T) {
 		t.Fatalf("initPostgres error: %v", err)
 	}
 	t.Logf("Postgres started on port: %v", port.Port())
+}
+
+func TestCreateCourse(t *testing.T) {
+	ctx := context.Background()
+
+	net, err := network.New(ctx)
+	require.NoError(t, err)
+
+	_, err = initPostgres(ctx, t, net)
+	require.NoError(t, err)
+
+	port, err := initBackend(ctx, t, net)
+	require.NoError(t, err)
+
+	url := fmt.Sprintf("http://localhost:%s/api/v1/courses?fake_user_id=\"%s\"",
+		port.Port(),
+		uuid.New().String(),
+	)
+
+	body, _ := json.Marshal(courses.CreateCourse{
+    DisciplineId: uuid.New(),
+    Name:         "Test Course",
+	})
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, 201, resp.StatusCode)
+
+	var created courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	require.Equal(t, "Test course ID", created.Id)
+	require.Equal(t, "Test course name:", created.Name)
 }
