@@ -68,7 +68,7 @@ func (r *PGRepo) CreateCourse(
 		}
 	}()
 
-	var returnedId int
+	var returnedId uuid.UUID
 	if rows.Next() {
 		if err := rows.Scan(&returnedId); err != nil {
 			return nil, err
@@ -80,7 +80,7 @@ func (r *PGRepo) CreateCourse(
 
 func (r *PGRepo) GetCourseById(
 	ctx context.Context,
-	id int,
+	id uuid.UUID,
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSql))
 
@@ -130,7 +130,7 @@ func (r *PGRepo) GetPaginatedCourses(
 }
 
 func (r *PGRepo) UpdateCourseById(
-	id int,
+	id uuid.UUID,
 	update *courses.UpdateCourse,
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSql))
@@ -152,7 +152,7 @@ func (r *PGRepo) UpdateCourseById(
 	return &course, nil
 }
 
-func (r *PGRepo) DeleteCourseById(id int) error {
+func (r *PGRepo) DeleteCourseById(id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSql))
 
 	res, err := r.db.Exec(deleteCourseByIdSql, id)
