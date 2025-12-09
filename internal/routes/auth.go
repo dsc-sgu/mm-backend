@@ -101,12 +101,12 @@ func (svc *UserService) Register(
 		Role:      "USER",
 	}
 
-	_, err = svc.service.CreateUser(&createUser)
+	u, err := svc.service.CreateUser(&createUser)
 	if err != nil {
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
-	return nil, nil
+	return &u.Id, nil
 }
 
 func (svc *UserService) Logout(
