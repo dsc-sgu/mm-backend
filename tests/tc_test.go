@@ -103,7 +103,7 @@ func initPostgres(
 				ReadOnly: true,
 			},
 		},
-		WaitingFor: wait.ForListeningPort(pgPort),
+		WaitingFor: wait.ForLog(database system is ready to accept connections),
 		Networks:   []string{net.Name},
 	}
 
