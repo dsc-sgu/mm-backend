@@ -41,3 +41,24 @@ type CreateModel struct {
 	Role       string `json:"role"       binding:"required"`
 	Password   string `json:"password"   binding:"password"`
 }
+
+type LoginModel struct {
+	Email    string `json:"email"    binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+type RegisterModel struct {
+	FirstName string `json:"firstName" binding:"required"`
+	LastName  string `json:"lastName"  binding:"required"`
+	Username  string `json:"username"  binding:"required"`
+	Email     string `json:"email"     binding:"required"`
+	Password  string `json:"password"  binding:"required"`
+}
+
+type LoginSuccessResponse struct {
+	Status string `json:"status"`
+}
+
+type RegisterResponse struct {
+	Id uuid.UUID `json:"id"`
+}

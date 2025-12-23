@@ -9,6 +9,7 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
@@ -205,7 +206,7 @@ func SetupRoutes(
 	fuego.Post(
 		authGroup,
 		"/login",
-		func(ctx fuego.ContextWithBody[routes.LoginModel]) (any, error) {
+		func(ctx fuego.ContextWithBody[users.LoginModel]) (any, error) {
 			return userService.Login(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Login user"),
@@ -214,7 +215,7 @@ func SetupRoutes(
 	fuego.Post(
 		authGroup,
 		"/register",
-		func(ctx fuego.ContextWithBody[routes.RegisterModel]) (any, error) {
+		func(ctx fuego.ContextWithBody[users.RegisterModel]) (any, error) {
 			return userService.Register(sessionRepo, cookieConfig, ctx)
 		},
 		option.Summary("Register new user"),
