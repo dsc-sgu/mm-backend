@@ -6,19 +6,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"path/filepath"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
@@ -198,22 +197,24 @@ func TestCreateCourse(t *testing.T) {
 		"password":  "password",
 	})
 
-	userReq, err := http.NewRequest("POST", userURL, bytes.NewBuffer(userBody))
+	userReq, err := http.NewRequest(
+		http.MethodPost,
+		userURL,
+		bytes.NewBuffer(userBody),
+	)
 	require.NoError(t, err)
 	userReq.Header.Set("Content-Type", "application/json")
 
-	userResp, err := http.DefaultClient.Do(userReq)
-	bodyBytes, _ := io.ReadAll(userResp.Body)
-	t.Log("register response body:", string(bodyBytes))
-	require.NoError(t, err)
-	defer userResp.Body.Close()
+	rawUserResp, err := http.DefaultClient.Do(userReq)
+  require.NoError(t, err)
+	var userResp users.RegisterResponse
+	require.NoError(t, json.NewDecoder(rawUserResp.Body).Decode(&userResp))
+	require.NotZero(t, userResp.Id)
 
+	userID := userResp.Id
+	defer rawUserResp.Body.Close()
 	fmt.Printf("Response: %v\n", userResp)
-
-	require.Equal(t, 201, userResp.StatusCode)
-
-	var userID uuid.UUID
-	require.NoError(t, json.NewDecoder(userResp.Body).Decode(&userID))
+	require.Equal(t, http.StatusCreated, rawUserResp.StatusCode)
 
 	disciplineURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/disciplines?fake_user_id=%s",

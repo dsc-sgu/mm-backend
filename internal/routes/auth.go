@@ -22,27 +22,10 @@ func NewUserService(repo users.Repo) *UserService {
 	}
 }
 
-type LoginModel struct {
-	Email    string `json:"email"    binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-type RegisterModel struct {
-	FirstName string `json:"firstName" binding:"required"`
-	LastName  string `json:"lastName"  binding:"required"`
-	Username  string `json:"username"  binding:"required"`
-	Email     string `json:"email"     binding:"required"`
-	Password  string `json:"password"  binding:"required"`
-}
-
-type LoginSuccessResponse struct {
-	Status string `json:"status"`
-}
-
 func (svc *UserService) Login(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
-	ctx fuego.ContextWithBody[LoginModel],
+	ctx fuego.ContextWithBody[users.LoginModel],
 ) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
@@ -85,7 +68,7 @@ func (svc *UserService) Login(
 func (svc *UserService) Register(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
-	ctx fuego.ContextWithBody[RegisterModel],
+	ctx fuego.ContextWithBody[users.RegisterModel],
 ) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
@@ -106,7 +89,11 @@ func (svc *UserService) Register(
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
-	return &u.Id, nil
+	response := users.RegisterResponse{
+    Id: u.Id,
+  }
+
+	return &response, nil
 }
 
 func (svc *UserService) Logout(
