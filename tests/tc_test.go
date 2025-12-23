@@ -103,8 +103,10 @@ func initPostgres(
 				ReadOnly: true,
 			},
 		},
-		WaitingFor: wait.ForLog(database system is ready to accept connections),
-		Networks:   []string{net.Name},
+		WaitingFor: wait.ForLog(
+			"database system is ready to accept connections",
+		),
+		Networks: []string{net.Name},
 	}
 
 	container, err := testcontainers.GenericContainer(
