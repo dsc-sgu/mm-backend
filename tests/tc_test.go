@@ -91,7 +91,7 @@ func initPostgres(
 			"POSTGRES_DB":       dbName,
 		},
 		Tmpfs: map[string]string{
-			"/var/lib/postgresql/data": "rw",
+			"/var/lib/postgresql": "rw",
 		},
 		Mounts: testcontainers.ContainerMounts{
 			{
