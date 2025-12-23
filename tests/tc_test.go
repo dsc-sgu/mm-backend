@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
@@ -18,6 +20,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
 
 func initBackend(
@@ -75,15 +78,29 @@ func initPostgres(
 	dbPassword := "postgres"
 	dbName := "postgres"
 	pgPort := nat.Port("5432/tcp")
+	SQLPath, err := filepath.Abs("../db")
+	require.NoError(t, err)
 
 	req := testcontainers.ContainerRequest{
 		Name:         "mm-postgres",
-		Image:        "postgres:latest",
+		Image:        "postgres:18.1",
 		ExposedPorts: []string{string(pgPort)},
 		Env: map[string]string{
 			"POSTGRES_USER":     dbUser,
 			"POSTGRES_PASSWORD": dbPassword,
 			"POSTGRES_DB":       dbName,
+		},
+		Tmpfs: map[string]string{
+			"/var/lib/postgresql/data": "rw",
+		},
+		Mounts: testcontainers.ContainerMounts{
+			{
+				Source: testcontainers.GenericBindMountSource{
+					HostPath: SQLPath,
+				},
+				Target:   "/docker-entrypoint-initdb.d",
+				ReadOnly: true,
+			},
 		},
 		WaitingFor: wait.ForListeningPort(pgPort),
 		Networks:   []string{net.Name},
@@ -166,17 +183,78 @@ func TestCreateCourse(t *testing.T) {
 	port, err := initBackend(ctx, t, net)
 	require.NoError(t, err)
 
-	url := fmt.Sprintf("http://localhost:%s/api/v1/courses?fake_user_id=\"%s\"",
+	userURL := fmt.Sprintf("http://localhost:%s/api/v1/auth/register",
 		port.Port(),
-		uuid.New().String(),
+	)
+
+	userBody, _ := json.Marshal(map[string]string{
+		"firstName": "Test First Name",
+		"lastName":  "Test Last Name",
+		"username":  "Username",
+		"email":     "test@email.com",
+		"password":  "password",
+	})
+
+	userReq, err := http.NewRequest("POST", userURL, bytes.NewBuffer(userBody))
+	require.NoError(t, err)
+	userReq.Header.Set("Content-Type", "application/json")
+
+	userResp, err := http.DefaultClient.Do(userReq)
+	bodyBytes, _ := io.ReadAll(userResp.Body)
+	t.Log("register response body:", string(bodyBytes))
+	require.NoError(t, err)
+	defer userResp.Body.Close()
+
+	fmt.Printf("Response: %v\n", userResp)
+
+	require.Equal(t, 201, userResp.StatusCode)
+
+	var userID uuid.UUID
+	require.NoError(t, json.NewDecoder(userResp.Body).Decode(&userID))
+
+	disciplineURL := fmt.Sprintf(
+		"http://localhost:%s/api/v1/disciplines?fake_user_id=%s",
+		port.Port(),
+		userID,
+	)
+
+	disciplineBody, _ := json.Marshal(disciplines.CreateDiscipline{
+		Name: "Test Discipline",
+	})
+
+	disciplineReq, err := http.NewRequest(
+		"POST",
+		disciplineURL,
+		bytes.NewBuffer(disciplineBody),
+	)
+	require.NoError(t, err)
+	disciplineReq.Header.Set("Content-Type", "application/json")
+
+	disciplineResp, err := http.DefaultClient.Do(disciplineReq)
+	require.NoError(t, err)
+	defer disciplineResp.Body.Close()
+
+	require.Equal(t, 201, disciplineResp.StatusCode)
+
+	var createdDiscipline disciplines.Discipline
+	require.NoError(
+		t,
+		json.NewDecoder(disciplineResp.Body).Decode(&createdDiscipline),
+	)
+	disciplineID := createdDiscipline.Id
+
+	courseURL := fmt.Sprintf(
+		"http://localhost:%s/api/v1/courses?fake_user_id=%s",
+		port.Port(),
+		userID,
 	)
 
 	body, _ := json.Marshal(courses.CreateCourse{
-    DisciplineId: uuid.New(),
-    Name:         "Test Course",
+		DisciplineId: disciplineID,
+		Name:         "Test Course",
 	})
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(body))
+	req, err := http.NewRequest("POST", courseURL, bytes.NewBuffer(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
