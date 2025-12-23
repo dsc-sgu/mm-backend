@@ -17,3 +17,9 @@ format:
 
 lint:
     golangci-lint run ./...
+
+test:
+    go test -test.v -cover ./internal/... ./pkg/...
+
+functional-test:
+    go test -test.v ./tests/...
