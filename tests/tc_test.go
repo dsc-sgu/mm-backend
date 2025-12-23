@@ -78,8 +78,9 @@ func initPostgres(
 	dbPassword := "postgres"
 	dbName := "postgres"
 	pgPort := nat.Port("5432/tcp")
-	SQLPath, err := filepath.Abs("../db")
+	SQLPath, err := filepath.Abs("../db/CreateTables.sql")
 	require.NoError(t, err)
+	fmt.Println(SQLPath)
 
 	req := testcontainers.ContainerRequest{
 		Name:         "mm-postgres",
@@ -98,7 +99,7 @@ func initPostgres(
 				Source: testcontainers.GenericBindMountSource{
 					HostPath: SQLPath,
 				},
-				Target:   "/docker-entrypoint-initdb.d",
+				Target:   "/docker-entrypoint-initdb.d/CreateTables.sql",
 				ReadOnly: true,
 			},
 		},
