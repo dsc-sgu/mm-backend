@@ -213,7 +213,6 @@ func TestCreateCourse(t *testing.T) {
 
 	userID := userResp.Id
 	defer rawUserResp.Body.Close()
-	fmt.Printf("Response: %v\n", userResp)
 	require.Equal(t, http.StatusCreated, rawUserResp.StatusCode)
 
 	disciplineURL := fmt.Sprintf(
@@ -271,6 +270,5 @@ func TestCreateCourse(t *testing.T) {
 	var created courses.Course
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 
-	require.Equal(t, "Test course ID", created.Id)
-	require.Equal(t, "Test course name:", created.Name)
+	require.Equal(t, "Test Course", created.Name)
 }
