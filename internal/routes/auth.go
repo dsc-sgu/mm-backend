@@ -90,8 +90,8 @@ func (svc *UserService) Register(
 	}
 
 	response := users.RegisterResponse{
-    Id: u.Id,
-  }
+		Id: u.Id,
+	}
 
 	return &response, nil
 }
