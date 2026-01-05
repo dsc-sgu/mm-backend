@@ -206,13 +206,18 @@ func TestCreateCourse(t *testing.T) {
 	userReq.Header.Set("Content-Type", "application/json")
 
 	rawUserResp, err := http.DefaultClient.Do(userReq)
-  require.NoError(t, err)
+	require.NoError(t, err)
 	var userResp users.RegisterResponse
 	require.NoError(t, json.NewDecoder(rawUserResp.Body).Decode(&userResp))
 	require.NotZero(t, userResp.Id)
 
 	userID := userResp.Id
-	defer rawUserResp.Body.Close()
+	defer func() {
+		err := rawUserResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 	require.Equal(t, http.StatusCreated, rawUserResp.StatusCode)
 
 	disciplineURL := fmt.Sprintf(
@@ -235,7 +240,12 @@ func TestCreateCourse(t *testing.T) {
 
 	disciplineResp, err := http.DefaultClient.Do(disciplineReq)
 	require.NoError(t, err)
-	defer disciplineResp.Body.Close()
+	defer func() {
+		err := disciplineResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 
 	require.Equal(t, 201, disciplineResp.StatusCode)
 
@@ -263,7 +273,12 @@ func TestCreateCourse(t *testing.T) {
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 
 	require.Equal(t, 201, resp.StatusCode)
 
