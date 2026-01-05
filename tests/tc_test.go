@@ -93,13 +93,11 @@ func initPostgres(
 		Tmpfs: map[string]string{
 			"/var/lib/postgresql": "rw",
 		},
-		Mounts: testcontainers.ContainerMounts{
+		Files: []testcontainers.ContainerFile{
 			{
-				Source: testcontainers.GenericBindMountSource{
-					HostPath: SQLPath,
-				},
-				Target:   "/docker-entrypoint-initdb.d/CreateTables.sql",
-				ReadOnly: true,
+				HostFilePath:      SQLPath,
+				ContainerFilePath: "/docker-entrypoint-initdb.d/CreateTables.sql",
+				FileMode:          0o644,
 			},
 		},
 		WaitingFor: wait.ForLog(
