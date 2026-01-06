@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -198,4 +199,83 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Equal(t, "Course 1", recievedCourses[0].Name)
 	require.Equal(t, "Course 2", recievedCourses[1].Name)
+}
+
+func TestUpdateCourse(t *testing.T) {
+	ctx := context.Background()
+
+	net, err := network.New(ctx)
+	require.NoError(t, err)
+
+	_, err = initPostgres(ctx, t, net)
+	require.NoError(t, err)
+
+	port, err := initBackend(ctx, t, net)
+	require.NoError(t, err)
+
+	userID := CreateTestUser(
+		t,
+		port,
+		"Test First Name",
+		"Test Last Name",
+		"Username",
+		"test@email.com",
+		"password",
+	)
+	require.NotZero(t, userID)
+
+	disciplineID := CreateTestDiscipline(
+		t,
+		port,
+		userID,
+		"Test Discipline",
+	)
+	require.NotZero(t, disciplineID)
+
+	courseID := CreateTestCourse(
+		t,
+		port,
+		userID,
+		disciplineID,
+		"Test Course",
+	)
+	require.NotZero(t, courseID)
+
+	url := fmt.Sprintf(
+		"http://localhost:%s/api/v1/courses/%s?fake_user_id=%s",
+		port.Port(),
+		courseID,
+		userID,
+	)
+
+	body, _ := json.Marshal(courses.UpdateCourse{
+		OwnerId: userID,
+		Name:    "Updated Test Course",
+	})
+
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		url,
+		bytes.NewBuffer(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var updatedCourse courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updatedCourse))
+
+	require.Equal(t, courseID, updatedCourse.Id)
+	require.Equal(t, "Updated Test Course", updatedCourse.Name)
+	require.Equal(t, disciplineID, updatedCourse.DisciplineId)
 }
