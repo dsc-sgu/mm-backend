@@ -41,6 +41,8 @@ func initBackend(
 			"HTTP_PORT":     basePort.Port(),
 			"POSTGRES_PORT": "5432",
 			"POSTGRES_HOST": "mm-postgres",
+			"REDIS_HOST":    "mm-redis",
+			"REDIS_PORT":    "6379",
 			"ENABLE_AUTH":   "false",
 		},
 		WaitingFor: wait.ForLog("Server running"),
@@ -119,6 +121,42 @@ func initPostgres(
 	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, pgPort)
+	if err != nil {
+		return nil, err
+	}
+
+	return &port, nil
+}
+
+func initRedis(
+	ctx context.Context,
+	t *testing.T,
+	net *testcontainers.DockerNetwork,
+) (*nat.Port, error) {
+	redisPort := nat.Port("6379/tcp")
+
+	req := testcontainers.ContainerRequest{
+		Name:         "mm-redis",
+		Image:        "docker.dragonflydb.io/dragonflydb/dragonfly",
+		ExposedPorts: []string{string(redisPort)},
+		WaitingFor:   wait.ForListeningPort(redisPort),
+		Networks:     []string{net.Name},
+	}
+
+	container, err := testcontainers.GenericContainer(
+		ctx,
+		testcontainers.GenericContainerRequest{
+			ContainerRequest: req,
+			Started:          true,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	testcontainers.CleanupContainer(t, container)
+
+	port, err := container.MappedPort(ctx, redisPort)
 	if err != nil {
 		return nil, err
 	}
