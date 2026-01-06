@@ -13,8 +13,8 @@ import (
 
 const (
 	createCourseSql = `
-		INSERT INTO course (id, discipline_id, owner_id, name, created_at)
-		VALUES (:id, :discipline_id, :owner_id, :name, :created_at)
+		INSERT INTO course (discipline_id, owner_id, name, created_at)
+	VALUES (:discipline_id, :owner_id, :name, :created_at)
 		RETURNING id
 	`
 
@@ -68,9 +68,8 @@ func (r *PGRepo) CreateCourse(
 		}
 	}()
 
-	var returnedId uuid.UUID
 	if rows.Next() {
-		if err := rows.Scan(&returnedId); err != nil {
+		if err := rows.Scan(&newCourse.Id); err != nil {
 			return nil, err
 		}
 	}

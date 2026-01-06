@@ -12,8 +12,8 @@ import (
 
 const (
 	createBlockSql = `
-		INSERT INTO block (id, block_type, data, course_id, position)
-		VALUES (:id, :block_type, :data, :course_id, :position)
+		INSERT INTO block (block_type, data, course_id, position)
+		VALUES (:block_type, :data, :course_id, :position)
 		RETURNING id
 	`
 
@@ -76,7 +76,6 @@ func (r *PGRepo) CreateBlock(
 	zap.L().Debug("Executing query", zap.String("query", createBlockSql))
 
 	newBlock := blocks.Block{
-		Id:        uuid.New(),
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
 		CourseId:  RequestBlock.CourseId,

@@ -21,7 +21,10 @@ func NewRedisRepo(redisClient *redis.Client) Repo {
 	return &RedisRepo{redisClient}
 }
 
-func (r *RedisRepo) Create(userId uuid.UUID, sessionLifetime Seconds) (*Model, error) {
+func (r *RedisRepo) Create(
+	userId uuid.UUID,
+	sessionLifetime Seconds,
+) (*Model, error) {
 	expiration := time.Second * time.Duration(sessionLifetime)
 
 	session := Model{
@@ -37,7 +40,8 @@ func (r *RedisRepo) Create(userId uuid.UUID, sessionLifetime Seconds) (*Model, e
 	}
 
 	key := fmt.Sprintf("%s:%s", redisSessionPrefix, session.Id.String())
-	err = r.redisClient.Set(context.Background(), key, sessionJson, expiration).Err()
+	err = r.redisClient.Set(context.Background(), key, sessionJson, expiration).
+		Err()
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +60,8 @@ func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
 	sessionJson, err := r.redisClient.Get(context.Background(), key).Result()
 
 	if err == redis.Nil {
-		zap.L().Debug("Session not found", zap.String("session_id", id.String()))
+		zap.L().
+			Debug("Session not found", zap.String("session_id", id.String()))
 		return nil, nil
 	}
 

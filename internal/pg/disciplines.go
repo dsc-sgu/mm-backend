@@ -12,8 +12,8 @@ import (
 
 const (
 	createDisciplineSql = `
-		INSERT INTO discipline (id, name)
-		VALUES (:id, :name)
+		INSERT INTO discipline (name)
+		VALUES (:name)
 		RETURNING id
 	`
 
@@ -41,10 +41,7 @@ func (r *PGRepo) CreateDiscipline(
 ) (*disciplines.Discipline, error) {
 	zap.L().Debug("Executing query", zap.String("query", createDisciplineSql))
 
-	u := uuid.New()
-
 	newDiscipline := disciplines.Discipline{
-		Id:   u,
 		Name: model.Name,
 	}
 
@@ -59,9 +56,8 @@ func (r *PGRepo) CreateDiscipline(
 		}
 	}()
 
-	var returnedId uuid.UUID
 	if rows.Next() {
-		if err := rows.Scan(&returnedId); err != nil {
+		if err := rows.Scan(&newDiscipline.Id); err != nil {
 			return nil, err
 		}
 	}
