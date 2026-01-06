@@ -62,7 +62,14 @@ func (svc *UserService) Login(
 		},
 	)
 
-	return nil, nil
+	response := users.LoginResponse{
+		SessionId: s.Id,
+		CreatedAt: s.CreatedAt,
+		ExpiresAt: s.ExpiresAt,
+		UserId:    user.Id,
+	}
+
+	return &response, nil
 }
 
 func (svc *UserService) Register(

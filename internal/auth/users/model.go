@@ -55,8 +55,11 @@ type RegisterModel struct {
 	Password  string `json:"password"  binding:"required"`
 }
 
-type LoginSuccessResponse struct {
-	Status string `json:"status"`
+type LoginResponse struct {
+	SessionId uuid.UUID `json:"sessionId"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	UserId    uuid.UUID `json:"userId"`
 }
 
 type RegisterResponse struct {
