@@ -34,7 +34,7 @@ CREATE TABLE unit (
 
 CREATE TABLE block (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    block_type block_type NOT NULL,
+    block_type TEXT NOT NULL,
     data jsonb NOT NULL,
     course_id uuid, -- REFERENCES course(id)
     position integer NOT NULL
