@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/docker/go-connections/nat"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -171,28 +172,21 @@ func TestInitPostgres(t *testing.T) {
 	t.Logf("Postgres started on port: %v", port.Port())
 }
 
-func TestCreateCourse(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
-
+func CreateTestUser(
+	t *testing.T,
+	port *nat.Port,
+	firstName, lastName, username, email, password string,
+) uuid.UUID {
 	userURL := fmt.Sprintf("http://localhost:%s/api/v1/auth/register",
 		port.Port(),
 	)
 
-	userBody, _ := json.Marshal(map[string]string{
-		"firstName": "Test First Name",
-		"lastName":  "Test Last Name",
-		"username":  "Username",
-		"email":     "test@email.com",
-		"password":  "password",
+	userBody, _ := json.Marshal(users.RegisterModel{
+		FirstName: firstName,
+		LastName:  lastName,
+		Username:  username,
+		Email:     email,
+		Password:  password,
 	})
 
 	userReq, err := http.NewRequest(
@@ -203,21 +197,29 @@ func TestCreateCourse(t *testing.T) {
 	require.NoError(t, err)
 	userReq.Header.Set("Content-Type", "application/json")
 
-	rawUserResp, err := http.DefaultClient.Do(userReq)
+	userResp, err := http.DefaultClient.Do(userReq)
 	require.NoError(t, err)
-	var userResp users.RegisterResponse
-	require.NoError(t, json.NewDecoder(rawUserResp.Body).Decode(&userResp))
-	require.NotZero(t, userResp.Id)
-
-	userID := userResp.Id
 	defer func() {
-		err := rawUserResp.Body.Close()
+		err := userResp.Body.Close()
 		if err != nil {
 			t.Error(err)
 		}
 	}()
-	require.Equal(t, http.StatusCreated, rawUserResp.StatusCode)
 
+	require.Equal(t, http.StatusCreated, userResp.StatusCode)
+
+	var createdUser users.RegisterResponse
+	require.NoError(t, json.NewDecoder(userResp.Body).Decode(&createdUser))
+
+	return createdUser.Id
+}
+
+func CreateTestDiscipline(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	name string,
+) uuid.UUID {
 	disciplineURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/disciplines?fake_user_id=%s",
 		port.Port(),
@@ -225,11 +227,11 @@ func TestCreateCourse(t *testing.T) {
 	)
 
 	disciplineBody, _ := json.Marshal(disciplines.CreateDiscipline{
-		Name: "Test Discipline",
+		Name: name,
 	})
 
 	disciplineReq, err := http.NewRequest(
-		"POST",
+		http.MethodPost,
 		disciplineURL,
 		bytes.NewBuffer(disciplineBody),
 	)
@@ -245,43 +247,97 @@ func TestCreateCourse(t *testing.T) {
 		}
 	}()
 
-	require.Equal(t, 201, disciplineResp.StatusCode)
+	require.Equal(t, http.StatusCreated, disciplineResp.StatusCode)
 
 	var createdDiscipline disciplines.Discipline
 	require.NoError(
 		t,
 		json.NewDecoder(disciplineResp.Body).Decode(&createdDiscipline),
 	)
-	disciplineID := createdDiscipline.Id
 
+	return createdDiscipline.Id
+}
+
+func CreateTestCourse(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	disciplineID uuid.UUID,
+	name string,
+) uuid.UUID {
 	courseURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses?fake_user_id=%s",
 		port.Port(),
 		userID,
 	)
 
-	body, _ := json.Marshal(courses.CreateCourse{
+	courseBody, _ := json.Marshal(courses.CreateCourse{
 		DisciplineId: disciplineID,
-		Name:         "Test Course",
+		Name:         name,
 	})
 
-	req, err := http.NewRequest("POST", courseURL, bytes.NewBuffer(body))
+	courseReq, err := http.NewRequest(
+		http.MethodPost,
+		courseURL,
+		bytes.NewBuffer(courseBody),
+	)
 	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
+	courseReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	courseResp, err := http.DefaultClient.Do(courseReq)
 	require.NoError(t, err)
 	defer func() {
-		err := resp.Body.Close()
+		err := courseResp.Body.Close()
 		if err != nil {
 			t.Error(err)
 		}
 	}()
 
-	require.Equal(t, 201, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, courseResp.StatusCode)
 
-	var created courses.Course
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	var createdCourse courses.Course
+	require.NoError(t, json.NewDecoder(courseResp.Body).Decode(&createdCourse))
 
-	require.Equal(t, "Test Course", created.Name)
+	return createdCourse.Id
+}
+
+func TestCreateCourse(t *testing.T) {
+	ctx := context.Background()
+
+	net, err := network.New(ctx)
+	require.NoError(t, err)
+
+	_, err = initPostgres(ctx, t, net)
+	require.NoError(t, err)
+
+	port, err := initBackend(ctx, t, net)
+	require.NoError(t, err)
+
+	userID := CreateTestUser(
+		t,
+		port,
+		"Test First Name",
+		"Test Last Name",
+		"Username",
+		"test@email.com",
+		"password",
+	)
+	require.NotZero(t, userID)
+
+	disciplineID := CreateTestDiscipline(
+		t,
+		port,
+		userID,
+		"Test Discipline",
+	)
+	require.NotZero(t, disciplineID)
+
+	courseID := CreateTestCourse(
+		t,
+		port,
+		userID,
+		disciplineID,
+		"Test Course",
+	)
+	require.NotZero(t, courseID)
 }
