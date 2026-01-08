@@ -130,7 +130,7 @@ func SetupRoutes(
 		},
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
-		option.QueryInt("offset", "Offset from list beginning"),
+		option.QueryInt("last_id", "Last ID from previous pagination request"),
 	)
 
 	fuego.Patch(

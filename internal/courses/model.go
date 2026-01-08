@@ -25,6 +25,6 @@ type UpdateCourse struct {
 }
 
 type CoursePagination struct {
-	Limit  int `query:"limit"`
-	Offset int `query:"offset"`
+	Limit  int       `query:"limit"`
+	LastId uuid.UUID `query:"last_id"`
 }
