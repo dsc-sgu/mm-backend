@@ -41,7 +41,7 @@ func (svc *CourseService) CreateCourse(
 // Other endpoints rewrote using fuego
 func (svc *CourseService) GetPaginatedCourses(
 	ctx fuego.ContextNoBody,
-) ([]*courses.Course, error) {
+) ([]courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
 	pathId := ctx.QueryParam("last_id")
 
@@ -69,7 +69,9 @@ func (svc *CourseService) GetCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{Title: fmt.Errorf("parsing UUID: %w", err).Error()}
+		return nil, fuego.InternalServerError{
+			Title: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	return svc.service.GetCourse(ctx.Context(), id)
