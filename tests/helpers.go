@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
@@ -252,4 +253,50 @@ func CreateTestCourse(
 	require.NoError(t, json.NewDecoder(courseResp.Body).Decode(&createdCourse))
 
 	return createdCourse.Id
+}
+
+func CreateTestBlock(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	courseID uuid.UUID,
+) uuid.UUID {
+	blockURL := fmt.Sprintf(
+		"http://localhost:%s/api/v1/blocks/%s/blocks?fake_user_id=%s",
+		port.Port(),
+		courseID,
+		userID,
+	)
+
+	blockBody, err := json.Marshal(blocks.CreateBlock{
+		CourseId:  courseID,
+		BlockType: "test",
+		Data:      []byte("true"),
+	})
+	require.NoError(t, err)
+
+	blockReq, err := http.NewRequest(
+		http.MethodPost,
+		blockURL,
+		bytes.NewBuffer(blockBody),
+	)
+	require.NoError(t, err)
+
+	blockReq.Header.Set("Content-Type", "application/json")
+
+	blockResp, err := http.DefaultClient.Do(blockReq)
+	require.NoError(t, err)
+	defer func() {
+		err := blockResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, blockResp.StatusCode)
+
+	var createdBlock blocks.Block
+	require.NoError(t, json.NewDecoder(blockResp.Body).Decode(&createdBlock))
+
+	return createdBlock.Id
 }
