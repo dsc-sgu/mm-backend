@@ -183,9 +183,7 @@ func main() {
 		disciplineController,
 		userController,
 		sessionRepo,
-		cookieConfig,
 		config,
-		zap.L(),
 	)
 
 	ctx, stop := signal.NotifyContext(
