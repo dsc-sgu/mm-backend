@@ -156,3 +156,13 @@ CREATE TABLE attempt_transitions (
     -- Can be used to save additional transition data (unpredictable for now)
     transition_data jsonb
 );
+
+CREATE TABLE ssh_keys (
+    owner_id uuid NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    key TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    created_at timestamp NOT NULL,
+
+    PRIMARY KEY (owner_id, fingerprint)
+);

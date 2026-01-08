@@ -30,7 +30,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/gitservice"
+	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
@@ -163,18 +163,19 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
-	// Service initialization
 	sessionRepo := session.NewRedisRepo(redisClient)
 	blockService := blocks.NewService(pgRepo)
 	courseService := courses.NewService(pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
+	gitService := git.NewService(pgRepo)
 
 	// Controller initialization
 	userController := routes.NewUserController(userService)
 	blockController := routes.NewBlockController(blockService)
 	courseController := routes.NewCourseController(courseService, blockService)
 	disciplineController := routes.NewDisciplineController(disciplineService)
+	gitController := routes.NewGitController(gitService)
 
 	v1 := fuego.Group(httpServer, "/api/v1")
 
@@ -184,6 +185,7 @@ func main() {
 		courseController,
 		disciplineController,
 		userController,
+		gitController,
 		sessionRepo,
 		config,
 	)
@@ -194,17 +196,17 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
-	a := gitservice.App{Access: pkggit.ReadWriteAccess}
+	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
-		ssh.PublicKeyAuth(gitservice.CheckPubkeyAuth),
-		ssh.PasswordAuth(gitservice.CheckPasswordAuth),
+		ssh.PublicKeyAuth(git.CheckPubkeyAuth),
+		ssh.PasswordAuth(git.CheckPasswordAuth),
 		wish.WithMiddleware(
-			pkggit.Middleware("repos", gitservice.RepoRename, a),
-			gitservice.GitListMiddleware,
+			pkggit.Middleware("repos", git.RepoRename, a),
+			git.GitListMiddleware,
 			logging.Middleware(),
 		),
 	)
