@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/go-fuego/fuego"
@@ -42,19 +43,23 @@ func (svc *CourseService) GetPaginatedCourses(
 	ctx fuego.ContextNoBody,
 ) ([]*courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
-	pathOffset := ctx.QueryParam("offset")
+	pathId := ctx.QueryParam("last_id")
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
 
-	offset, err := strconv.Atoi(pathOffset)
+	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		if pathId == "" {
+			id = uuid.Nil
+		} else {
+			return nil, fuego.InternalServerError{Title: fmt.Errorf("parsing UUID: %w", err).Error()}
+		}
 	}
 
-	return svc.service.GetPaginatedCourses(limit, offset)
+	return svc.service.GetPaginatedCourses(limit, id)
 }
 
 func (svc *CourseService) GetCourse(
@@ -64,7 +69,7 @@ func (svc *CourseService) GetCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.InternalServerError{Title: fmt.Errorf("parsing UUID: %w", err).Error()}
 	}
 
 	return svc.service.GetCourse(ctx.Context(), id)

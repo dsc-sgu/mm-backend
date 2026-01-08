@@ -23,9 +23,9 @@ func (s *Service) CreateCourse(
 
 func (s *Service) GetPaginatedCourses(
 	limit int,
-	offset int,
+	lastId uuid.UUID,
 ) ([]*Course, error) {
-	return s.repo.GetPaginatedCourses(limit, offset)
+	return s.repo.GetPaginatedCourses(limit, lastId)
 }
 
 func (s *Service) GetCourse(
