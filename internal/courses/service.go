@@ -1,49 +1,9 @@
 package courses
 
-import (
-	"context"
-
-	"github.com/google/uuid"
-)
-
 type Service struct {
-	repo Repo
+	Repo
 }
 
 func NewService(repo Repo) *Service {
 	return &Service{repo}
-}
-
-func (s *Service) CreateCourse(
-	model *CreateCourse,
-	ownerId uuid.UUID,
-) (*Course, error) {
-	return s.repo.CreateCourse(model, ownerId)
-}
-
-func (s *Service) GetPaginatedCourses(
-	limit int,
-	lastId uuid.UUID,
-) ([]Course, error) {
-	return s.repo.GetPaginatedCourses(limit, lastId)
-}
-
-func (s *Service) GetCourse(
-	ctx context.Context,
-	id uuid.UUID,
-) (*Course, error) {
-	return s.repo.GetCourseById(ctx, id)
-}
-
-func (s *Service) PatchCourse(
-	id uuid.UUID,
-	update *UpdateCourse,
-) (*Course, error) {
-	return s.repo.UpdateCourseById(id, update)
-}
-
-func (s *Service) DeleteCourse(
-	id uuid.UUID,
-) error {
-	return s.repo.DeleteCourseById(id)
 }

@@ -12,17 +12,22 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 )
 
-type CourseService struct {
-	service courses.Service
+type CourseController struct {
+	courseService *courses.Service
+	blockService  *blocks.Service
 }
 
-func NewCourseService(repo courses.Repo) *CourseService {
-	return &CourseService{
-		service: *courses.NewService(repo),
+func NewCourseController(
+	courseService *courses.Service,
+	blockService *blocks.Service,
+) *CourseController {
+	return &CourseController{
+		courseService: courseService,
+		blockService:  blockService,
 	}
 }
 
-func (svc *CourseService) CreateCourse(
+func (c *CourseController) CreateCourse(
 	ctx fuego.ContextWithBody[courses.CreateCourse],
 ) (*courses.Course, error) {
 	body, err := ctx.Body()
@@ -35,11 +40,11 @@ func (svc *CourseService) CreateCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	return svc.service.CreateCourse(&body, userID)
+	return c.courseService.CreateCourse(&body, userID)
 }
 
 // Other endpoints rewrote using fuego
-func (svc *CourseService) GetPaginatedCourses(
+func (c *CourseController) GetPaginatedCourses(
 	ctx fuego.ContextNoBody,
 ) ([]courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
@@ -59,10 +64,10 @@ func (svc *CourseService) GetPaginatedCourses(
 		}
 	}
 
-	return svc.service.GetPaginatedCourses(limit, id)
+	return c.courseService.GetPaginatedCourses(limit, id)
 }
 
-func (svc *CourseService) GetCourse(
+func (c *CourseController) GetCourse(
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -74,10 +79,10 @@ func (svc *CourseService) GetCourse(
 		}
 	}
 
-	return svc.service.GetCourse(ctx.Context(), id)
+	return c.courseService.GetCourseById(ctx.Context(), id)
 }
 
-func (svc *CourseService) PatchCourse(
+func (c *CourseController) PatchCourse(
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -92,11 +97,10 @@ func (svc *CourseService) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return svc.service.PatchCourse(id, &body)
+	return c.courseService.UpdateCourseById(id, &body)
 }
 
-func (svc *CourseService) DeleteCourse(
-	blockService *BlockService,
+func (c *CourseController) DeleteCourse(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	pathId := ctx.PathParam("course_id")
@@ -106,16 +110,16 @@ func (svc *CourseService) DeleteCourse(
 		return nil, fuego.InternalServerError{}
 	}
 
-	block_id, err := uuid.Parse(pathId)
+	blockId, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
 
-	err = svc.service.DeleteCourse(id)
+	err = c.courseService.DeleteCourseById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	linkedBlocks, err := blockService.service.GetAllBlocks(block_id)
+	linkedBlocks, err := c.blockService.GetAllBlocksByCourseId(blockId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -127,7 +131,7 @@ func (svc *CourseService) DeleteCourse(
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := blockService.service.UpdateBlock(block.Id, &updatedBlock)
+		_, err := c.blockService.UpdateBlockById(block.Id, &updatedBlock)
 		if err != nil {
 			return nil, fuego.InternalServerError{}
 		}

@@ -1,80 +1,45 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
-	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 )
 
-type UserService struct {
-	service users.Service
+type UserController struct {
+	svc *users.Service
 }
 
-func NewUserService(repo users.Repo) *UserService {
-	return &UserService{
-		service: *users.NewService(repo),
+func NewUserController(
+	svc *users.Service,
+) *UserController {
+	return &UserController{
+		svc,
 	}
 }
 
-func (svc *UserService) Login(
-	sessionRepo session.Repo,
-	cookieConfig *cookie.CookieConfig,
+func (c *UserController) Login(
 	ctx fuego.ContextWithBody[users.LoginModel],
 ) (any, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
+		return nil, fmt.Errorf("parsing body: %w", err)
 	}
 
-	user, err := svc.service.GetUserByEmail(ctx.Context(), body.Email)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
+	if response, cookie, err := c.svc.Login(ctx.Context(), body); err != nil {
+		return nil, err
+	} else {
+		ctx.SetCookie(cookie)
+		return response, nil
 	}
-
-	if user == nil {
-		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
-	}
-
-	if !password.Valid(body.Password, user.PasswordHash, user.PasswordSalt) {
-		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
-	}
-
-	s, err := sessionRepo.Create(user.Id, cookieConfig.SessionLifetime)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	ctx.SetCookie(
-		http.Cookie{
-			Name:     session.CookieName,
-			Value:    s.Id.String(),
-			Path:     cookieConfig.Path,
-			MaxAge:   cookieConfig.SessionLifetime,
-			Domain:   cookieConfig.Domain,
-			Secure:   cookieConfig.Secure,
-			HttpOnly: cookieConfig.HttpOnly,
-		},
-	)
-
-	response := users.LoginResponse{
-		SessionId: s.Id,
-		CreatedAt: s.CreatedAt,
-		ExpiresAt: s.ExpiresAt,
-		UserId:    user.Id,
-	}
-
-	return &response, nil
 }
 
-func (svc *UserService) Register(
-	sessionRepo session.Repo,
-	cookieConfig *cookie.CookieConfig,
+func (c *UserController) Register(
 	ctx fuego.ContextWithBody[users.RegisterModel],
 ) (any, error) {
 	body, err := ctx.Body()
@@ -91,7 +56,7 @@ func (svc *UserService) Register(
 		Role:      "USER",
 	}
 
-	u, err := svc.service.CreateUser(&createUser)
+	u, err := c.svc.CreateUser(&createUser)
 	if err != nil {
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
@@ -103,36 +68,26 @@ func (svc *UserService) Register(
 	return &response, nil
 }
 
-func (svc *UserService) Logout(
-	sessionRepo session.Repo,
-	cookieConfig *cookie.CookieConfig,
+func (c *UserController) Logout(
 	ctx fuego.ContextNoBody,
-) (*struct{}, error) {
-	userID := session.UserIDFromContext(ctx.Context())
-	if userID == uuid.Nil {
-		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+) (any, error) {
+	if err := c.svc.Logout(ctx.Context()); err != nil {
+		return nil, err
+	} else {
+		ctx.SetCookie(http.Cookie{
+			Name:     session.CookieName,
+			MaxAge:   -1,
+			Value:    "",
+			Path:     "/",
+			Domain:   "localhost",
+			Secure:   false,
+			HttpOnly: true,
+		})
+		return nil, nil
 	}
-
-	err := sessionRepo.DeleteById(userID)
-	if err != nil {
-		return nil, fuego.InternalServerError{}
-	}
-
-	ctx.SetCookie(http.Cookie{
-		Name:     session.CookieName,
-		MaxAge:   -1,
-		Value:    "",
-		Path:     "/",
-		Domain:   "localhost",
-		Secure:   false,
-		HttpOnly: true,
-	})
-
-	return nil, nil
 }
 
-func (svc *UserService) GetSession(
-	cookieConfig *cookie.CookieConfig,
+func (c *UserController) GetSession(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	userID := session.UserIDFromContext(ctx.Context())
@@ -140,7 +95,7 @@ func (svc *UserService) GetSession(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	u, err := svc.service.GetUserByID(ctx.Context(), userID)
+	u, err := c.svc.GetUserById(ctx.Context(), userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
