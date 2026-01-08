@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/logging"
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-fuego/fuego"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
@@ -25,8 +24,12 @@ import (
 	api "github.com/dsc-sgu/mm-backend/internal"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
+	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/db"
+	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/gitservice"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
@@ -133,16 +136,6 @@ func main() {
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
 		fuego.WithGlobalMiddlewares(logger.ZapMiddleware()),
 	)
-	httpServer.OpenAPI.Description().Servers = openapi3.Servers{
-		{
-			URL: fmt.Sprintf(
-				"http://%s:%d",
-				config.OpenAPI.Host,
-				config.OpenAPI.Port,
-			),
-			Description: "Docker dev deployment server",
-		},
-	}
 
 	corsMiddleware := cors.New(cors.Options{
 		AllowCredentials: true,
@@ -168,20 +161,27 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
-	userService := routes.NewUserService(pgRepo)
-	blockService := routes.NewBlockService(pgRepo)
-	courseService := routes.NewCourseService(pgRepo)
-	disciplineService := routes.NewDisciplineService(pgRepo)
+	// Service initialization
 	sessionRepo := session.NewRedisRepo(redisClient)
+	blockService := blocks.NewService(pgRepo)
+	courseService := courses.NewService(pgRepo)
+	disciplineService := disciplines.NewService(pgRepo)
+	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
+
+	// Controller initialization
+	userController := routes.NewUserController(userService)
+	blockController := routes.NewBlockController(blockService)
+	courseController := routes.NewCourseController(courseService, blockService)
+	disciplineController := routes.NewDisciplineController(disciplineService)
 
 	v1 := fuego.Group(httpServer, "/api/v1")
 
 	api.SetupRoutes(
 		v1,
-		blockService,
-		courseService,
-		disciplineService,
-		userService,
+		blockController,
+		courseController,
+		disciplineController,
+		userController,
 		sessionRepo,
 		cookieConfig,
 		config,

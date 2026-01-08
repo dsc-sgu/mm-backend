@@ -9,21 +9,18 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/dsc-sgu/mm-backend/internal/auth/users"
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
-	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 func SetupRoutes(
 	g *fuego.Server,
-	blockService *routes.BlockService,
-	courseService *routes.CourseService,
-	disciplineService *routes.DisciplineService,
-	userService *routes.UserService,
+	blockController *routes.BlockController,
+	courseController *routes.CourseController,
+	disciplineController *routes.DisciplineController,
+	userController *routes.UserController,
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 	config *config.Config,
@@ -53,18 +50,14 @@ func SetupRoutes(
 	fuego.Get(
 		blockGroup,
 		"/{block_id}",
-		func(ctx fuego.ContextNoBody) (*blocks.Block, error) {
-			return blockService.GetBlock(ctx)
-		},
+		blockController.GetBlock,
 		option.Summary("Get block by id"),
 	)
 
 	fuego.Post(
 		blockGroup,
 		"/{course_id}/blocks",
-		func(ctx fuego.ContextWithBody[blocks.CreateBlock]) (*blocks.Block, error) {
-			return blockService.CreateBlock(ctx)
-		},
+		blockController.CreateBlock,
 		option.Summary("Create new block on course"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
@@ -72,27 +65,21 @@ func SetupRoutes(
 	fuego.Patch(
 		blockGroup,
 		"/{block_id}",
-		func(ctx fuego.ContextWithBody[blocks.UpdateBlock]) (*blocks.Block, error) {
-			return blockService.PatchBlock(ctx)
-		},
+		blockController.PatchBlock,
 		option.Summary("Update existing block"),
 	)
 
 	fuego.Delete(
 		blockGroup,
 		"/{block_id}/{course_id}",
-		func(ctx fuego.ContextNoBody) (*blocks.Block, error) {
-			return blockService.UnlinkFromCourse(ctx)
-		},
+		blockController.UnlinkFromCourse,
 		option.Summary("Unlink block from course"),
 	)
 
 	fuego.Delete(
 		blockGroup,
 		"/{block_id}",
-		func(ctx fuego.ContextNoBody) (any, error) {
-			return blockService.DeleteBlock(ctx)
-		},
+		blockController.DeleteBlock,
 		option.Summary("Delete block from course"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
@@ -106,9 +93,7 @@ func SetupRoutes(
 	fuego.Post(
 		courseGroup,
 		"",
-		func(ctx fuego.ContextWithBody[courses.CreateCourse]) (*courses.Course, error) {
-			return courseService.CreateCourse(ctx)
-		},
+		courseController.CreateCourse,
 		option.Summary("Create new course"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
@@ -116,18 +101,14 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"/{course_id}",
-		func(ctx fuego.ContextNoBody) (*courses.Course, error) {
-			return courseService.GetCourse(ctx)
-		},
+		courseController.GetCourse,
 		option.Summary("Get existing course by id"),
 	)
 
 	fuego.Get(
 		courseGroup,
 		"",
-		func(ctx fuego.ContextNoBody) ([]courses.Course, error) {
-			return courseService.GetPaginatedCourses(ctx)
-		},
+		courseController.GetPaginatedCourses,
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
 		option.QueryInt("last_id", "Last ID from previous pagination request"),
@@ -137,7 +118,7 @@ func SetupRoutes(
 		courseGroup,
 		"/{course_id}",
 		func(ctx fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			return courseService.PatchCourse(ctx)
+			return courseController.PatchCourse(ctx)
 		},
 		option.Summary("Update existing course"),
 	)
@@ -145,9 +126,7 @@ func SetupRoutes(
 	fuego.Delete(
 		courseGroup,
 		"/{course_id}",
-		func(ctx fuego.ContextNoBody) (any, error) {
-			return courseService.DeleteCourse(blockService, ctx)
-		},
+		courseController.DeleteCourse,
 		option.Summary("Delete course"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
@@ -161,35 +140,27 @@ func SetupRoutes(
 	fuego.Post(
 		disciplineGroup,
 		"",
-		func(ctx fuego.ContextWithBody[disciplines.CreateDiscipline]) (*disciplines.Discipline, error) {
-			return disciplineService.CreateDiscipline(ctx)
-		},
+		disciplineController.CreateDiscipline,
 		option.Summary("Create new discipline"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
 	fuego.Get(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(ctx fuego.ContextNoBody) (*disciplines.Discipline, error) {
-			return disciplineService.GetDiscipline(ctx)
-		},
+		disciplineController.GetDiscipline,
 		option.Summary("Get discipline by id"),
 	)
 
 	fuego.Patch(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(ctx fuego.ContextWithBody[disciplines.PatchDiscipline]) (*disciplines.Discipline, error) {
-			return disciplineService.PatchDiscipline(ctx)
-		},
+		disciplineController.PatchDiscipline,
 		option.Summary("Update existing discipline"),
 	)
 	fuego.Delete(
 		disciplineGroup,
 		"/{discipline_id}",
-		func(ctx fuego.ContextNoBody) (any, error) {
-			return disciplineService.DeleteDiscipline(ctx)
-		},
+		disciplineController.DeleteDiscipline,
 		option.DefaultStatusCode(http.StatusNoContent),
 		option.Summary("Delete discipline"),
 	)
@@ -206,18 +177,14 @@ func SetupRoutes(
 	fuego.Post(
 		authGroup,
 		"/login",
-		func(ctx fuego.ContextWithBody[users.LoginModel]) (any, error) {
-			return userService.Login(sessionRepo, cookieConfig, ctx)
-		},
+		userController.Login,
 		option.Summary("Login user"),
 	)
 
 	fuego.Post(
 		authGroup,
 		"/register",
-		func(ctx fuego.ContextWithBody[users.RegisterModel]) (any, error) {
-			return userService.Register(sessionRepo, cookieConfig, ctx)
-		},
+		userController.Register,
 		option.Summary("Register new user"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
@@ -226,9 +193,7 @@ func SetupRoutes(
 	fuego.Post(
 		privateAuthGroup,
 		"/logout",
-		func(ctx fuego.ContextNoBody) (any, error) {
-			return userService.Logout(sessionRepo, cookieConfig, ctx)
-		},
+		userController.Logout,
 		option.Summary("Logout user"),
 	)
 
@@ -236,11 +201,6 @@ func SetupRoutes(
 	fuego.Get(
 		privateAuthGroup,
 		"/session",
-		func(ctx fuego.ContextNoBody) (any, error) {
-			return userService.GetSession(
-				cookieConfig,
-				ctx,
-			)
-		},
+		userController.GetSession,
 	)
 }
