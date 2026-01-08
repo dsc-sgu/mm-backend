@@ -7,7 +7,6 @@ import (
 	"github.com/go-fuego/fuego/option"
 	"go.uber.org/zap"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
@@ -22,9 +21,7 @@ func SetupRoutes(
 	disciplineController *routes.DisciplineController,
 	userController *routes.UserController,
 	sessionRepo session.Repo,
-	cookieConfig *cookie.CookieConfig,
 	config *config.Config,
-	logger *zap.Logger,
 ) {
 	var mws []func(http.Handler) http.Handler
 	if config.EnableAuth {
