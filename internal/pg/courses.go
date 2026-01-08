@@ -97,12 +97,12 @@ func (r *PGRepo) GetCourseById(
 func (r *PGRepo) GetPaginatedCourses(
 	limit int,
 	lastId uuid.UUID,
-) ([]*courses.Course, error) {
+) ([]courses.Course, error) {
 	zap.L().
 		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSql))
 
 	var course courses.Course
-	var courseList []*courses.Course
+	var courseList []courses.Course
 	rows, err := r.db.Queryx(getAllCoursesByCourseIdSql, limit, lastId)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -120,7 +120,7 @@ func (r *PGRepo) GetPaginatedCourses(
 		if err := rows.StructScan(&course); err != nil {
 			return nil, err
 		}
-		courseList = append(courseList, &course)
+		courseList = append(courseList, course)
 	}
 	if err = rows.Err(); err != nil {
 		return courseList, err

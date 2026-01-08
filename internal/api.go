@@ -125,7 +125,7 @@ func SetupRoutes(
 	fuego.Get(
 		courseGroup,
 		"",
-		func(ctx fuego.ContextNoBody) ([]*courses.Course, error) {
+		func(ctx fuego.ContextNoBody) ([]courses.Course, error) {
 			return courseService.GetPaginatedCourses(ctx)
 		},
 		option.Summary("Get paginated courses"),

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/network"
 
@@ -168,13 +169,13 @@ func TestGetPaginatedCourse(t *testing.T) {
 	}
 
 	limit := 2
-	offset := 1
+	lastId := uuid.Nil
 
 	url := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses?limit=%d&offset=%d&fake_user_id=%s",
+		"http://localhost:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
 		port.Port(),
 		limit,
-		offset,
+		lastId,
 		userID,
 	)
 
@@ -197,8 +198,8 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Len(t, recievedCourses, limit)
 
-	require.Equal(t, "Course 1", recievedCourses[0].Name)
-	require.Equal(t, "Course 2", recievedCourses[1].Name)
+	require.Equal(t, "Course 0", recievedCourses[0].Name)
+	require.Equal(t, "Course 1", recievedCourses[1].Name)
 }
 
 func TestUpdateCourse(t *testing.T) {
