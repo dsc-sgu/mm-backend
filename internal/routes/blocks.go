@@ -7,17 +7,17 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
-type BlockService struct {
+type BlockController struct {
 	service blocks.Service
 }
 
-func NewBlockService(repo blocks.Repo) *BlockService {
-	return &BlockService{
+func NewBlockService(repo blocks.Repo) *BlockController {
+	return &BlockController{
 		service: *blocks.NewService(repo),
 	}
 }
 
-func (svc *BlockService) GetBlock(
+func (svc *BlockController) GetBlock(
 	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
@@ -26,10 +26,10 @@ func (svc *BlockService) GetBlock(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	return svc.service.GetBlock(ctx.Context(), id)
+	return svc.service.GetBlockById(ctx.Context(), id)
 }
 
-func (svc *BlockService) GetAllBlocks(
+func (svc *BlockController) GetAllBlocks(
 	ctx fuego.ContextNoBody,
 ) ([]*blocks.Block, error) {
 	pathId := ctx.PathParam("course_id")
@@ -38,10 +38,10 @@ func (svc *BlockService) GetAllBlocks(
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	return svc.service.GetAllBlocks(id)
+	return svc.service.GetAllBlocksByCourseId(id)
 }
 
-func (svc *BlockService) CreateBlock(
+func (svc *BlockController) CreateBlock(
 	ctx fuego.ContextWithBody[blocks.CreateBlock],
 ) (*blocks.Block, error) {
 	body, err := ctx.Body()
@@ -52,7 +52,7 @@ func (svc *BlockService) CreateBlock(
 	return svc.service.CreateBlock(ctx.Context(), &body)
 }
 
-func (svc *BlockService) PatchBlock(
+func (svc *BlockController) PatchBlock(
 	ctx fuego.ContextWithBody[blocks.UpdateBlock],
 ) (*blocks.Block, error) {
 	pathId := ctx.PathParam("block_id")
@@ -67,10 +67,10 @@ func (svc *BlockService) PatchBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return svc.service.UpdateBlock(id, &body)
+	return svc.service.UpdateBlockById(id, &body)
 }
 
-func (svc *BlockService) UnlinkFromCourse(
+func (svc *BlockController) UnlinkFromCourse(
 	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
 	pathBlockId := ctx.PathParam("block_id")
@@ -87,10 +87,10 @@ func (svc *BlockService) UnlinkFromCourse(
 		return nil, err
 	}
 
-	return svc.service.UnlinkBlock(courseId, blockId)
+	return svc.service.UnlinkBlockById(courseId, blockId)
 }
 
-func (svc *BlockService) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
+func (svc *BlockController) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
 	pathId := ctx.PathParam("block_id")
 
 	id, err := uuid.Parse(pathId)
@@ -98,5 +98,5 @@ func (svc *BlockService) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
 		return nil, fuego.InternalServerError{}
 	}
 
-	return nil, svc.service.DeleteBlock(id)
+	return nil, svc.service.DeleteBlockById(id)
 }

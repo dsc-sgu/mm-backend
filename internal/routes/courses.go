@@ -12,17 +12,17 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 )
 
-type CourseService struct {
+type CourseController struct {
 	service courses.Service
 }
 
-func NewCourseService(repo courses.Repo) *CourseService {
-	return &CourseService{
+func NewCourseService(repo courses.Repo) *CourseController {
+	return &CourseController{
 		service: *courses.NewService(repo),
 	}
 }
 
-func (svc *CourseService) CreateCourse(
+func (svc *CourseController) CreateCourse(
 	ctx fuego.ContextWithBody[courses.CreateCourse],
 ) (*courses.Course, error) {
 	body, err := ctx.Body()
@@ -39,7 +39,7 @@ func (svc *CourseService) CreateCourse(
 }
 
 // Other endpoints rewrote using fuego
-func (svc *CourseService) GetPaginatedCourses(
+func (svc *CourseController) GetPaginatedCourses(
 	ctx fuego.ContextNoBody,
 ) ([]courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
@@ -62,7 +62,7 @@ func (svc *CourseService) GetPaginatedCourses(
 	return svc.service.GetPaginatedCourses(limit, id)
 }
 
-func (svc *CourseService) GetCourse(
+func (svc *CourseController) GetCourse(
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -74,10 +74,10 @@ func (svc *CourseService) GetCourse(
 		}
 	}
 
-	return svc.service.GetCourse(ctx.Context(), id)
+	return svc.service.GetCourseById(ctx.Context(), id)
 }
 
-func (svc *CourseService) PatchCourse(
+func (svc *CourseController) PatchCourse(
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
 	pathId := ctx.PathParam("course_id")
@@ -92,11 +92,11 @@ func (svc *CourseService) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return svc.service.PatchCourse(id, &body)
+	return svc.service.UpdateCourseById(id, &body)
 }
 
-func (svc *CourseService) DeleteCourse(
-	blockService *BlockService,
+func (svc *CourseController) DeleteCourse(
+	blockService *BlockController,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	pathId := ctx.PathParam("course_id")
@@ -106,16 +106,16 @@ func (svc *CourseService) DeleteCourse(
 		return nil, fuego.InternalServerError{}
 	}
 
-	block_id, err := uuid.Parse(pathId)
+	blockId, err := uuid.Parse(pathId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
 
-	err = svc.service.DeleteCourse(id)
+	err = svc.service.DeleteCourseById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
-	linkedBlocks, err := blockService.service.GetAllBlocks(block_id)
+	linkedBlocks, err := blockService.service.GetAllBlocksByCourseId(blockId)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
@@ -127,7 +127,7 @@ func (svc *CourseService) DeleteCourse(
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := blockService.service.UpdateBlock(block.Id, &updatedBlock)
+		_, err := blockService.service.UpdateBlockById(block.Id, &updatedBlock)
 		if err != nil {
 			return nil, fuego.InternalServerError{}
 		}

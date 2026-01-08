@@ -12,17 +12,17 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 )
 
-type UserService struct {
+type UserController struct {
 	service users.Service
 }
 
-func NewUserService(repo users.Repo) *UserService {
-	return &UserService{
+func NewUserService(repo users.Repo) *UserController {
+	return &UserController{
 		service: *users.NewService(repo),
 	}
 }
 
-func (svc *UserService) Login(
+func (svc *UserController) Login(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextWithBody[users.LoginModel],
@@ -72,7 +72,7 @@ func (svc *UserService) Login(
 	return &response, nil
 }
 
-func (svc *UserService) Register(
+func (svc *UserController) Register(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextWithBody[users.RegisterModel],
@@ -103,7 +103,7 @@ func (svc *UserService) Register(
 	return &response, nil
 }
 
-func (svc *UserService) Logout(
+func (svc *UserController) Logout(
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
@@ -131,7 +131,7 @@ func (svc *UserService) Logout(
 	return nil, nil
 }
 
-func (svc *UserService) GetSession(
+func (svc *UserController) GetSession(
 	cookieConfig *cookie.CookieConfig,
 	ctx fuego.ContextNoBody,
 ) (any, error) {
@@ -140,7 +140,7 @@ func (svc *UserService) GetSession(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	u, err := svc.service.GetUserByID(ctx.Context(), userID)
+	u, err := svc.service.GetUserById(ctx.Context(), userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}

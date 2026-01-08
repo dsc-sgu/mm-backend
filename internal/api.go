@@ -20,10 +20,10 @@ import (
 
 func SetupRoutes(
 	g *fuego.Server,
-	blockService *routes.BlockService,
-	courseService *routes.CourseService,
-	disciplineService *routes.DisciplineService,
-	userService *routes.UserService,
+	blockService *routes.BlockController,
+	courseService *routes.CourseController,
+	disciplineService *routes.DisciplineController,
+	userService *routes.UserController,
 	sessionRepo session.Repo,
 	cookieConfig *cookie.CookieConfig,
 	config *config.Config,

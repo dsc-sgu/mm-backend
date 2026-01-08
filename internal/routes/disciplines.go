@@ -7,17 +7,17 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
 
-type DisciplineService struct {
+type DisciplineController struct {
 	service disciplines.Service
 }
 
-func NewDisciplineService(repo disciplines.Repo) *DisciplineService {
-	return &DisciplineService{
+func NewDisciplineService(repo disciplines.Repo) *DisciplineController {
+	return &DisciplineController{
 		service: *disciplines.NewService(repo),
 	}
 }
 
-func (svc *DisciplineService) CreateDiscipline(
+func (svc *DisciplineController) CreateDiscipline(
 	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
 ) (*disciplines.Discipline, error) {
 	body, err := ctx.Body()
@@ -28,7 +28,7 @@ func (svc *DisciplineService) CreateDiscipline(
 	return svc.service.CreateDiscipline(&body)
 }
 
-func (svc *DisciplineService) GetDiscipline(
+func (svc *DisciplineController) GetDiscipline(
 	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
 	pathId := ctx.PathParam("discipline_id")
@@ -38,10 +38,10 @@ func (svc *DisciplineService) GetDiscipline(
 		return nil, fuego.InternalServerError{}
 	}
 
-	return svc.service.GetDiscipline(ctx.Context(), id)
+	return svc.service.GetDisciplineById(ctx.Context(), id)
 }
 
-func (svc *DisciplineService) PatchDiscipline(
+func (svc *DisciplineController) PatchDiscipline(
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
 	pathId := ctx.PathParam("discipline_id")
@@ -56,10 +56,10 @@ func (svc *DisciplineService) PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return svc.service.PatchDiscipline(id, &body)
+	return svc.service.UpdateDisciplineById(id, &body)
 }
 
-func (svc *DisciplineService) DeleteDiscipline(
+func (svc *DisciplineController) DeleteDiscipline(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	pathId := ctx.PathParam("discipline_id")
@@ -74,7 +74,7 @@ func (svc *DisciplineService) DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	err = svc.service.DeleteDiscipline(id)
+	err = svc.service.DeleteDisciplineById(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{}
 	}
