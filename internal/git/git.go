@@ -1,4 +1,4 @@
-package gitservice
+package git
 
 // An example git server. This will list all available repos if you ssh
 // directly to the server. To test `ssh -p 23233 localhost` once it's running.

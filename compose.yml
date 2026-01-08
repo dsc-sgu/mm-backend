@@ -36,8 +36,6 @@ services:
     image: docker.dragonflydb.io/dragonflydb/dragonfly
     ulimits:
       memlock: -1
-    ports:
-      - "1302:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 5s

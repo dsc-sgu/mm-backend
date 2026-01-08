@@ -10,6 +10,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
@@ -20,6 +21,7 @@ func SetupRoutes(
 	courseController *routes.CourseController,
 	disciplineController *routes.DisciplineController,
 	userController *routes.UserController,
+	gitController *routes.GitController,
 	sessionRepo session.Repo,
 	config *config.Config,
 ) {
@@ -169,6 +171,32 @@ func SetupRoutes(
 		"/{discipline_id}",
 		disciplineController.DeleteDiscipline,
 		option.Summary("Delete discipline"),
+		option.DefaultStatusCode(http.StatusNoContent),
+	)
+
+	gitGroup := fuego.Group(
+		privateGroup,
+		"/git",
+		option.Summary("Git API"),
+	)
+
+	fuego.Post(
+		gitGroup,
+		"/add_key",
+		func(ctx fuego.ContextWithBody[git.AddSshKey]) (any, error) {
+			return gitController.AddSshKey(ctx)
+		},
+		option.Summary("Add new SSH key"),
+		option.DefaultStatusCode(http.StatusAccepted),
+	)
+
+	fuego.Delete(
+		gitGroup,
+		"/delete_key",
+		func(ctx fuego.ContextWithBody[git.DeleteSshKey]) (any, error) {
+			return gitController.DeleteSshKey(ctx)
+		},
+		option.Summary("Delete SSH key"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
