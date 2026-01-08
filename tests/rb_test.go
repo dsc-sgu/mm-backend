@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/network"
 
@@ -131,8 +132,92 @@ func TestGetBlockById(t *testing.T) {
 		}
 	}()
 
-	var createdBlock blocks.Block
-	require.NoError(t, json.NewDecoder(getBlockResp.Body).Decode(&createdBlock))
+	var returnedBlock blocks.Block
+	require.NoError(
+		t,
+		json.NewDecoder(getBlockResp.Body).Decode(&returnedBlock),
+	)
 
-	require.Equal(t, courseID, createdBlock.CourseId)
+	require.Equal(t, courseID, returnedBlock.CourseId)
+}
+
+func TestUnlinkBlock(t *testing.T) {
+	ctx := context.Background()
+
+	net, err := network.New(ctx)
+	require.NoError(t, err)
+
+	_, err = initPostgres(ctx, t, net)
+	require.NoError(t, err)
+
+	port, err := initBackend(ctx, t, net)
+	require.NoError(t, err)
+
+	userID := CreateTestUser(
+		t,
+		port,
+		"Test First Name",
+		"Test Last Name",
+		"Username",
+		"test@email.com",
+		"password",
+	)
+	require.NotZero(t, userID)
+
+	disciplineID := CreateTestDiscipline(
+		t,
+		port,
+		userID,
+		"Test Discipline",
+	)
+	require.NotZero(t, disciplineID)
+
+	courseID := CreateTestCourse(
+		t,
+		port,
+		userID,
+		disciplineID,
+		"Test Course",
+	)
+
+	blockID := CreateTestBlock(
+		t,
+		port,
+		userID,
+		courseID,
+	)
+
+	unlinkBlockURL := fmt.Sprintf(
+		"http://localhost:%s/api/v1/blocks/%s/%s?fake_user_id=%s",
+		port.Port(),
+		blockID,
+		courseID,
+		userID,
+	)
+
+	unlinkBlockReq, err := http.NewRequest(
+		http.MethodDelete,
+		unlinkBlockURL,
+		nil,
+	)
+	require.NoError(t, err)
+
+	unlinkBlockResp, err := http.DefaultClient.Do(unlinkBlockReq)
+	require.NoError(t, err)
+
+	defer func() {
+		err := unlinkBlockResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	var returnedBlock blocks.Block
+	require.NoError(
+		t,
+		json.NewDecoder(unlinkBlockResp.Body).Decode(&returnedBlock),
+	)
+
+	require.Equal(t, uuid.Nil, returnedBlock.CourseId)
+
 }
