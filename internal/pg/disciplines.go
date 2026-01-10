@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -47,7 +48,7 @@ func (r *PGRepo) CreateDiscipline(
 
 	rows, err := r.db.NamedQuery(createDisciplineSql, newDiscipline)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create discipline: %w", err)
 	}
 
 	defer func() {
@@ -58,7 +59,7 @@ func (r *PGRepo) CreateDiscipline(
 
 	if rows.Next() {
 		if err := rows.Scan(&newDiscipline.Id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create discipline: %w", err)
 		}
 	}
 
