@@ -28,3 +28,7 @@ type CoursePagination struct {
 	Limit  int       `query:"limit"`
 	LastId uuid.UUID `query:"last_id"`
 }
+
+type CreateResponse struct {
+	Id uuid.UUID `json:"id"`
+}

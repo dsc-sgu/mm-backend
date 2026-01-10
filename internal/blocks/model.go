@@ -41,3 +41,7 @@ type DeleteBlockFromCourse struct {
 	CourseId uuid.UUID `json:"courseId" db:"course_id" binding:"required"`
 	Id       uuid.UUID `json:"id"       db:"id"        binding:"required"`
 }
+
+type CreateResponse struct {
+	Id uuid.UUID `json:"id"`
+}
