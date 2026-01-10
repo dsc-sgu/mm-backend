@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,7 +67,7 @@ func (r *PGRepo) CreateCourse(
 
 	rows, err := r.db.NamedQuery(createCourseSql, newCourse)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create course: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -76,7 +77,7 @@ func (r *PGRepo) CreateCourse(
 
 	if rows.Next() {
 		if err := rows.Scan(&newCourse.Id); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to create course: %w", err)
 		}
 	}
 
