@@ -25,23 +25,24 @@ func NewUserController(
 
 func (c *UserController) Login(
 	ctx fuego.ContextWithBody[users.LoginModel],
-) (any, error) {
+) (*users.LoginResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fmt.Errorf("parsing body: %w", err)
 	}
 
-	if response, cookie, err := c.svc.Login(ctx.Context(), body); err != nil {
+	response, cookie, err := c.svc.Login(ctx.Context(), body)
+	if err != nil {
 		return nil, err
 	} else {
 		ctx.SetCookie(cookie)
-		return response, nil
+		return &response, nil
 	}
 }
 
 func (c *UserController) Register(
 	ctx fuego.ContextWithBody[users.RegisterModel],
-) (any, error) {
+) (*users.RegisterResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
@@ -89,7 +90,7 @@ func (c *UserController) Logout(
 
 func (c *UserController) GetSession(
 	ctx fuego.ContextNoBody,
-) (any, error) {
+) (*users.Model, error) {
 	userID := session.UserIDFromContext(ctx.Context())
 	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
@@ -97,7 +98,7 @@ func (c *UserController) GetSession(
 
 	u, err := c.svc.GetUserById(ctx.Context(), userID)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	if u == nil {
