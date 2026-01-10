@@ -54,7 +54,11 @@ CREATE TABLE course (
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
     -- Service info
-    created_at timestamp NOT NULL
+    created_at timestamp NOT NULL,
+
+    -- NOTE(Ezhkin-Kot): unique course names in one discipline
+    CONSTRAINT course_discipline_name_unique
+        UNIQUE (discipline_id, name)
 );
 
 
