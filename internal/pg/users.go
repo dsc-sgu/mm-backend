@@ -26,6 +26,11 @@ const (
 		WHERE id = $1
 	`
 
+	getUserByUsernameSql = `
+		SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
+		FROM users
+		WHERE username = $1
+	`
 	getUserByEmailSql = `
 		SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
 		FROM users
@@ -92,6 +97,24 @@ func (r *PGRepo) GetUserById(
 		}
 		return nil, err
 	}
+	return &u, nil
+}
+
+func (r *PGRepo) GetUserByUsername(
+	ctx context.Context,
+	username string,
+) (*users.Model, error) {
+	zap.L().Debug("Executing query", zap.String("query", getUserByUsernameSql))
+
+	var u users.Model
+	err := r.db.GetContext(ctx, &u, getUserByUsernameSql, username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
 	return &u, nil
 }
 
