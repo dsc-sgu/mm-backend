@@ -29,7 +29,7 @@ func NewCourseController(
 
 func (c *CourseController) CreateCourse(
 	ctx fuego.ContextWithBody[courses.CreateCourse],
-) (*courses.Course, error) {
+) (*courses.CreateResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
@@ -40,7 +40,16 @@ func (c *CourseController) CreateCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	return c.courseService.CreateCourse(&body, userID)
+	course, err := c.courseService.CreateCourse(&body, userID)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	response := courses.CreateResponse{
+		Id: course.Id,
+	}
+
+	return &response, nil
 }
 
 // Other endpoints rewrote using fuego
@@ -52,7 +61,7 @@ func (c *CourseController) GetPaginatedCourses(
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
 	id, err := uuid.Parse(pathId)
@@ -60,11 +69,18 @@ func (c *CourseController) GetPaginatedCourses(
 		if pathId == "" {
 			id = uuid.Nil
 		} else {
-			return nil, fuego.InternalServerError{Title: fmt.Errorf("parsing UUID: %w", err).Error()}
+			return nil, fuego.BadRequestError{
+				Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+			}
 		}
 	}
 
-	return c.courseService.GetPaginatedCourses(limit, id)
+	course, err := c.courseService.GetPaginatedCourses(limit, id)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return course, nil
 }
 
 func (c *CourseController) GetCourse(
@@ -74,12 +90,17 @@ func (c *CourseController) GetCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{
-			Title: fmt.Errorf("parsing UUID: %w", err).Error(),
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	return c.courseService.GetCourseById(ctx.Context(), id)
+	course, err := c.courseService.GetCourseById(ctx.Context(), id)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	return course, nil
 }
 
 func (c *CourseController) PatchCourse(
@@ -89,7 +110,9 @@ func (c *CourseController) PatchCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	body, err := ctx.Body()
@@ -97,7 +120,12 @@ func (c *CourseController) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return c.courseService.UpdateCourseById(id, &body)
+	course, err := c.courseService.UpdateCourseById(id, &body)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	return course, nil
 }
 
 func (c *CourseController) DeleteCourse(
@@ -107,25 +135,28 @@ func (c *CourseController) DeleteCourse(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	blockId, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	err = c.courseService.DeleteCourseById(id)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 	linkedBlocks, err := c.blockService.GetAllBlocksByCourseId(blockId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	for _, block := range linkedBlocks {
-
 		updatedBlock := blocks.UpdateBlock{
 			CourseId: uuid.Nil,
 			Data:     block.Data,
@@ -133,7 +164,7 @@ func (c *CourseController) DeleteCourse(
 		}
 		_, err := c.blockService.UpdateBlockById(block.Id, &updatedBlock)
 		if err != nil {
-			return nil, fuego.InternalServerError{}
+			return nil, fuego.InternalServerError{Detail: err.Error()}
 		}
 	}
 
