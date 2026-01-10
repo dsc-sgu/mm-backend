@@ -14,3 +14,7 @@ type CreateDiscipline struct {
 type PatchDiscipline struct {
 	Name string `json:"name" db:"name" binding:"required"`
 }
+
+type CreateResponse struct {
+	Id uuid.UUID `json:"id"`
+}
