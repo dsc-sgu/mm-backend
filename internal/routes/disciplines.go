@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"fmt"
+
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 
@@ -19,13 +21,22 @@ func NewDisciplineController(svc *disciplines.Service) *DisciplineController {
 
 func (c *DisciplineController) CreateDiscipline(
 	ctx fuego.ContextWithBody[disciplines.CreateDiscipline],
-) (*disciplines.Discipline, error) {
+) (*disciplines.CreateResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return c.svc.CreateDiscipline(&body)
+	discipline, err := c.svc.CreateDiscipline(&body)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	response := disciplines.CreateResponse{
+		Id: discipline.Id,
+	}
+
+	return &response, nil
 }
 
 func (c *DisciplineController) GetDiscipline(
@@ -35,10 +46,17 @@ func (c *DisciplineController) GetDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
-	return c.svc.GetDisciplineById(ctx.Context(), id)
+	discipline, err := c.svc.GetDisciplineById(ctx.Context(), id)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	return discipline, nil
 }
 
 func (c *DisciplineController) PatchDiscipline(
@@ -48,7 +66,9 @@ func (c *DisciplineController) PatchDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	body, err := ctx.Body()
@@ -56,7 +76,12 @@ func (c *DisciplineController) PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return c.svc.UpdateDisciplineById(id, &body)
+	discipline, err := c.svc.UpdateDisciplineById(id, &body)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: err.Error()}
+	}
+
+	return discipline, nil
 }
 
 func (c *DisciplineController) DeleteDiscipline(
@@ -66,7 +91,9 @@ func (c *DisciplineController) DeleteDiscipline(
 
 	id, err := uuid.Parse(pathId)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
 	}
 
 	// If discipline is deleted it might possible have
@@ -76,7 +103,7 @@ func (c *DisciplineController) DeleteDiscipline(
 
 	err = c.svc.DeleteDisciplineById(id)
 	if err != nil {
-		return nil, fuego.InternalServerError{}
+		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
 	return nil, nil
