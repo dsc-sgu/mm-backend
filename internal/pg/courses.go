@@ -24,6 +24,12 @@ const (
 		WHERE id = $1
 	`
 
+	getCourseByNameSql = `
+    SELECT id, discipline_id, owner_id, name, created_at
+    FROM course
+    WHERE name = $1
+  `
+
 	getAllCoursesByCourseIdSql = `
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM course
@@ -85,6 +91,23 @@ func (r *PGRepo) GetCourseById(
 
 	var course courses.Course
 	err := r.db.GetContext(ctx, &course, getCourseByIdSql, id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &course, nil
+}
+
+func (r *PGRepo) GetCourseByName(
+	ctx context.Context,
+	name string,
+) (*courses.Course, error) {
+	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSql))
+
+	var course courses.Course
+	err := r.db.GetContext(ctx, &course, getCourseByNameSql, name)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
