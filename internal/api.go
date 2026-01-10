@@ -73,7 +73,7 @@ func SetupRoutes(
 		"/{block_id}/{course_id}",
 		blockController.UnlinkFromCourse,
 		option.Summary("Unlink block from course"),
-		option.DefaultStatusCode(http.StatusNoContent),
+		option.DefaultStatusCode(http.StatusOK),
 	)
 
 	fuego.Delete(
