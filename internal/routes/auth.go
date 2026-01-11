@@ -28,7 +28,7 @@ func (c *UserController) Login(
 ) (*users.LoginResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
-		return nil, fmt.Errorf("parsing body: %w", err)
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
 	response, cookie, err := c.svc.Login(ctx.Context(), body)
@@ -73,7 +73,7 @@ func (c *UserController) Logout(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
 	if err := c.svc.Logout(ctx.Context()); err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	} else {
 		ctx.SetCookie(http.Cookie{
 			Name:     session.CookieName,
