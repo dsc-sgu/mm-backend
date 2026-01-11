@@ -48,7 +48,7 @@ func (r *PGRepo) CreateDiscipline(
 
 	rows, err := r.db.NamedQuery(createDisciplineSql, newDiscipline)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create discipline: %w", err)
+		return nil, fmt.Errorf("create discipline: insert in db: %w", err)
 	}
 
 	defer func() {
@@ -59,7 +59,10 @@ func (r *PGRepo) CreateDiscipline(
 
 	if rows.Next() {
 		if err := rows.Scan(&newDiscipline.Id); err != nil {
-			return nil, fmt.Errorf("failed to create discipline: %w", err)
+			return nil, fmt.Errorf(
+				"create discipline: scan discipline id: %w",
+				err,
+			)
 		}
 	}
 

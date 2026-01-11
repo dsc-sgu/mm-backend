@@ -71,7 +71,7 @@ func (r *PGRepo) CreateBlock(
 		RequestBlock.CourseId,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create block: %w", err)
+		return nil, fmt.Errorf("create block: scan next position: %w", err)
 	}
 
 	zap.L().Debug("Executing query", zap.String("query", createBlockSql))
@@ -85,7 +85,7 @@ func (r *PGRepo) CreateBlock(
 
 	rows, err := r.db.NamedQuery(createBlockSql, newBlock)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create block: %w", err)
+		return nil, fmt.Errorf("create block: insert in db: %w", err)
 	}
 
 	defer func() {
@@ -96,7 +96,7 @@ func (r *PGRepo) CreateBlock(
 
 	if rows.Next() {
 		if err := rows.Scan(&newBlock.Id); err != nil {
-			return nil, fmt.Errorf("failed to create block: %w", err)
+			return nil, fmt.Errorf("create block: scan block id: %w", err)
 		}
 	}
 
