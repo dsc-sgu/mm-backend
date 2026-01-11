@@ -33,7 +33,7 @@ func (c *UserController) Login(
 
 	response, cookie, err := c.svc.Login(ctx.Context(), body)
 	if err != nil {
-		return nil, err
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	} else {
 		ctx.SetCookie(cookie)
 		return &response, nil
@@ -59,7 +59,7 @@ func (c *UserController) Register(
 
 	u, err := c.svc.CreateUser(&createUser)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	response := users.RegisterResponse{

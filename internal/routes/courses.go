@@ -42,7 +42,7 @@ func (c *CourseController) CreateCourse(
 
 	course, err := c.courseService.CreateCourse(&body, userID)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	response := courses.CreateResponse{
@@ -97,7 +97,7 @@ func (c *CourseController) GetCourse(
 
 	course, err := c.courseService.GetCourseById(ctx.Context(), id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return course, nil
@@ -122,7 +122,7 @@ func (c *CourseController) PatchCourse(
 
 	course, err := c.courseService.UpdateCourseById(id, &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return course, nil
@@ -149,7 +149,7 @@ func (c *CourseController) DeleteCourse(
 
 	err = c.courseService.DeleteCourseById(id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 	linkedBlocks, err := c.blockService.GetAllBlocksByCourseId(blockId)
 	if err != nil {
