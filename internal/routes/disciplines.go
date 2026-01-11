@@ -29,7 +29,7 @@ func (c *DisciplineController) CreateDiscipline(
 
 	discipline, err := c.svc.CreateDiscipline(&body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	response := disciplines.CreateResponse{
@@ -53,7 +53,7 @@ func (c *DisciplineController) GetDiscipline(
 
 	discipline, err := c.svc.GetDisciplineById(ctx.Context(), id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return discipline, nil
@@ -78,7 +78,7 @@ func (c *DisciplineController) PatchDiscipline(
 
 	discipline, err := c.svc.UpdateDisciplineById(id, &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return discipline, nil
@@ -103,7 +103,7 @@ func (c *DisciplineController) DeleteDiscipline(
 
 	err = c.svc.DeleteDisciplineById(id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return nil, nil

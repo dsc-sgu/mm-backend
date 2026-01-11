@@ -33,7 +33,7 @@ func (c *BlockController) GetBlock(
 
 	block, err := c.svc.GetBlockById(ctx.Context(), id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return block, nil
@@ -53,7 +53,7 @@ func (c *BlockController) GetAllBlocks(
 
 	block, err := c.svc.GetAllBlocksByCourseId(id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return block, nil
@@ -69,7 +69,7 @@ func (c *BlockController) CreateBlock(
 
 	block, err := c.svc.CreateBlock(ctx.Context(), &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	response := blocks.CreateResponse{
@@ -98,7 +98,7 @@ func (c *BlockController) PatchBlock(
 
 	block, err := c.svc.UpdateBlockById(id, &body)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return block, nil
@@ -127,7 +127,7 @@ func (c *BlockController) UnlinkFromCourse(
 
 	block, err := c.svc.UnlinkBlockById(courseId, blockId)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return block, nil
@@ -145,7 +145,7 @@ func (c *BlockController) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
 
 	err = c.svc.DeleteBlockById(id)
 	if err != nil {
-		return nil, fuego.BadRequestError{Detail: err.Error()}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	return nil, nil
