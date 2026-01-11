@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-fuego/fuego"
@@ -57,13 +56,13 @@ func (c *UserController) Register(
 		Role:      "USER",
 	}
 
-	u, err := c.svc.CreateUser(&createUser)
+	user, err := c.svc.CreateUser(&createUser)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	response := users.RegisterResponse{
-		Id: u.Id,
+		Id: user.Id,
 	}
 
 	return &response, nil
@@ -96,14 +95,14 @@ func (c *UserController) GetSession(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	u, err := c.svc.GetUserById(ctx.Context(), userID)
+	user, err := c.svc.GetUserById(ctx.Context(), userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	if u == nil {
+	if user == nil {
 		return nil, fuego.NotFoundError{Title: "Unrelated to user error"}
 	}
 
-	return u, nil
+	return user, nil
 }
