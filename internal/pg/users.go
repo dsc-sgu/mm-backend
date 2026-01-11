@@ -60,7 +60,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 
 	rows, err := r.db.NamedQuery(createUserSql, newUser)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user: %w", err)
+		return nil, fmt.Errorf("create user: insert in db: %w", err)
 	}
 
 	defer func() {
@@ -71,7 +71,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 
 	if rows.Next() {
 		if err := rows.Scan(&newUser.Id, &newUser.CreatedAt); err != nil {
-			return nil, fmt.Errorf("failed to create user: %w", err)
+			return nil, fmt.Errorf("create user: scan user id: %w", err)
 		}
 	}
 

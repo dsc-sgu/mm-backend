@@ -61,7 +61,7 @@ func (r *PGRepo) CreateCourse(
 
 	rows, err := r.db.NamedQuery(createCourseSql, newCourse)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create course: %w", err)
+		return nil, fmt.Errorf("create course: insert in db: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
@@ -71,7 +71,7 @@ func (r *PGRepo) CreateCourse(
 
 	if rows.Next() {
 		if err := rows.Scan(&newCourse.Id); err != nil {
-			return nil, fmt.Errorf("failed to create course: %w", err)
+			return nil, fmt.Errorf("create course: scan course id: %w", err)
 		}
 	}
 
