@@ -46,8 +46,8 @@ type Config struct {
 
 	EnableAuth          bool     `env:"ENABLE_AUTH, default=true"`
 	SessionCookieSecure bool     `env:"SESSION_COOKIE_SECURE, default=false"`
-	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=localhost:5173"`
-	AllowOrigins        []string `env:"ALLOW_ORIGINS,         default=http://localhost:5173"`
+	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=localhost"`
+	AllowOrigins        []string `env:"ALLOW_ORIGINS,         default=http://localhost:8034,http://127.0.0.1:8034"`
 
 	GinMode  string `env:"GIN_MODE,              default=debug"`
 	Host     string `env:"HOST,                  default=0.0.0.0"`

@@ -132,11 +132,6 @@ func main() {
 	redisClient := redis.NewClient(redisOpts)
 	zap.L().Info("Redis connection is established")
 
-	httpServer := fuego.NewServer(
-		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
-		fuego.WithGlobalMiddlewares(logger.ZapMiddleware()),
-	)
-
 	corsMiddleware := cors.New(cors.Options{
 		AllowCredentials: true,
 		AllowedOrigins:   config.AllowOrigins,
@@ -145,6 +140,7 @@ func main() {
 			http.MethodPost,
 			http.MethodPut,
 			http.MethodDelete,
+			http.MethodOptions,
 		},
 		AllowedHeaders: []string{
 			"Authorization",
@@ -153,7 +149,10 @@ func main() {
 		},
 	})
 
-	fuego.Use(httpServer, corsMiddleware.Handler)
+	httpServer := fuego.NewServer(
+		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
+		fuego.WithGlobalMiddlewares(corsMiddleware.Handler, logger.ZapMiddleware()),
+	)
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
