@@ -47,7 +47,7 @@ type Config struct {
 	EnableAuth          bool     `env:"ENABLE_AUTH, default=true"`
 	SessionCookieSecure bool     `env:"SESSION_COOKIE_SECURE, default=false"`
 	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=localhost"`
-	AllowOrigins        []string `env:"ALLOW_ORIGINS,         default=http://localhost:8034,http://127.0.0.1:8034"`
+	AllowOrigins        []string `env:"ALLOW_ORIGINS"`
 
 	GinMode  string `env:"GIN_MODE,              default=debug"`
 	Host     string `env:"HOST,                  default=0.0.0.0"`
@@ -57,12 +57,24 @@ type Config struct {
 	LogLevel zap.AtomicLevel `env:"LOG_LEVEL,             default=debug"`
 }
 
+func applyDefaultAllowOrigins(cfg *Config) {
+	if len(cfg.AllowOrigins) > 0 {
+		return
+	}
+	cfg.AllowOrigins = []string{
+		fmt.Sprintf("http://localhost:%d", cfg.HTTPPort),
+		fmt.Sprintf("http://127.0.0.1:%d", cfg.HTTPPort),
+	}
+}
+
 func LoadFromEnv() (*Config, error) {
 	_ = godotenv.Load()
 	config := Config{}
 	if err := envconfig.Process(context.Background(), &config); err != nil {
 		return nil, fmt.Errorf("populating config object from environment: %w", err)
 	}
+
+	applyDefaultAllowOrigins(&config)
 
 	return &config, nil
 }
