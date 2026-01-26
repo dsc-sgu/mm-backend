@@ -10,7 +10,7 @@ type Model struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	UserID    uuid.UUID `json:"userId"`
+	UserID    uuid.UUID `json:"userID"`
 }
 
 func (session *Model) IsExpired() bool {

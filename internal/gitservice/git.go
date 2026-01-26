@@ -60,9 +60,9 @@ func RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 }
 
 type RepoID struct {
-	CourseID      uuid.UUID `json:"courseId"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskId"        binding:"required"`
-	ParticipantID uuid.UUID `json:"participantId" binding:"required"`
+	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
+	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
+	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
 }
 
 func (repoID *RepoID) intoPath() string {
