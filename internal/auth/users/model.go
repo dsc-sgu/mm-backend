@@ -28,7 +28,7 @@ type OutModel struct {
 	Patronymic string    `json:"patronymic"`
 	Username   string    `json:"username"`
 	Email      string    `json:"email"`
-	AvatarURL  string    `json:"avatarUrl"`
+	AvatarURL  string    `json:"avatarURL"`
 	Role       string    `json:"role"`
 }
 
@@ -56,10 +56,10 @@ type RegisterModel struct {
 }
 
 type LoginResponse struct {
-	SessionID uuid.UUID `json:"sessionId"`
+	SessionID uuid.UUID `json:"sessionID"`
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	UserID    uuid.UUID `json:"userId"`
+	UserID    uuid.UUID `json:"userID"`
 }
 
 type RegisterResponse struct {

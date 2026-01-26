@@ -33,9 +33,9 @@ type FileInfo struct {
 }
 
 type RepoID struct {
-	CourseID      uuid.UUID `json:"courseId"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskId"        binding:"required"`
-	ParticipantID uuid.UUID `json:"participantId" binding:"required"`
+	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
+	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
+	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
 }
 
 type MakeAttempt struct {
@@ -45,6 +45,6 @@ type MakeAttempt struct {
 
 type Attempt struct {
 	ID        uuid.UUID `json:"id"         binding:"required"`
-	CreatedAt time.Time `json:"created_at" binding:"required"`
+	CreatedAt time.Time `json:"createdAt" binding:"required"`
 	Name      string    `json:"name"       binding:"required"`
 }
