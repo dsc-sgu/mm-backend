@@ -121,9 +121,9 @@ func TestGetCourseByID(t *testing.T) {
 	var recievedCourse courses.Course
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedCourse))
 
-	require.Equal(t, courseID, recievedCourse.Id)
+	require.Equal(t, courseID, recievedCourse.ID)
 	require.Equal(t, "Test Course", recievedCourse.Name)
-	require.Equal(t, disciplineID, recievedCourse.DisciplineId)
+	require.Equal(t, disciplineID, recievedCourse.DisciplineID)
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
@@ -169,13 +169,13 @@ func TestGetPaginatedCourse(t *testing.T) {
 	}
 
 	limit := 2
-	lastId := uuid.Nil
+	lastID := uuid.Nil
 
 	url := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
 		port.Port(),
 		limit,
-		lastId,
+		lastID,
 		userID,
 	)
 
@@ -250,7 +250,7 @@ func TestUpdateCourse(t *testing.T) {
 	)
 
 	body, _ := json.Marshal(courses.UpdateCourse{
-		OwnerId: userID,
+		OwnerID: userID,
 		Name:    "Updated Test Course",
 	})
 
@@ -276,7 +276,7 @@ func TestUpdateCourse(t *testing.T) {
 	var updatedCourse courses.Course
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updatedCourse))
 
-	require.Equal(t, courseID, updatedCourse.Id)
+	require.Equal(t, courseID, updatedCourse.ID)
 	require.Equal(t, "Updated Test Course", updatedCourse.Name)
-	require.Equal(t, disciplineID, updatedCourse.DisciplineId)
+	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
 }

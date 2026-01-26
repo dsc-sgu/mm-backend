@@ -95,5 +95,5 @@ func TestLoginUser(t *testing.T) {
 	var recievedSession users.LoginResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedSession))
 
-	require.Equal(t, userID, recievedSession.UserId)
+	require.Equal(t, userID, recievedSession.UserID)
 }

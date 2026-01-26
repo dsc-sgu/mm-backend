@@ -7,10 +7,10 @@ import (
 )
 
 type Model struct {
-	Id        uuid.UUID `json:"id"`
+	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	UserId    uuid.UUID `json:"userId"`
+	UserID    uuid.UUID `json:"userId"`
 }
 
 func (session *Model) IsExpired() bool {

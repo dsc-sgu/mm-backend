@@ -22,16 +22,16 @@ func NewBlockController(svc *blocks.Service) *BlockController {
 func (c *BlockController) GetBlock(
 	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
-	pathId := ctx.PathParam("block_id")
+	pathID := ctx.PathParam("block_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	block, err := c.svc.GetBlockById(ctx.Context(), id)
+	block, err := c.svc.GetBlockByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -42,16 +42,16 @@ func (c *BlockController) GetBlock(
 func (c *BlockController) GetAllBlocks(
 	ctx fuego.ContextNoBody,
 ) ([]*blocks.Block, error) {
-	pathId := ctx.PathParam("course_id")
+	pathID := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	block, err := c.svc.GetAllBlocksByCourseId(id)
+	block, err := c.svc.GetAllBlocksByCourseID(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -73,7 +73,7 @@ func (c *BlockController) CreateBlock(
 	}
 
 	response := blocks.CreateResponse{
-		Id: block.Id,
+		ID: block.ID,
 	}
 
 	return &response, nil
@@ -82,9 +82,9 @@ func (c *BlockController) CreateBlock(
 func (c *BlockController) PatchBlock(
 	ctx fuego.ContextWithBody[blocks.UpdateBlock],
 ) (*blocks.Block, error) {
-	pathId := ctx.PathParam("block_id")
+	pathID := ctx.PathParam("block_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -96,7 +96,7 @@ func (c *BlockController) PatchBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	block, err := c.svc.UpdateBlockById(id, &body)
+	block, err := c.svc.UpdateBlockByID(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -107,25 +107,25 @@ func (c *BlockController) PatchBlock(
 func (c *BlockController) UnlinkFromCourse(
 	ctx fuego.ContextNoBody,
 ) (*blocks.Block, error) {
-	pathBlockId := ctx.PathParam("block_id")
+	pathBlockID := ctx.PathParam("block_id")
 
-	blockId, err := uuid.Parse(pathBlockId)
+	blockID, err := uuid.Parse(pathBlockID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	pathCourseId := ctx.PathParam("course_id")
+	pathCourseID := ctx.PathParam("course_id")
 
-	courseId, err := uuid.Parse(pathCourseId)
+	courseID, err := uuid.Parse(pathCourseID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	block, err := c.svc.UnlinkBlockById(courseId, blockId)
+	block, err := c.svc.UnlinkBlockByID(courseID, blockID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -134,16 +134,16 @@ func (c *BlockController) UnlinkFromCourse(
 }
 
 func (c *BlockController) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
-	pathId := ctx.PathParam("block_id")
+	pathID := ctx.PathParam("block_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	err = c.svc.DeleteBlockById(id)
+	err = c.svc.DeleteBlockByID(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

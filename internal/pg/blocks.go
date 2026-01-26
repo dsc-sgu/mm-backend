@@ -12,45 +12,45 @@ import (
 )
 
 const (
-	createBlockSql = `
+	createBlockSQL = `
 		INSERT INTO block (block_type, data, course_id, position)
 		VALUES (:block_type, :data, :course_id, :position)
 		RETURNING id
 	`
 
-	nextPositionSql = `
+	nextPositionSQL = `
 		SELECT COALESCE(MAX(position), 0)
 		FROM block
 		WHERE course_id = $1
 	`
 
-	getBlockByIdSql = `
+	getBlockByIdSQL = `
 		SELECT id, block_type, data, course_id, position
 		FROM block
 		WHERE id = $1
 	`
 
-	getAllBlocksByCourseIdSql = `
+	getAllBlocksByCourseIdSQL = `
 		SELECT *
 		FROM block
 		WHERE course_id = $1
 	`
 
-	updateBlockByIdSql = `
+	updateBlockByIdSQL = `
 		UPDATE block
 		SET course_id = $1, data = $2, position = $3
 		WHERE id = $4
 		RETURNING id, block_type, data, course_id, position
 	`
 
-	UnlinkByIdSql = `
+	UnlinkByIdSQL = `
 		UPDATE block
 		SET course_id = NULL
 		WHERE course_id = $1 AND id = $2
 		RETURNING id, block_type, data, course_id, position
 	`
 
-	deleteBlockByIdSql = `
+	deleteBlockByIdSQL = `
 		DELETE FROM block
 		WHERE id = $1
 	`
@@ -60,30 +60,30 @@ func (r *PGRepo) CreateBlock(
 	ctx context.Context,
 	RequestBlock *blocks.CreateBlock,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", nextPositionSql))
+	zap.L().Debug("Executing query", zap.String("query", nextPositionSQL))
 
 	position := 0
 
 	err := r.db.GetContext(
 		ctx,
 		&position,
-		nextPositionSql,
-		RequestBlock.CourseId,
+		nextPositionSQL,
+		RequestBlock.CourseID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create block: scan next position: %w", err)
 	}
 
-	zap.L().Debug("Executing query", zap.String("query", createBlockSql))
+	zap.L().Debug("Executing query", zap.String("query", createBlockSQL))
 
 	newBlock := blocks.Block{
 		BlockType: RequestBlock.BlockType,
 		Data:      RequestBlock.Data,
-		CourseId:  RequestBlock.CourseId,
+		CourseID:  RequestBlock.CourseID,
 		Position:  position + 1,
 	}
 
-	rows, err := r.db.NamedQuery(createBlockSql, newBlock)
+	rows, err := r.db.NamedQuery(createBlockSQL, newBlock)
 	if err != nil {
 		return nil, fmt.Errorf("create block: insert in db: %w", err)
 	}
@@ -95,7 +95,7 @@ func (r *PGRepo) CreateBlock(
 	}()
 
 	if rows.Next() {
-		if err := rows.Scan(&newBlock.Id); err != nil {
+		if err := rows.Scan(&newBlock.ID); err != nil {
 			return nil, fmt.Errorf("create block: scan block id: %w", err)
 		}
 	}
@@ -103,14 +103,14 @@ func (r *PGRepo) CreateBlock(
 	return &newBlock, nil
 }
 
-func (r *PGRepo) GetBlockById(
+func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSQL))
 
 	var block blocks.Block
-	err := r.db.GetContext(ctx, &block, getBlockByIdSql, id)
+	err := r.db.GetContext(ctx, &block, getBlockByIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -120,11 +120,11 @@ func (r *PGRepo) GetBlockById(
 	return &block, nil
 }
 
-func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSql))
+func (r *PGRepo) GetAllBlocksByCourseID(id uuid.UUID) ([]*blocks.Block, error) {
+	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSQL))
 
 	var blockList []*blocks.Block
-	rows, err := r.db.Queryx(getAllBlocksByCourseIdSql, id)
+	rows, err := r.db.Queryx(getAllBlocksByCourseIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -151,15 +151,15 @@ func (r *PGRepo) GetAllBlocksByCourseId(id uuid.UUID) ([]*blocks.Block, error) {
 	return blockList, nil
 }
 
-func (r *PGRepo) UpdateBlockById(
+func (r *PGRepo) UpdateBlockByID(
 	id uuid.UUID,
 	update *blocks.UpdateBlock,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateBlockByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", updateBlockByIdSQL))
 
 	row := r.db.QueryRowx(
-		updateBlockByIdSql,
-		update.CourseId,
+		updateBlockByIdSQL,
+		update.CourseID,
 		update.Data,
 		update.Position,
 		id,
@@ -175,17 +175,17 @@ func (r *PGRepo) UpdateBlockById(
 	return &block, nil
 }
 
-func (r *PGRepo) UnlinkBlockById(
-	courseId uuid.UUID,
-	blockId uuid.UUID,
+func (r *PGRepo) UnlinkBlockByID(
+	courseID uuid.UUID,
+	blockID uuid.UUID,
 ) (*blocks.Block, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", UnlinkByIdSql))
+		Debug("Executing query", zap.String("query", UnlinkByIdSQL))
 
 	row := r.db.QueryRowx(
-		UnlinkByIdSql,
-		courseId,
-		blockId,
+		UnlinkByIdSQL,
+		courseID,
+		blockID,
 	)
 
 	var unlinkedBlock blocks.Block
@@ -198,10 +198,10 @@ func (r *PGRepo) UnlinkBlockById(
 	return &unlinkedBlock, nil
 }
 
-func (r *PGRepo) DeleteBlockById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSql))
+func (r *PGRepo) DeleteBlockByID(id uuid.UUID) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSQL))
 
-	res, err := r.db.Exec(deleteBlockByIdSql, id)
+	res, err := r.db.Exec(deleteBlockByIdSQL, id)
 	if err != nil {
 		return err
 	}

@@ -14,30 +14,30 @@ import (
 )
 
 const (
-	createUserSql = `
+	createUserSQL = `
 		INSERT INTO users (first_name, last_name, username, email, role, password_hash, password_salt, created_at)
 		VALUES (:first_name, :last_name, :username, :email, :role, :password_hash, :password_salt, :created_at)
 		RETURNING id, created_at
 	`
 
-	getUserByIdSql = `
+	getUserByIdSQL = `
 		SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
 		FROM users
 		WHERE id = $1
 	`
 
-	getUserByUsernameSql = `
+	getUserByUsernameSQL = `
 		SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
 		FROM users
 		WHERE username = $1
 	`
-	getUserByEmailSql = `
+	getUserByEmailSQL = `
 		SELECT id, first_name, last_name, username, email, role, password_hash, password_salt, created_at
 		FROM users
 		WHERE email = $1
 	`
 
-	deleteUserByIdSql = `
+	deleteUserByIdSQL = `
 		DELETE FROM users
 		WHERE id = $1
 	`
@@ -50,7 +50,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 	}
 
 	passwordHash := password.Hash(user.Password, passwordSalt)
-	zap.L().Debug("Executing query", zap.String("query", createUserSql))
+	zap.L().Debug("Executing query", zap.String("query", createUserSQL))
 
 	newUser := users.Model{
 		FirstName:    user.FirstName,
@@ -63,7 +63,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 		CreatedAt:    time.Now(),
 	}
 
-	rows, err := r.db.NamedQuery(createUserSql, newUser)
+	rows, err := r.db.NamedQuery(createUserSQL, newUser)
 	if err != nil {
 		return nil, fmt.Errorf("create user: insert in db: %w", err)
 	}
@@ -75,7 +75,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 	}()
 
 	if rows.Next() {
-		if err := rows.Scan(&newUser.Id, &newUser.CreatedAt); err != nil {
+		if err := rows.Scan(&newUser.ID, &newUser.CreatedAt); err != nil {
 			return nil, fmt.Errorf("create user: scan user id: %w", err)
 		}
 	}
@@ -83,14 +83,14 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 	return &newUser, nil
 }
 
-func (r *PGRepo) GetUserById(
+func (r *PGRepo) GetUserByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*users.Model, error) {
-	zap.L().Debug("Executing query", zap.String("query", getUserByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getUserByIdSQL))
 
 	var u users.Model
-	err := r.db.GetContext(ctx, &u, getUserByIdSql, id)
+	err := r.db.GetContext(ctx, &u, getUserByIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -104,10 +104,10 @@ func (r *PGRepo) GetUserByUsername(
 	ctx context.Context,
 	username string,
 ) (*users.Model, error) {
-	zap.L().Debug("Executing query", zap.String("query", getUserByUsernameSql))
+	zap.L().Debug("Executing query", zap.String("query", getUserByUsernameSQL))
 
 	var u users.Model
-	err := r.db.GetContext(ctx, &u, getUserByUsernameSql, username)
+	err := r.db.GetContext(ctx, &u, getUserByUsernameSQL, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -122,10 +122,10 @@ func (r *PGRepo) GetUserByEmail(
 	ctx context.Context,
 	email string,
 ) (*users.Model, error) {
-	zap.L().Debug("Executing query", zap.String("query", getUserByEmailSql))
+	zap.L().Debug("Executing query", zap.String("query", getUserByEmailSQL))
 
 	var u users.Model
-	err := r.db.GetContext(ctx, &u, getUserByEmailSql, email)
+	err := r.db.GetContext(ctx, &u, getUserByEmailSQL, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -136,8 +136,8 @@ func (r *PGRepo) GetUserByEmail(
 	return &u, nil
 }
 
-func (r *PGRepo) DeleteUserById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteUserByIdSql))
-	_, err := r.db.ExecContext(context.Background(), deleteUserByIdSql, id)
+func (r *PGRepo) DeleteUserByID(id uuid.UUID) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteUserByIdSQL))
+	_, err := r.db.ExecContext(context.Background(), deleteUserByIdSQL, id)
 	return err
 }

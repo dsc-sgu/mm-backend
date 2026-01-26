@@ -29,14 +29,14 @@ func AuthMiddleware(
 				return
 			}
 
-			s, err := sessionRepo.GetById(sessionID)
+			s, err := sessionRepo.GetByID(sessionID)
 			if err != nil {
 				http.Error(w, "WRONG_CREDENTIALS", http.StatusUnauthorized)
 				return
 			}
 
 			ctx := session.WithSessionID(r.Context(), sessionID)
-			ctx = session.WithUserID(ctx, s.UserId)
+			ctx = session.WithUserID(ctx, s.UserID)
 			r = r.WithContext(ctx)
 
 			next.ServeHTTP(w, r)

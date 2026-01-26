@@ -3,7 +3,7 @@ package disciplines
 import "github.com/google/uuid"
 
 type Discipline struct {
-	Id   uuid.UUID `json:"id"   db:"id"   binding:"required"`
+	ID   uuid.UUID `json:"id"   db:"id"   binding:"required"`
 	Name string    `json:"name" db:"name" binding:"required"`
 }
 
@@ -16,5 +16,5 @@ type PatchDiscipline struct {
 }
 
 type CreateResponse struct {
-	Id uuid.UUID `json:"id"`
+	ID uuid.UUID `json:"id"`
 }

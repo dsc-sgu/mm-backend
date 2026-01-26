@@ -117,7 +117,7 @@ func main() {
 
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
 
-	dbConn, err := db.CreateDb(config.Postgres.GetURL())
+	dbConn, err := db.CreateDB(config.Postgres.GetURL())
 	if err != nil {
 		zap.S().
 			Fatalf("establishing database connection: %s", err.Error())
