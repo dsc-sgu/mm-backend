@@ -10,7 +10,11 @@ import (
 
 const CookieName = "SESSION_ID"
 
-func CheckHTTPReq(cookie *http.Cookie, sessionRepo Repo, logger *zap.Logger) (*Model, error) {
+func CheckHTTPReq(
+	cookie *http.Cookie,
+	sessionRepo Repo,
+	logger *zap.Logger,
+) (*Model, error) {
 	u, err := uuid.Parse(cookie.Value)
 	if err != nil {
 		return nil, err

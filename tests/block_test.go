@@ -219,5 +219,4 @@ func TestUnlinkBlock(t *testing.T) {
 	)
 
 	require.Equal(t, uuid.Nil, returnedBlock.CourseID)
-
 }

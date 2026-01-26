@@ -13,7 +13,7 @@ import (
 - Преподаватель решил оценить попытку
 */
 
-// Add table with Users Git Data to DB
+// AttemptStatus adds table with Users Git Data to DB
 type AttemptStatus string
 
 const (
@@ -22,10 +22,10 @@ const (
 	AttemptStatusRetrieve AttemptStatus = "retrieve"
 )
 
-// массив файлов
+// FileInfo массив файлов
 type FileInfo struct {
 	FileName string `json:"fileName"    binding:"required"`
-	// FilePath    string    `json:"-" binding:"required"`
+	// FilePath    string    `json:"-"           binding:"required"`
 	FileSize    int64     `json:"fileSize"    binding:"required"`
 	ContentType string    `json:"contentType" binding:"required"`
 	MD5Hash     string    `json:"md5Hash"     binding:"required"`
@@ -40,11 +40,11 @@ type RepoID struct {
 
 type MakeAttempt struct {
 	RepoID
-	// FileInfo ... Content make zip
+	// FileInfo Content make zip
 }
 
 type Attempt struct {
-	ID        uuid.UUID `json:"id"         binding:"required"`
+	ID        uuid.UUID `json:"id"        binding:"required"`
 	CreatedAt time.Time `json:"createdAt" binding:"required"`
-	Name      string    `json:"name"       binding:"required"`
+	Name      string    `json:"name"      binding:"required"`
 }

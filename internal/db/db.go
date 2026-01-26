@@ -34,7 +34,7 @@ func RunSQL(dbURL string, filePath string) (*sqlx.DB, error) {
 func CreateDB(dbURL string) (*sqlx.DB, error) {
 	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
-		zap.S().Errorf("Unable to establish database connection: %s", err.Error())
+		zap.S().Errorf("establish database connection: %s", err.Error())
 		os.Exit(1)
 	}
 
