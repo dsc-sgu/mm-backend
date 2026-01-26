@@ -151,7 +151,10 @@ func main() {
 
 	httpServer := fuego.NewServer(
 		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
-		fuego.WithGlobalMiddlewares(corsMiddleware.Handler, logger.ZapMiddleware()),
+		fuego.WithGlobalMiddlewares(
+			corsMiddleware.Handler,
+			logger.ZapMiddleware(),
+		),
 	)
 
 	cookieConfig := cookie.DefaultCookieConfig()

@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -38,7 +39,10 @@ func (c *Service) Login(
 ) (LoginResponse, http.Cookie, error) {
 	user, err := c.GetUserByEmail(ctx, body.Email)
 	if err != nil {
-		return LoginResponse{}, http.Cookie{}, fmt.Errorf("getting user: %w", err)
+		return LoginResponse{}, http.Cookie{}, fmt.Errorf(
+			"getting user: %w",
+			err,
+		)
 	}
 
 	if user == nil {
@@ -51,7 +55,10 @@ func (c *Service) Login(
 
 	s, err := c.sessionRepo.Create(user.ID, c.cookieConfig.SessionLifetime)
 	if err != nil {
-		return LoginResponse{}, http.Cookie{}, fmt.Errorf("creating session: %w", err)
+		return LoginResponse{}, http.Cookie{}, fmt.Errorf(
+			"creating session: %w",
+			err,
+		)
 	}
 
 	response := LoginResponse{

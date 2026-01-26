@@ -36,7 +36,11 @@ func Hash(password string, salt []byte) []byte {
 	return hash
 }
 
-func Valid(enteredPassword string, passwordHash []byte, passwordSalt []byte) bool {
+func Valid(
+	enteredPassword string,
+	passwordHash []byte,
+	passwordSalt []byte,
+) bool {
 	enteredPasswordHash := Hash(enteredPassword, passwordSalt)
 	return bytes.Equal(enteredPasswordHash, passwordHash)
 }

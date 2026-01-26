@@ -13,14 +13,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dsc-sgu/mm-backend/pkg/git"
-
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/google/uuid"
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -135,7 +135,11 @@ func GetRepoID(path string, fingerprint string) (RepoID, error) {
 		return RepoID{}, err
 	}
 
-	return RepoID{ParticipantID: participantID, CourseID: courseID, TaskID: taskID}, nil
+	return RepoID{
+		ParticipantID: participantID,
+		CourseID:      courseID,
+		TaskID:        taskID,
+	}, nil
 }
 
 type RepoManager interface {
@@ -192,11 +196,22 @@ func GitListMiddleware(next ssh.Handler) ssh.Handler {
 		}
 		for _, dir := range dest {
 			wish.Println(sess, fmt.Sprintf("• %s - ", dir.Name()))
-			wish.Println(sess, fmt.Sprintf("git clone ssh://%s/%s", net.JoinHostPort(host, port), dir.Name()))
+			wish.Println(
+				sess,
+				fmt.Sprintf(
+					"git clone ssh://%s/%s",
+					net.JoinHostPort(host, port),
+					dir.Name(),
+				),
+			)
 		}
 		wish.Printf(sess, "\n\n### Add some repos! ###\n\n")
 		wish.Printf(sess, "> cd some_repo\n")
-		wish.Printf(sess, "> git remote add wish_test ssh://%s/some_repo\n", net.JoinHostPort(host, port))
+		wish.Printf(
+			sess,
+			"> git remote add wish_test ssh://%s/some_repo\n",
+			net.JoinHostPort(host, port),
+		)
 		wish.Printf(sess, "> git push wish_test\n\n\n")
 		next(sess)
 	}

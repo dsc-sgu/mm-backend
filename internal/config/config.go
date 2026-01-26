@@ -18,7 +18,14 @@ type PostgresConfig struct {
 }
 
 func (p *PostgresConfig) GetURL() string {
-	return fmt.Sprintf("postgresql://%s:%s@%s:%d/%s?sslmode=disable", p.User, p.Password, p.Host, p.Port, p.Database)
+	return fmt.Sprintf(
+		"postgresql://%s:%s@%s:%d/%s?sslmode=disable",
+		p.User,
+		p.Password,
+		p.Host,
+		p.Port,
+		p.Database,
+	)
 }
 
 type RedisConfig struct {
@@ -71,7 +78,10 @@ func LoadFromEnv() (*Config, error) {
 	_ = godotenv.Load()
 	config := Config{}
 	if err := envconfig.Process(context.Background(), &config); err != nil {
-		return nil, fmt.Errorf("populating config object from environment: %w", err)
+		return nil, fmt.Errorf(
+			"populating config object from environment: %w",
+			err,
+		)
 	}
 
 	applyDefaultAllowOrigins(&config)

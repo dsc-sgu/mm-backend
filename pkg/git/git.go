@@ -36,7 +36,6 @@ import (
 	"github.com/charmbracelet/wish"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-
 	gossh "golang.org/x/crypto/ssh"
 )
 
@@ -89,7 +88,11 @@ type Hooks interface {
 // checked for access on a per repo basis for a ssh.Session public key.
 // Hooks.Push and Hooks.Fetch will be called on successful completion of
 // their commands.
-func Middleware(repoDir string, repoRename func(string, gossh.PublicKey) (string, error), gh Hooks) wish.Middleware {
+func Middleware(
+	repoDir string,
+	repoRename func(string, gossh.PublicKey) (string, error),
+	gh Hooks,
+) wish.Middleware {
 	return func(sh ssh.Handler) ssh.Handler {
 		return func(s ssh.Session) {
 			cmd := s.Command()
