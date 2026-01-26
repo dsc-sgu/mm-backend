@@ -22,25 +22,25 @@ func NewRedisRepo(redisClient *redis.Client) Repo {
 }
 
 func (r *RedisRepo) Create(
-	userId uuid.UUID,
+	userID uuid.UUID,
 	sessionLifetime Seconds,
 ) (*Model, error) {
 	expiration := time.Second * time.Duration(sessionLifetime)
 
 	session := Model{
-		Id:        uuid.New(),
+		ID:        uuid.New(),
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(expiration),
-		UserId:    userId,
+		UserID:    userID,
 	}
 
-	sessionJson, err := json.Marshal(session)
+	sessionJSON, err := json.Marshal(session)
 	if err != nil {
 		return nil, err
 	}
 
-	key := fmt.Sprintf("%s:%s", redisSessionPrefix, session.Id.String())
-	err = r.redisClient.Set(context.Background(), key, sessionJson, expiration).
+	key := fmt.Sprintf("%s:%s", redisSessionPrefix, session.ID.String())
+	err = r.redisClient.Set(context.Background(), key, sessionJSON, expiration).
 		Err()
 	if err != nil {
 		return nil, err
@@ -48,16 +48,16 @@ func (r *RedisRepo) Create(
 
 	zap.L().Debug(
 		"Session created",
-		zap.String("session_id", session.Id.String()),
-		zap.String("user_id", userId.String()),
+		zap.String("session_id", session.ID.String()),
+		zap.String("user_id", userID.String()),
 	)
 
 	return &session, nil
 }
 
-func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
+func (r *RedisRepo) GetByID(id uuid.UUID) (*Model, error) {
 	key := fmt.Sprintf("%s:%s", redisSessionPrefix, id.String())
-	sessionJson, err := r.redisClient.Get(context.Background(), key).Result()
+	sessionJSON, err := r.redisClient.Get(context.Background(), key).Result()
 
 	if err == redis.Nil {
 		zap.L().
@@ -70,7 +70,7 @@ func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
 	}
 
 	var session Model
-	err = json.Unmarshal([]byte(sessionJson), &session)
+	err = json.Unmarshal([]byte(sessionJSON), &session)
 	if err != nil {
 		zap.L().Error("Failed to unmarshal session", zap.Error(err))
 		return nil, err
@@ -80,7 +80,7 @@ func (r *RedisRepo) GetById(id uuid.UUID) (*Model, error) {
 	return &session, nil
 }
 
-func (r *RedisRepo) DeleteById(id uuid.UUID) error {
+func (r *RedisRepo) DeleteByID(id uuid.UUID) error {
 	key := fmt.Sprintf("%s:%s", redisSessionPrefix, id.String())
 
 	err := r.redisClient.Del(context.Background(), key).Err()

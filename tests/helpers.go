@@ -203,7 +203,7 @@ func CreateTestUser(
 	var createdUser users.RegisterResponse
 	require.NoError(t, json.NewDecoder(userResp.Body).Decode(&createdUser))
 
-	return createdUser.Id
+	return createdUser.ID
 }
 
 func CreateTestDiscipline(
@@ -247,7 +247,7 @@ func CreateTestDiscipline(
 		json.NewDecoder(disciplineResp.Body).Decode(&createdDiscipline),
 	)
 
-	return createdDiscipline.Id
+	return createdDiscipline.ID
 }
 
 func CreateTestCourse(
@@ -264,7 +264,7 @@ func CreateTestCourse(
 	)
 
 	courseBody, _ := json.Marshal(courses.CreateCourse{
-		DisciplineId: disciplineID,
+		DisciplineID: disciplineID,
 		Name:         name,
 	})
 
@@ -290,7 +290,7 @@ func CreateTestCourse(
 	var createdCourse courses.Course
 	require.NoError(t, json.NewDecoder(courseResp.Body).Decode(&createdCourse))
 
-	return createdCourse.Id
+	return createdCourse.ID
 }
 
 func CreateTestBlock(
@@ -307,7 +307,7 @@ func CreateTestBlock(
 	)
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
-		CourseId:  courseID,
+		CourseID:  courseID,
 		BlockType: "test",
 		Data:      []byte("true"),
 	})
@@ -336,5 +336,5 @@ func CreateTestBlock(
 	var createdBlock blocks.Block
 	require.NoError(t, json.NewDecoder(blockResp.Body).Decode(&createdBlock))
 
-	return createdBlock.Id
+	return createdBlock.ID
 }

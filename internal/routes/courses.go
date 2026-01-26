@@ -46,7 +46,7 @@ func (c *CourseController) CreateCourse(
 	}
 
 	response := courses.CreateResponse{
-		Id: course.Id,
+		ID: course.ID,
 	}
 
 	return &response, nil
@@ -57,16 +57,16 @@ func (c *CourseController) GetPaginatedCourses(
 	ctx fuego.ContextNoBody,
 ) ([]courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
-	pathId := ctx.QueryParam("last_id")
+	pathID := ctx.QueryParam("last_id")
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
 		return nil, fuego.BadRequestError{Detail: err.Error()}
 	}
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
-		if pathId == "" {
+		if pathID == "" {
 			id = uuid.Nil
 		} else {
 			return nil, fuego.BadRequestError{
@@ -86,16 +86,16 @@ func (c *CourseController) GetPaginatedCourses(
 func (c *CourseController) GetCourse(
 	ctx fuego.ContextNoBody,
 ) (*courses.Course, error) {
-	pathId := ctx.PathParam("course_id")
+	pathID := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	course, err := c.courseService.GetCourseById(ctx.Context(), id)
+	course, err := c.courseService.GetCourseByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -106,9 +106,9 @@ func (c *CourseController) GetCourse(
 func (c *CourseController) PatchCourse(
 	ctx fuego.ContextWithBody[courses.UpdateCourse],
 ) (*courses.Course, error) {
-	pathId := ctx.PathParam("course_id")
+	pathID := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -120,7 +120,7 @@ func (c *CourseController) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	course, err := c.courseService.UpdateCourseById(id, &body)
+	course, err := c.courseService.UpdateCourseByID(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -131,38 +131,38 @@ func (c *CourseController) PatchCourse(
 func (c *CourseController) DeleteCourse(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
-	pathId := ctx.PathParam("course_id")
+	pathID := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	blockId, err := uuid.Parse(pathId)
+	blockID, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	err = c.courseService.DeleteCourseById(id)
+	err = c.courseService.DeleteCourseByID(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
-	linkedBlocks, err := c.blockService.GetAllBlocksByCourseId(blockId)
+	linkedBlocks, err := c.blockService.GetAllBlocksByCourseID(blockID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
 	for _, block := range linkedBlocks {
 		updatedBlock := blocks.UpdateBlock{
-			CourseId: uuid.Nil,
+			CourseID: uuid.Nil,
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := c.blockService.UpdateBlockById(block.Id, &updatedBlock)
+		_, err := c.blockService.UpdateBlockByID(block.ID, &updatedBlock)
 		if err != nil {
 			return nil, fuego.InternalServerError{Detail: err.Error()}
 		}

@@ -62,7 +62,7 @@ func (c *UserController) Register(
 	}
 
 	response := users.RegisterResponse{
-		Id: user.Id,
+		ID: user.ID,
 	}
 
 	return &response, nil
@@ -95,7 +95,7 @@ func (c *UserController) GetSession(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	user, err := c.svc.GetUserById(ctx.Context(), userID)
+	user, err := c.svc.GetUserByID(ctx.Context(), userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

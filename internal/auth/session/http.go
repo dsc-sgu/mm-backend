@@ -16,7 +16,7 @@ func CheckHTTPReq(cookie *http.Cookie, sessionRepo Repo, logger *zap.Logger) (*M
 		return nil, err
 	}
 
-	session, err := sessionRepo.GetById(u)
+	session, err := sessionRepo.GetByID(u)
 	if err != nil {
 		return nil, err
 	}

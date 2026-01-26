@@ -7,28 +7,28 @@ import (
 )
 
 type Model struct {
-	Id           uuid.UUID `db:"id"`
+	ID           uuid.UUID `db:"id"`
 	CreatedAt    time.Time `db:"created_at"`
 	FirstName    string    `db:"first_name"`
 	LastName     string    `db:"last_name"`
 	Patronymic   string    `db:"patronymic"`
 	Username     string    `db:"username"`
 	Email        string    `db:"email"`
-	AvatarUrl    string    `db:"avatar_url"`
+	AvatarURL    string    `db:"avatar_url"`
 	Role         string    `db:"role"`
 	PasswordHash []byte    `db:"password_hash"`
 	PasswordSalt []byte    `db:"password_salt"`
 }
 
 type OutModel struct {
-	Id         uuid.UUID `json:"id"`
+	ID         uuid.UUID `json:"id"`
 	CreatedAt  time.Time `json:"createdAt"`
 	FirstName  string    `json:"firstName"`
 	LastName   string    `json:"lastName"`
 	Patronymic string    `json:"patronymic"`
 	Username   string    `json:"username"`
 	Email      string    `json:"email"`
-	AvatarUrl  string    `json:"avatarUrl"`
+	AvatarURL  string    `json:"avatarUrl"`
 	Role       string    `json:"role"`
 }
 
@@ -56,12 +56,12 @@ type RegisterModel struct {
 }
 
 type LoginResponse struct {
-	SessionId uuid.UUID `json:"sessionId"`
+	SessionID uuid.UUID `json:"sessionId"`
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
-	UserId    uuid.UUID `json:"userId"`
+	UserID    uuid.UUID `json:"userId"`
 }
 
 type RegisterResponse struct {
-	Id uuid.UUID `json:"id"`
+	ID uuid.UUID `json:"id"`
 }

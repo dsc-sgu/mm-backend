@@ -33,7 +33,7 @@ func (c *DisciplineController) CreateDiscipline(
 	}
 
 	response := disciplines.CreateResponse{
-		Id: discipline.Id,
+		ID: discipline.ID,
 	}
 
 	return &response, nil
@@ -42,16 +42,16 @@ func (c *DisciplineController) CreateDiscipline(
 func (c *DisciplineController) GetDiscipline(
 	ctx fuego.ContextNoBody,
 ) (*disciplines.Discipline, error) {
-	pathId := ctx.PathParam("discipline_id")
+	pathID := ctx.PathParam("discipline_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
 		}
 	}
 
-	discipline, err := c.svc.GetDisciplineById(ctx.Context(), id)
+	discipline, err := c.svc.GetDisciplineByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -62,9 +62,9 @@ func (c *DisciplineController) GetDiscipline(
 func (c *DisciplineController) PatchDiscipline(
 	ctx fuego.ContextWithBody[disciplines.PatchDiscipline],
 ) (*disciplines.Discipline, error) {
-	pathId := ctx.PathParam("discipline_id")
+	pathID := ctx.PathParam("discipline_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -76,7 +76,7 @@ func (c *DisciplineController) PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := c.svc.UpdateDisciplineById(id, &body)
+	discipline, err := c.svc.UpdateDisciplineByID(id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -87,9 +87,9 @@ func (c *DisciplineController) PatchDiscipline(
 func (c *DisciplineController) DeleteDiscipline(
 	ctx fuego.ContextNoBody,
 ) (any, error) {
-	pathId := ctx.PathParam("discipline_id")
+	pathID := ctx.PathParam("discipline_id")
 
-	id, err := uuid.Parse(pathId)
+	id, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -101,7 +101,7 @@ func (c *DisciplineController) DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	err = c.svc.DeleteDisciplineById(id)
+	err = c.svc.DeleteDisciplineByID(id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

@@ -47,7 +47,7 @@ func (a App) Fetch(repo string, _ ssh.PublicKey) {
 
 func RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 	fingerprint := gossh.FingerprintSHA256(publicKey)
-	repoID, err := GetRepoId(original, fingerprint)
+	repoID, err := GetRepoID(original, fingerprint)
 	if err != nil {
 		return "", err
 	}
@@ -60,8 +60,8 @@ func RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 }
 
 type RepoID struct {
-	CourseId      uuid.UUID `json:"courseId"      binding:"required"`
-	TaskId        uuid.UUID `json:"taskId"        binding:"required"`
+	CourseID      uuid.UUID `json:"courseId"      binding:"required"`
+	TaskID        uuid.UUID `json:"taskId"        binding:"required"`
 	ParticipantID uuid.UUID `json:"participantId" binding:"required"`
 }
 
@@ -91,7 +91,7 @@ func GetTask(name string) (uuid.UUID, error) {
 	return uuid.Parse("e7cf6012-1348-434b-9d54-bd89c9e6e95e")
 }
 
-func GetRepoId(path string, fingerprint string) (RepoID, error) {
+func GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if strings.HasPrefix(path, string(os.PathSeparator)) {
 		path = path[len(string(os.PathSeparator)):]
 	}
@@ -135,7 +135,7 @@ func GetRepoId(path string, fingerprint string) (RepoID, error) {
 		return RepoID{}, err
 	}
 
-	return RepoID{ParticipantID: participantID, CourseId: courseID, TaskId: taskID}, nil
+	return RepoID{ParticipantID: participantID, CourseID: courseID, TaskID: taskID}, nil
 }
 
 type RepoManager interface {

@@ -49,26 +49,26 @@ func (c *Service) Login(
 		return LoginResponse{}, http.Cookie{}, ErrWrongCredentials
 	}
 
-	s, err := c.sessionRepo.Create(user.Id, c.cookieConfig.SessionLifetime)
+	s, err := c.sessionRepo.Create(user.ID, c.cookieConfig.SessionLifetime)
 	if err != nil {
 		return LoginResponse{}, http.Cookie{}, fmt.Errorf("creating session: %w", err)
 	}
 
 	response := LoginResponse{
-		SessionId: s.Id,
+		SessionID: s.ID,
 		CreatedAt: s.CreatedAt,
 		ExpiresAt: s.ExpiresAt,
-		UserId:    user.Id,
+		UserID:    user.ID,
 	}
 
 	cookie := http.Cookie{
 		Name:     session.CookieName,
-		Value:    s.Id.String(),
+		Value:    s.ID.String(),
 		Path:     c.cookieConfig.Path,
 		MaxAge:   c.cookieConfig.SessionLifetime,
 		Domain:   c.cookieConfig.Domain,
 		Secure:   c.cookieConfig.Secure,
-		HttpOnly: c.cookieConfig.HttpOnly,
+		HttpOnly: c.cookieConfig.HTTPOnly,
 	}
 
 	return response, cookie, nil
@@ -82,7 +82,7 @@ func (c *Service) Logout(
 		return ErrWrongCredentials
 	}
 
-	if err := c.sessionRepo.DeleteById(userID); err != nil {
+	if err := c.sessionRepo.DeleteByID(userID); err != nil {
 		return ErrSessionNotFound
 	} else {
 		return nil

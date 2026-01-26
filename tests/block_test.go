@@ -62,7 +62,7 @@ func TestCreateBlock(t *testing.T) {
 	require.NotZero(t, blockID)
 }
 
-func TestGetBlockById(t *testing.T) {
+func TestGetBlockByID(t *testing.T) {
 	ctx := context.Background()
 
 	net, err := network.New(ctx)
@@ -138,7 +138,7 @@ func TestGetBlockById(t *testing.T) {
 		json.NewDecoder(getBlockResp.Body).Decode(&returnedBlock),
 	)
 
-	require.Equal(t, courseID, returnedBlock.CourseId)
+	require.Equal(t, courseID, returnedBlock.CourseID)
 }
 
 func TestUnlinkBlock(t *testing.T) {
@@ -218,6 +218,6 @@ func TestUnlinkBlock(t *testing.T) {
 		json.NewDecoder(unlinkBlockResp.Body).Decode(&returnedBlock),
 	)
 
-	require.Equal(t, uuid.Nil, returnedBlock.CourseId)
+	require.Equal(t, uuid.Nil, returnedBlock.CourseID)
 
 }

@@ -13,25 +13,25 @@ import (
 )
 
 const (
-	createCourseSql = `
+	createCourseSQL = `
 		INSERT INTO course (discipline_id, owner_id, name, created_at)
 	VALUES (:discipline_id, :owner_id, :name, :created_at)
 		RETURNING id
 	`
 
-	getCourseByIdSql = `
+	getCourseByIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM course
 		WHERE id = $1
 	`
 
-	getCourseByNameSql = `
+	getCourseByNameSQL = `
     SELECT id, discipline_id, owner_id, name, created_at
     FROM course
     WHERE name = $1
   `
 
-	getAllCoursesByCourseIdSql = `
+	getAllCoursesByCourseIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM course
 		WHERE id > $2
@@ -39,14 +39,14 @@ const (
 		LIMIT $1
 	`
 
-	updateCourseByIdSql = `
+	updateCourseByIdSQL = `
 		UPDATE course
 		SET owner_id = $1, name = $2
 		WHERE id = $3
 		RETURNING id, discipline_id, owner_id, name, created_at
 	`
 
-	deleteCourseByIdSql = `
+	deleteCourseByIdSQL = `
 		DELETE FROM course
 		WHERE id = $1
 	`
@@ -54,18 +54,18 @@ const (
 
 func (r *PGRepo) CreateCourse(
 	model *courses.CreateCourse,
-	ownerId uuid.UUID,
+	ownerID uuid.UUID,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", createCourseSql))
+	zap.L().Debug("Executing query", zap.String("query", createCourseSQL))
 
 	newCourse := courses.Course{
-		DisciplineId: model.DisciplineId,
-		OwnerId:      ownerId,
+		DisciplineID: model.DisciplineID,
+		OwnerID:      ownerID,
 		Name:         model.Name,
 		CreatedAt:    time.Now(),
 	}
 
-	rows, err := r.db.NamedQuery(createCourseSql, newCourse)
+	rows, err := r.db.NamedQuery(createCourseSQL, newCourse)
 	if err != nil {
 		return nil, fmt.Errorf("create course: insert in db: %w", err)
 	}
@@ -76,7 +76,7 @@ func (r *PGRepo) CreateCourse(
 	}()
 
 	if rows.Next() {
-		if err := rows.Scan(&newCourse.Id); err != nil {
+		if err := rows.Scan(&newCourse.ID); err != nil {
 			return nil, fmt.Errorf("create course: scan course id: %w", err)
 		}
 	}
@@ -84,14 +84,14 @@ func (r *PGRepo) CreateCourse(
 	return &newCourse, nil
 }
 
-func (r *PGRepo) GetCourseById(
+func (r *PGRepo) GetCourseByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSQL))
 
 	var course courses.Course
-	err := r.db.GetContext(ctx, &course, getCourseByIdSql, id)
+	err := r.db.GetContext(ctx, &course, getCourseByIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -105,10 +105,10 @@ func (r *PGRepo) GetCourseByName(
 	ctx context.Context,
 	name string,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSql))
+	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
-	err := r.db.GetContext(ctx, &course, getCourseByNameSql, name)
+	err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -120,14 +120,14 @@ func (r *PGRepo) GetCourseByName(
 
 func (r *PGRepo) GetPaginatedCourses(
 	limit int,
-	lastId uuid.UUID,
+	lastID uuid.UUID,
 ) ([]courses.Course, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSql))
+		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
 
 	var course courses.Course
 	var courseList []courses.Course
-	rows, err := r.db.Queryx(getAllCoursesByCourseIdSql, limit, lastId)
+	rows, err := r.db.Queryx(getAllCoursesByCourseIdSQL, limit, lastID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -152,15 +152,15 @@ func (r *PGRepo) GetPaginatedCourses(
 	return courseList, nil
 }
 
-func (r *PGRepo) UpdateCourseById(
+func (r *PGRepo) UpdateCourseByID(
 	id uuid.UUID,
 	update *courses.UpdateCourse,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSQL))
 
 	row := r.db.QueryRowx(
-		updateCourseByIdSql,
-		update.OwnerId,
+		updateCourseByIdSQL,
+		update.OwnerID,
 		update.Name,
 		id,
 	)
@@ -175,10 +175,10 @@ func (r *PGRepo) UpdateCourseById(
 	return &course, nil
 }
 
-func (r *PGRepo) DeleteCourseById(id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSql))
+func (r *PGRepo) DeleteCourseByID(id uuid.UUID) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSQL))
 
-	res, err := r.db.Exec(deleteCourseByIdSql, id)
+	res, err := r.db.Exec(deleteCourseByIdSQL, id)
 	if err != nil {
 		return err
 	}

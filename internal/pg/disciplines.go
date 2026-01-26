@@ -12,26 +12,26 @@ import (
 )
 
 const (
-	createDisciplineSql = `
+	createDisciplineSQL = `
 		INSERT INTO discipline (name)
 		VALUES (:name)
 		RETURNING id
 	`
 
-	getDisciplineByIdSql = `
+	getDisciplineByIdSQL = `
 		SELECT id, name
 		FROM discipline
 		WHERE id = $1
 	`
 
-	updateDisciplineByIdSql = `
+	updateDisciplineByIdSQL = `
 		UPDATE discipline
 		SET name = $1
 		WHERE id = $2
 		RETURNING id, name
 	`
 
-	deleteDisciplineByIdSql = `
+	deleteDisciplineByIdSQL = `
 		DELETE FROM discipline
 		WHERE id = $1
 	`
@@ -40,13 +40,13 @@ const (
 func (r *PGRepo) CreateDiscipline(
 	model *disciplines.CreateDiscipline,
 ) (*disciplines.Discipline, error) {
-	zap.L().Debug("Executing query", zap.String("query", createDisciplineSql))
+	zap.L().Debug("Executing query", zap.String("query", createDisciplineSQL))
 
 	newDiscipline := disciplines.Discipline{
 		Name: model.Name,
 	}
 
-	rows, err := r.db.NamedQuery(createDisciplineSql, newDiscipline)
+	rows, err := r.db.NamedQuery(createDisciplineSQL, newDiscipline)
 	if err != nil {
 		return nil, fmt.Errorf("create discipline: insert in db: %w", err)
 	}
@@ -58,7 +58,7 @@ func (r *PGRepo) CreateDiscipline(
 	}()
 
 	if rows.Next() {
-		if err := rows.Scan(&newDiscipline.Id); err != nil {
+		if err := rows.Scan(&newDiscipline.ID); err != nil {
 			return nil, fmt.Errorf(
 				"create discipline: scan discipline id: %w",
 				err,
@@ -69,14 +69,14 @@ func (r *PGRepo) CreateDiscipline(
 	return &newDiscipline, nil
 }
 
-func (r *PGRepo) GetDisciplineById(
+func (r *PGRepo) GetDisciplineByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*disciplines.Discipline, error) {
-	zap.L().Debug("Executing query", zap.String("query", getDisciplineByIdSql))
+	zap.L().Debug("Executing query", zap.String("query", getDisciplineByIdSQL))
 
 	var discipline disciplines.Discipline
-	err := r.db.GetContext(ctx, &discipline, getDisciplineByIdSql, id)
+	err := r.db.GetContext(ctx, &discipline, getDisciplineByIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -86,15 +86,15 @@ func (r *PGRepo) GetDisciplineById(
 	return &discipline, nil
 }
 
-func (r *PGRepo) UpdateDisciplineById(
+func (r *PGRepo) UpdateDisciplineByID(
 	id uuid.UUID,
 	model *disciplines.PatchDiscipline,
 ) (*disciplines.Discipline, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", updateDisciplineByIdSql))
+		Debug("Executing query", zap.String("query", updateDisciplineByIdSQL))
 
 	row := r.db.QueryRowx(
-		updateDisciplineByIdSql,
+		updateDisciplineByIdSQL,
 		model.Name,
 		id,
 	)
@@ -109,11 +109,11 @@ func (r *PGRepo) UpdateDisciplineById(
 	return &discipline, nil
 }
 
-func (r *PGRepo) DeleteDisciplineById(id uuid.UUID) error {
+func (r *PGRepo) DeleteDisciplineByID(id uuid.UUID) error {
 	zap.L().
-		Debug("Executing query", zap.String("query", deleteDisciplineByIdSql))
+		Debug("Executing query", zap.String("query", deleteDisciplineByIdSQL))
 
-	res, err := r.db.Exec(deleteDisciplineByIdSql, id)
+	res, err := r.db.Exec(deleteDisciplineByIdSQL, id)
 	if err != nil {
 		return err
 	}

@@ -6,7 +6,7 @@ type CookieConfig struct {
 	SessionLifetime Seconds
 	Secure          bool
 	Path            string
-	HttpOnly        bool
+	HTTPOnly        bool
 	Domain          string
 }
 
@@ -15,7 +15,7 @@ func DefaultCookieConfig() *CookieConfig {
 		SessionLifetime: 604800, // 7 weeks
 		Secure:          true,
 		Path:            "/",
-		HttpOnly:        true,
+		HTTPOnly:        true,
 		Domain:          "",
 	}
 }
