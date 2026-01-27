@@ -68,7 +68,7 @@ func TestLoginUser(t *testing.T) {
 		port.Port(),
 	)
 
-	body, _ := json.Marshal(users.LoginModel{
+	body, _ := json.Marshal(users.LoginUser{
 		Email:    "test@email.com",
 		Password: "password",
 	})

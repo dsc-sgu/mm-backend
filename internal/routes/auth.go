@@ -23,7 +23,7 @@ func NewUserController(
 }
 
 func (c *UserController) Login(
-	ctx fuego.ContextWithBody[users.LoginModel],
+	ctx fuego.ContextWithBody[users.LoginUser],
 ) (*users.LoginResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
@@ -40,14 +40,14 @@ func (c *UserController) Login(
 }
 
 func (c *UserController) Register(
-	ctx fuego.ContextWithBody[users.RegisterModel],
+	ctx fuego.ContextWithBody[users.RegisterUser],
 ) (*users.RegisterResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	createUser := users.CreateModel{
+	createUser := users.CreateUser{
 		FirstName: body.FirstName,
 		LastName:  body.LastName,
 		Username:  body.Username,
@@ -89,7 +89,7 @@ func (c *UserController) Logout(
 
 func (c *UserController) GetSession(
 	ctx fuego.ContextNoBody,
-) (*users.Model, error) {
+) (*users.User, error) {
 	userID := session.UserIDFromContext(ctx.Context())
 	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}

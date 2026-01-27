@@ -173,7 +173,7 @@ func CreateTestUser(
 		port.Port(),
 	)
 
-	userBody, _ := json.Marshal(users.RegisterModel{
+	userBody, _ := json.Marshal(users.RegisterUser{
 		FirstName: firstName,
 		LastName:  lastName,
 		Username:  username,
