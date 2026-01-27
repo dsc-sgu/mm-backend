@@ -79,7 +79,7 @@ func LoadFromEnv() (*Config, error) {
 	config := Config{}
 	if err := envconfig.Process(context.Background(), &config); err != nil {
 		return nil, fmt.Errorf(
-			"populating config object from environment: %w",
+			"populate config object from environment: %w",
 			err,
 		)
 	}
