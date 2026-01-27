@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	api "github.com/dsc-sgu/mm-backend/internal"
+	"github.com/dsc-sgu/mm-backend/internal/attempt"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
