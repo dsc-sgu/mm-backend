@@ -17,6 +17,7 @@ import (
 
 func SetupRoutes(
 	g *fuego.Server,
+	attemptController *routes.AttemptController,
 	blockController *routes.BlockController,
 	courseController *routes.CourseController,
 	disciplineController *routes.DisciplineController,
@@ -38,6 +39,22 @@ func SetupRoutes(
 		g,
 		"",
 		option.Middleware(mws...),
+	)
+
+	attemptGroup := fuego.Group(
+		privateGroup,
+		"/attempts",
+		option.Summary("Attempt API"),
+	)
+
+	fuego.Get(
+		attemptGroup,
+		"/diff",
+		attemptController.GetDiff,
+		option.Summary("Get attempt diff by two id"),
+		option.QueryInt("id1", "First attempt ID"),
+		option.QueryInt("id2", "Second attempt ID"),
+		option.DefaultStatusCode(http.StatusOK),
 	)
 
 	blockGroup := fuego.Group(
