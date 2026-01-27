@@ -22,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	api "github.com/dsc-sgu/mm-backend/internal"
+	"github.com/dsc-sgu/mm-backend/internal/attempt"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
@@ -164,6 +165,7 @@ func main() {
 	pgRepo := pg.NewPGRepo(dbConn)
 
 	sessionRepo := session.NewRedisRepo(redisClient)
+	attemptService := attempt.NewService()
 	blockService := blocks.NewService(pgRepo)
 	courseService := courses.NewService(pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
@@ -171,6 +173,7 @@ func main() {
 	gitService := git.NewService(pgRepo)
 
 	// Controller initialization
+	attemptController := routes.NewAttemptController(attemptService)
 	userController := routes.NewUserController(userService)
 	blockController := routes.NewBlockController(blockService)
 	courseController := routes.NewCourseController(courseService, blockService)
@@ -181,6 +184,7 @@ func main() {
 
 	api.SetupRoutes(
 		v1,
+		attemptController,
 		blockController,
 		courseController,
 		disciplineController,
