@@ -4,9 +4,6 @@ package gitservice
 // directly to the server. To test `ssh -p 23233 localhost` once it's running.
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net"
@@ -16,10 +13,10 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	gogit "github.com/go-git/go-git/v6"
 	"github.com/google/uuid"
 	gossh "golang.org/x/crypto/ssh"
 
+	"github.com/dsc-sgu/mm-backend/internal/attempt"
 	"github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
@@ -52,27 +49,11 @@ func RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 		return "", err
 	}
 
-	println(repoID.intoPath())
+	println(repoID.IntoPath())
 
-	repoPath := fmt.Sprintf("%s.git", repoID.intoPath())
+	repoPath := fmt.Sprintf("%s.git", repoID.IntoPath())
 
 	return repoPath, nil
-}
-
-type RepoID struct {
-	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
-	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
-}
-
-func (repoID *RepoID) intoPath() string {
-	hasher := sha1.New()
-	// NOTE: error shouldn't happen
-	data, _ := json.Marshal(repoID)
-
-	hasher.Write(data)
-	hashSum := hasher.Sum(nil)
-	return hex.EncodeToString(hashSum)
 }
 
 func GetParticipant(fingerprint string) (uuid.UUID, error) {
@@ -91,7 +72,7 @@ func GetTask(name string) (uuid.UUID, error) {
 	return uuid.Parse("e7cf6012-1348-434b-9d54-bd89c9e6e95e")
 }
 
-func GetRepoID(path string, fingerprint string) (RepoID, error) {
+func GetRepoID(path string, fingerprint string) (attempt.RepoID, error) {
 	if strings.HasPrefix(path, string(os.PathSeparator)) {
 		path = path[len(string(os.PathSeparator)):]
 	}
@@ -99,7 +80,7 @@ func GetRepoID(path string, fingerprint string) (RepoID, error) {
 	pathList := strings.Split(path, string(os.PathSeparator))
 	l := len(pathList)
 	if l == 0 {
-		return RepoID{}, fmt.Errorf("path is empty")
+		return attempt.RepoID{}, fmt.Errorf("path is empty")
 	}
 
 	last := pathList[l-1]
@@ -117,54 +98,25 @@ func GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if len(pathList) == 1 {
 		// TODO: right now, i don't know what will be the interface for getting a task that
 		// is course-wide.
-		return RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
+		return attempt.RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
 	} else if len(pathList) == 2 {
 		var err error
 		courseID, err = GetCourse(pathList[0])
 		if err != nil {
-			return RepoID{}, err
+			return attempt.RepoID{}, err
 		}
 		taskID, err = GetTask(pathList[0])
 		if err != nil {
-			return RepoID{}, err
+			return attempt.RepoID{}, err
 		}
 	}
 
 	participantID, err := GetParticipant(fingerprint)
 	if err != nil {
-		return RepoID{}, err
+		return attempt.RepoID{}, err
 	}
 
-	return RepoID{
-		ParticipantID: participantID,
-		CourseID:      courseID,
-		TaskID:        taskID,
-	}, nil
-}
-
-type RepoManager interface {
-	InitRepo(repoID RepoID) error
-	// RemoveRepo(repoID RepoID) error
-	// MakeAttempt(repoID RepoID, fileInfo []FileInfo) (attempt Attempt, err error)
-	// GetAttempts(repoID RepoID) ([]Attempt, error)
-	// GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
-}
-
-type GitManager struct{}
-
-var _ RepoManager = &GitManager{}
-
-func (mng *GitManager) InitRepo(repoID RepoID) error {
-	repoName := repoID.intoPath()
-
-	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
-	repo, err := gogit.PlainInit(repoPath, true)
-	if err != nil {
-		return err
-	}
-	fmt.Println(repo)
-
-	return nil
+	return attempt.RepoID{ParticipantID: participantID, CourseID: courseID, TaskID: taskID}, nil
 }
 
 func CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
