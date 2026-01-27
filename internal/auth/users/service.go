@@ -40,7 +40,7 @@ func (c *Service) Login(
 	user, err := c.GetUserByEmail(ctx, body.Email)
 	if err != nil {
 		return LoginResponse{}, http.Cookie{}, fmt.Errorf(
-			"getting user: %w",
+			"get user: %w",
 			err,
 		)
 	}
@@ -56,7 +56,7 @@ func (c *Service) Login(
 	s, err := c.sessionRepo.Create(user.ID, c.cookieConfig.SessionLifetime)
 	if err != nil {
 		return LoginResponse{}, http.Cookie{}, fmt.Errorf(
-			"creating session: %w",
+			"create session: %w",
 			err,
 		)
 	}
