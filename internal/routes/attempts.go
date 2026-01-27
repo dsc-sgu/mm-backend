@@ -10,7 +10,7 @@ import (
 )
 
 type AttemptController struct {
-	attemtpService *attempt.Service
+	attemptService *attempt.Service
 }
 
 func NewAttemptController(
@@ -21,7 +21,7 @@ func NewAttemptController(
 	}
 }
 
-func (a *AttemptController) GetDiff(
+func (c *AttemptController) GetDiff(
 	ctx fuego.ContextNoBody,
 ) ([]string, error) {
 	AttemptID1 := ctx.QueryParam("attemptID1")
@@ -43,7 +43,7 @@ func (a *AttemptController) GetDiff(
 		}
 	}
 
-	diff, err := a.attemtpService.GetDiff(id1, id2)
+	diff, err := c.attemptService.GetDiff(id1, id2)
 
 	if err != nil {
 		return nil, fuego.BadRequestError{
@@ -51,5 +51,30 @@ func (a *AttemptController) GetDiff(
 		}
 	}
 
-	return diff, err
+	return diff, nil
+}
+
+func (c *AttemptController) GetAttempts(
+	ctx fuego.ContextNoBody,
+) ([]attempt.Attempt, error) {
+	taskId, err := uuid.Parse(ctx.PathParam("task_id"))
+	if err != nil {
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
+	}
+
+	participantId, err := uuid.Parse(ctx.PathParam("participant_id"))
+	if err != nil {
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
+	}
+
+	attemptList, err := c.attemptService.GetAttempts(taskId, participantId)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return attemptList, nil
 }
