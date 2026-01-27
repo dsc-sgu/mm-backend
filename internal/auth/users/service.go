@@ -35,7 +35,7 @@ var (
 
 func (c *Service) Login(
 	ctx context.Context,
-	body LoginModel,
+	body LoginUser,
 ) (LoginResponse, http.Cookie, error) {
 	user, err := c.GetUserByEmail(ctx, body.Email)
 	if err != nil {

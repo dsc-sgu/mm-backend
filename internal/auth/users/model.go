@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type Model struct {
+type User struct {
 	ID           uuid.UUID `db:"id"`
 	CreatedAt    time.Time `db:"created_at"`
 	FirstName    string    `db:"first_name"`
@@ -20,19 +20,7 @@ type Model struct {
 	PasswordSalt []byte    `db:"password_salt"`
 }
 
-type OutModel struct {
-	ID         uuid.UUID `json:"id"`
-	CreatedAt  time.Time `json:"createdAt"`
-	FirstName  string    `json:"firstName"`
-	LastName   string    `json:"lastName"`
-	Patronymic string    `json:"patronymic"`
-	Username   string    `json:"username"`
-	Email      string    `json:"email"`
-	AvatarURL  string    `json:"avatarURL"`
-	Role       string    `json:"role"`
-}
-
-type CreateModel struct {
+type CreateUser struct {
 	FirstName  string `json:"firstName"  binding:"required"`
 	LastName   string `json:"lastName"   binding:"required"`
 	Patronymic string `json:"patronymic" binding:"required"`
@@ -42,12 +30,12 @@ type CreateModel struct {
 	Password   string `json:"password"   binding:"password"`
 }
 
-type LoginModel struct {
+type LoginUser struct {
 	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
-type RegisterModel struct {
+type RegisterUser struct {
 	FirstName string `json:"firstName" binding:"required"`
 	LastName  string `json:"lastName"  binding:"required"`
 	Username  string `json:"username"  binding:"required"`

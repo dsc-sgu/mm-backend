@@ -24,10 +24,10 @@ func NewRedisRepo(redisClient *redis.Client) Repo {
 func (r *RedisRepo) Create(
 	userID uuid.UUID,
 	sessionLifetime Seconds,
-) (*Model, error) {
+) (*Session, error) {
 	expiration := time.Second * time.Duration(sessionLifetime)
 
-	session := Model{
+	session := Session{
 		ID:        uuid.New(),
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(expiration),
@@ -55,7 +55,7 @@ func (r *RedisRepo) Create(
 	return &session, nil
 }
 
-func (r *RedisRepo) GetByID(id uuid.UUID) (*Model, error) {
+func (r *RedisRepo) GetByID(id uuid.UUID) (*Session, error) {
 	key := fmt.Sprintf("%s:%s", redisSessionPrefix, id.String())
 	sessionJSON, err := r.redisClient.Get(context.Background(), key).Result()
 
@@ -69,7 +69,7 @@ func (r *RedisRepo) GetByID(id uuid.UUID) (*Model, error) {
 		return nil, err
 	}
 
-	var session Model
+	var session Session
 	err = json.Unmarshal([]byte(sessionJSON), &session)
 	if err != nil {
 		zap.L().Error("Failed to unmarshal session", zap.Error(err))

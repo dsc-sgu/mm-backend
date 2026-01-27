@@ -14,7 +14,7 @@ func CheckHTTPReq(
 	cookie *http.Cookie,
 	sessionRepo Repo,
 	logger *zap.Logger,
-) (*Model, error) {
+) (*Session, error) {
 	u, err := uuid.Parse(cookie.Value)
 	if err != nil {
 		return nil, err

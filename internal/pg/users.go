@@ -43,7 +43,7 @@ const (
 	`
 )
 
-func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
+func (r *PGRepo) CreateUser(user *users.CreateUser) (*users.User, error) {
 	passwordSalt, err := password.GenerateSalt()
 	if err != nil {
 		return nil, nil
@@ -52,7 +52,7 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 	passwordHash := password.Hash(user.Password, passwordSalt)
 	zap.L().Debug("Executing query", zap.String("query", createUserSQL))
 
-	newUser := users.Model{
+	newUser := users.User{
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
 		Username:     user.Username,
@@ -86,10 +86,10 @@ func (r *PGRepo) CreateUser(user *users.CreateModel) (*users.Model, error) {
 func (r *PGRepo) GetUserByID(
 	ctx context.Context,
 	id uuid.UUID,
-) (*users.Model, error) {
+) (*users.User, error) {
 	zap.L().Debug("Executing query", zap.String("query", getUserByIdSQL))
 
-	var u users.Model
+	var u users.User
 	err := r.db.GetContext(ctx, &u, getUserByIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -103,10 +103,10 @@ func (r *PGRepo) GetUserByID(
 func (r *PGRepo) GetUserByUsername(
 	ctx context.Context,
 	username string,
-) (*users.Model, error) {
+) (*users.User, error) {
 	zap.L().Debug("Executing query", zap.String("query", getUserByUsernameSQL))
 
-	var u users.Model
+	var u users.User
 	err := r.db.GetContext(ctx, &u, getUserByUsernameSQL, username)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -121,10 +121,10 @@ func (r *PGRepo) GetUserByUsername(
 func (r *PGRepo) GetUserByEmail(
 	ctx context.Context,
 	email string,
-) (*users.Model, error) {
+) (*users.User, error) {
 	zap.L().Debug("Executing query", zap.String("query", getUserByEmailSQL))
 
-	var u users.Model
+	var u users.User
 	err := r.db.GetContext(ctx, &u, getUserByEmailSQL, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
