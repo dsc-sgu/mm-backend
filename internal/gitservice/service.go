@@ -82,7 +82,7 @@ func (s *GitService) PushAttempt(
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, storedFile.Content, 0o644); err != nil {
+		if err := os.WriteFile(path, storedFile.Content, 0o644); err != nil { // TODO: isn't implemented
 			return err
 		}
 		if _, err := wt.Add(f.FileName); err != nil {

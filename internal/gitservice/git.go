@@ -98,7 +98,9 @@ func GetRepoID(path string, fingerprint string) (attempt.RepoID, error) {
 	if len(pathList) == 1 {
 		// TODO: right now, i don't know what will be the interface for getting a task that
 		// is course-wide.
-		return attempt.RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
+		return attempt.RepoID{}, fmt.Errorf(
+			"course-wide tasks are not implemented",
+		)
 	} else if len(pathList) == 2 {
 		var err error
 		courseID, err = GetCourse(pathList[0])
@@ -116,7 +118,11 @@ func GetRepoID(path string, fingerprint string) (attempt.RepoID, error) {
 		return attempt.RepoID{}, err
 	}
 
-	return attempt.RepoID{ParticipantID: participantID, CourseID: courseID, TaskID: taskID}, nil
+	return attempt.RepoID{
+		ParticipantID: participantID,
+		CourseID:      courseID,
+		TaskID:        taskID,
+	}, nil
 }
 
 func CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
