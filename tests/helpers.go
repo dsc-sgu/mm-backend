@@ -24,9 +24,8 @@ import (
 // Helper functions for tests
 func initBackend(
 	ctx context.Context,
-	t *testing.T,
 	net *testcontainers.DockerNetwork,
-) (*nat.Port, error) {
+) (testcontainers.Container, *nat.Port, error) {
 	basePort := nat.Port("80/tcp")
 
 	req := testcontainers.ContainerRequest{
@@ -57,30 +56,29 @@ func initBackend(
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, nat.Port(basePort))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &port, nil
+	return container, &port, nil
 }
 
 func initPostgres(
 	ctx context.Context,
-	t *testing.T,
 	net *testcontainers.DockerNetwork,
-) (*nat.Port, error) {
+) (testcontainers.Container, *nat.Port, error) {
 	dbUser := "postgres"
 	dbPassword := "postgres"
 	dbName := "postgres"
 	pgPort := nat.Port("5432/tcp")
 	SQLPath, err := filepath.Abs("../db/CreateTables.sql")
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 	fmt.Println(SQLPath)
 
 	req := testcontainers.ContainerRequest{
@@ -115,24 +113,21 @@ func initPostgres(
 			Started:          true,
 		})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, pgPort)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &port, nil
+	return container, &port, nil
 }
 
 func initRedis(
 	ctx context.Context,
-	t *testing.T,
 	net *testcontainers.DockerNetwork,
-) (*nat.Port, error) {
+) (testcontainers.Container, *nat.Port, error) {
 	redisPort := nat.Port("6379/tcp")
 
 	req := testcontainers.ContainerRequest{
@@ -151,17 +146,37 @@ func initRedis(
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	testcontainers.CleanupContainer(t, container)
 
 	port, err := container.MappedPort(ctx, redisPort)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &port, nil
+	return container, &port, nil
+}
+
+func clearPostgres(t *testing.T) {
+	_, err := testPostgres.Exec(`
+		TRUNCATE TABLE 
+			users, 
+			disciplines, 
+			courses, 
+			blocks
+		RESTART IDENTITY CASCADE;
+	`)
+	require.NoError(t, err)
+}
+
+func clearRedis(t *testing.T) {
+	err := testRedis.FlushDB(context.Background()).Err()
+	require.NoError(t, err)
+}
+
+func clearDatabases(t *testing.T) {
+	clearPostgres(t)
+	clearRedis(t)
 }
 
 func CreateTestUser(

@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,26 +8,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
 func TestCreateBlock(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -39,7 +28,7 @@ func TestCreateBlock(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -47,7 +36,7 @@ func TestCreateBlock(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -55,7 +44,7 @@ func TestCreateBlock(t *testing.T) {
 
 	blockID := CreateTestBlock(
 		t,
-		port,
+		&backendPort,
 		userID,
 		courseID,
 	)
@@ -63,20 +52,11 @@ func TestCreateBlock(t *testing.T) {
 }
 
 func TestGetBlockByID(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -87,7 +67,7 @@ func TestGetBlockByID(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -95,7 +75,7 @@ func TestGetBlockByID(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -103,14 +83,14 @@ func TestGetBlockByID(t *testing.T) {
 
 	blockID := CreateTestBlock(
 		t,
-		port,
+		&backendPort,
 		userID,
 		courseID,
 	)
 
 	getBlockURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/blocks/%s?fake_user_id=%s",
-		port.Port(),
+		backendPort.Port(),
 		blockID,
 		userID,
 	)
@@ -142,20 +122,11 @@ func TestGetBlockByID(t *testing.T) {
 }
 
 func TestUnlinkBlock(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -166,7 +137,7 @@ func TestUnlinkBlock(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -174,7 +145,7 @@ func TestUnlinkBlock(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -182,14 +153,14 @@ func TestUnlinkBlock(t *testing.T) {
 
 	blockID := CreateTestBlock(
 		t,
-		port,
+		&backendPort,
 		userID,
 		courseID,
 	)
 
 	unlinkBlockURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/blocks/%s/%s?fake_user_id=%s",
-		port.Port(),
+		backendPort.Port(),
 		blockID,
 		courseID,
 		userID,

@@ -2,7 +2,6 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,27 +9,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 )
 
 // Tests for courses
 func TestCreateCourse(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -41,7 +30,7 @@ func TestCreateCourse(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -49,7 +38,7 @@ func TestCreateCourse(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -58,20 +47,11 @@ func TestCreateCourse(t *testing.T) {
 }
 
 func TestGetCourseByID(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -82,7 +62,7 @@ func TestGetCourseByID(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -90,7 +70,7 @@ func TestGetCourseByID(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -99,7 +79,7 @@ func TestGetCourseByID(t *testing.T) {
 
 	url := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses/%s?fake_user_id=%s",
-		port.Port(),
+		backendPort.Port(),
 		courseID,
 		userID,
 	)
@@ -127,20 +107,11 @@ func TestGetCourseByID(t *testing.T) {
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -151,7 +122,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -160,7 +131,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	for i := range 5 {
 		id := CreateTestCourse(
 			t,
-			port,
+			&backendPort,
 			userID,
 			disciplineID,
 			fmt.Sprintf("Course %d", i),
@@ -173,7 +144,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	url := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
-		port.Port(),
+		backendPort.Port(),
 		limit,
 		lastID,
 		userID,
@@ -203,20 +174,11 @@ func TestGetPaginatedCourse(t *testing.T) {
 }
 
 func TestUpdateCourse(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -227,7 +189,7 @@ func TestUpdateCourse(t *testing.T) {
 
 	disciplineID := CreateTestDiscipline(
 		t,
-		port,
+		&backendPort,
 		userID,
 		"Test Discipline",
 	)
@@ -235,7 +197,7 @@ func TestUpdateCourse(t *testing.T) {
 
 	courseID := CreateTestCourse(
 		t,
-		port,
+		&backendPort,
 		userID,
 		disciplineID,
 		"Test Course",
@@ -244,7 +206,7 @@ func TestUpdateCourse(t *testing.T) {
 
 	url := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses/%s?fake_user_id=%s",
-		port.Port(),
+		backendPort.Port(),
 		courseID,
 		userID,
 	)
