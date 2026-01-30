@@ -2,33 +2,22 @@ package tests
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 )
 
 func TestRegisterUser(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -39,23 +28,11 @@ func TestRegisterUser(t *testing.T) {
 }
 
 func TestLoginUser(t *testing.T) {
-	ctx := context.Background()
-
-	net, err := network.New(ctx)
-	require.NoError(t, err)
-
-	_, err = initPostgres(ctx, t, net)
-	require.NoError(t, err)
-
-	_, err = initRedis(ctx, t, net)
-	require.NoError(t, err)
-
-	port, err := initBackend(ctx, t, net)
-	require.NoError(t, err)
+	clearDatabases(t)
 
 	userID := CreateTestUser(
 		t,
-		port,
+		&backendPort,
 		"Test First Name",
 		"Test Last Name",
 		"Username",
@@ -65,7 +42,7 @@ func TestLoginUser(t *testing.T) {
 	require.NotZero(t, userID)
 
 	url := fmt.Sprintf("http://localhost:%s/api/v1/auth/login",
-		port.Port(),
+		backendPort.Port(),
 	)
 
 	body, _ := json.Marshal(users.LoginUser{

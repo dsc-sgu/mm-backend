@@ -13,8 +13,8 @@ func TestInitBackend(t *testing.T) {
 	ctx := context.Background()
 	network, err := network.New(ctx)
 	assert.Nil(t, err)
-	_, _ = initPostgres(ctx, t, network)
-	port, err := initBackend(ctx, t, network)
+	_, _, _ = initPostgres(ctx, network)
+	_, port, err := initBackend(ctx, network)
 	if err != nil {
 		t.Fatalf("initBackend error: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestInitPostgres(t *testing.T) {
 	ctx := context.Background()
 	network, err := network.New(ctx)
 	assert.Nil(t, err)
-	port, err := initPostgres(ctx, t, network)
+	_, port, err := initPostgres(ctx, network)
 	if err != nil {
 		t.Fatalf("initPostgres error: %v", err)
 	}
