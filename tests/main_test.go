@@ -56,7 +56,11 @@ func TestMain(m *testing.M) {
 	}
 
 	testPostgres = pgDB
-	defer testPostgres.Close()
+	defer func() {
+		if err := testPostgres.Close(); err != nil {
+			log.Print("close postgres:", err)
+		}
+	}()
 
 	redisContainer, redisPort, err := initRedis(ctx, net)
 	if err != nil {
@@ -76,7 +80,11 @@ func TestMain(m *testing.M) {
 		log.Fatal("ping redis:", err)
 	}
 	testRedis = redisDB
-	defer testRedis.Close()
+	defer func() {
+		if err := testRedis.Close(); err != nil {
+			log.Print("close redis:", err)
+		}
+	}()
 
 	backendContainer, port, err := initBackend(ctx, net)
 	if err != nil {
