@@ -159,6 +159,8 @@ func initRedis(
 }
 
 func clearPostgres(t *testing.T) {
+	t.Helper()
+
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE 
 			users, 
@@ -171,11 +173,14 @@ func clearPostgres(t *testing.T) {
 }
 
 func clearRedis(t *testing.T) {
+	t.Helper()
+
 	err := testRedis.FlushDB(context.Background()).Err()
 	require.NoError(t, err)
 }
 
 func clearDatabases(t *testing.T) {
+	t.Helper()
 	clearPostgres(t)
 	clearRedis(t)
 }
@@ -185,6 +190,8 @@ func CreateTestUser(
 	port *nat.Port,
 	firstName, lastName, username, email, password string,
 ) uuid.UUID {
+	t.Helper()
+
 	userURL := fmt.Sprintf("http://localhost:%s/api/v1/auth/register",
 		port.Port(),
 	)
@@ -228,6 +235,8 @@ func CreateTestDiscipline(
 	userID uuid.UUID,
 	name string,
 ) uuid.UUID {
+	t.Helper()
+
 	disciplineURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/disciplines?fake_user_id=%s",
 		port.Port(),
@@ -273,6 +282,8 @@ func CreateTestCourse(
 	disciplineID uuid.UUID,
 	name string,
 ) uuid.UUID {
+	t.Helper()
+
 	courseURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses?fake_user_id=%s",
 		port.Port(),
@@ -315,6 +326,8 @@ func CreateTestBlock(
 	userID uuid.UUID,
 	courseID uuid.UUID,
 ) uuid.UUID {
+	t.Helper()
+
 	blockURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/blocks/%s/blocks?fake_user_id=%s",
 		port.Port(),
