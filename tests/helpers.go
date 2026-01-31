@@ -100,8 +100,9 @@ func initPostgres(
 				FileMode:          0o644,
 			},
 		},
-		WaitingFor: wait.ForLog(
-			"database system is ready to accept connections",
+		WaitingFor: wait.ForAll(
+			wait.ForLog("database system is ready to accept connections"),
+			wait.ForListeningPort(pgPort),
 		),
 		Networks: []string{net.Name},
 	}
@@ -161,9 +162,9 @@ func clearPostgres(t *testing.T) {
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE 
 			users, 
-			disciplines, 
-			courses, 
-			blocks
+			discipline, 
+			course, 
+			block
 		RESTART IDENTITY CASCADE;
 	`)
 	require.NoError(t, err)
