@@ -1,5 +1,6 @@
 tmp
 .ssh
+doc/openapi.json
 
 # Created by https://www.toptal.com/developers/gitignore/api/go,visualstudiocode,goland+all,vim,emacs,windows,macos,linux,dotenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=go,visualstudiocode,goland+all,vim,emacs,windows,macos,linux,dotenv
