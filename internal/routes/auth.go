@@ -48,12 +48,13 @@ func (c *UserController) Register(
 	}
 
 	createUser := users.CreateUser{
-		FirstName: body.FirstName,
-		LastName:  body.LastName,
-		Username:  body.Username,
-		Email:     body.Email,
-		Password:  body.Password,
-		Role:      "USER",
+		FirstName:  body.FirstName,
+		LastName:   body.LastName,
+		Patronymic: body.Patronymic,
+		Username:   body.Username,
+		Email:      body.Email,
+		Password:   body.Password,
+		Role:       "USER",
 	}
 
 	user, err := c.svc.CreateUser(&createUser)
