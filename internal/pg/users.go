@@ -15,8 +15,8 @@ import (
 
 const (
 	createUserSQL = `
-		INSERT INTO users (first_name, last_name, username, email, role, password_hash, password_salt, created_at)
-		VALUES (:first_name, :last_name, :username, :email, :role, :password_hash, :password_salt, :created_at)
+		INSERT INTO users (first_name, last_name, patronymic, username, email, role, password_hash, password_salt, created_at)
+		VALUES (:first_name, :last_name, :patronymic, :username, :email, :role, :password_hash, :password_salt, :created_at)
 		RETURNING id, created_at
 	`
 
@@ -55,6 +55,7 @@ func (r *PGRepo) CreateUser(user *users.CreateUser) (*users.User, error) {
 	newUser := users.User{
 		FirstName:    user.FirstName,
 		LastName:     user.LastName,
+		Patronymic:   user.Patronymic,
 		Username:     user.Username,
 		Email:        user.Email,
 		Role:         user.Role,
