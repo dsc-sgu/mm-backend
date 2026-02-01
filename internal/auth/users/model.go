@@ -30,6 +30,16 @@ type CreateUser struct {
 	Password   string `json:"password"   binding:"password"`
 }
 
+type GetUser struct {
+	FirstName  string `json:"firstName"  binding:"required"`
+	LastName   string `json:"lastName"   binding:"required"`
+	Patronymic string `json:"patronymic" binding:"required"`
+	Username   string `json:"username"   binding:"required"`
+	Email      string `json:"email"      binding:"required"`
+	Role       string `json:"role"       binding:"required"`
+	AvatarURL  string `json:"avatarURL"  binding:"required"`
+}
+
 type LoginUser struct {
 	Email    string `json:"email"    binding:"required"`
 	Password string `json:"password" binding:"required"`
