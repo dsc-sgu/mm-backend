@@ -90,7 +90,7 @@ func (c *UserController) Logout(
 
 func (c *UserController) GetSession(
 	ctx fuego.ContextNoBody,
-) (*users.User, error) {
+) (*users.GetUser, error) {
 	userID := session.UserIDFromContext(ctx.Context())
 	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
@@ -105,5 +105,15 @@ func (c *UserController) GetSession(
 		return nil, fuego.NotFoundError{Title: "Unrelated to user error"}
 	}
 
-	return user, nil
+	response := users.GetUser{
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+		Patronymic: user.Patronymic,
+		Username:   user.Username,
+		Email:      user.Email,
+		Role:       user.Role,
+		AvatarURL:  user.AvatarURL,
+	}
+
+	return &response, nil
 }
