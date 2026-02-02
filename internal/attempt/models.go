@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/git"
 )
 
 /*
@@ -22,24 +24,8 @@ const (
 	AttemptStatusRetrieve AttemptStatus = "retrieve"
 )
 
-// FileInfo массив файлов
-type FileInfo struct {
-	FileName string `json:"fileName"    binding:"required"`
-	// FilePath    string    `json:"-"           binding:"required"`
-	FileSize    int64     `json:"fileSize"    binding:"required"`
-	ContentType string    `json:"contentType" binding:"required"`
-	MD5Hash     string    `json:"md5Hash"     binding:"required"`
-	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
-}
-
-type RepoID struct {
-	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
-	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
-}
-
 type MakeAttempt struct {
-	RepoID
+	git.RepoID
 	// FileInfo Content make zip
 }
 
