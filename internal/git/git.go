@@ -4,9 +4,6 @@ package git
 // directly to the server. To test `ssh -p 23233 localhost` once it's running.
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net"
@@ -52,27 +49,11 @@ func RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 		return "", err
 	}
 
-	println(repoID.intoPath())
+	println(repoID.IntoPath())
 
-	repoPath := fmt.Sprintf("%s.git", repoID.intoPath())
+	repoPath := fmt.Sprintf("%s.git", repoID.IntoPath())
 
 	return repoPath, nil
-}
-
-type RepoID struct {
-	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
-	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
-}
-
-func (repoID *RepoID) intoPath() string {
-	hasher := sha1.New()
-	// NOTE: error shouldn't happen
-	data, _ := json.Marshal(repoID)
-
-	hasher.Write(data)
-	hashSum := hasher.Sum(nil)
-	return hex.EncodeToString(hashSum)
 }
 
 func GetParticipant(fingerprint string) (uuid.UUID, error) {
@@ -142,20 +123,18 @@ func GetRepoID(path string, fingerprint string) (RepoID, error) {
 	}, nil
 }
 
-type RepoManager interface {
+type RepoManager2 interface {
 	InitRepo(repoID RepoID) error
 	// RemoveRepo(repoID RepoID) error
-	// MakeAttempt(repoID RepoID, fileInfo []FileInfo) (attempt Attempt, err error)
-	// GetAttempts(repoID RepoID) ([]Attempt, error)
 	// GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
 }
 
 type GitManager struct{}
 
-var _ RepoManager = &GitManager{}
+var _ RepoManager2 = &GitManager{}
 
 func (mng *GitManager) InitRepo(repoID RepoID) error {
-	repoName := repoID.intoPath()
+	repoName := repoID.IntoPath()
 
 	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
 	repo, err := gogit.PlainInit(repoPath, true)
