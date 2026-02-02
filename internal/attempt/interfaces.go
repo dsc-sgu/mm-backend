@@ -1,18 +1,11 @@
 package attempt
 
-import "github.com/google/uuid"
-
-type RepoManager interface {
-	InitRepo(repoID RepoID) error
-	RemoveRepo(repoID RepoID) error
-	PushAttempt(repoID RepoID, fileInfo []FileInfo) error
-	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
-}
+import "github.com/dsc-sgu/mm-backend/internal/git"
 
 type FileDescriptor = string
 
 type FileStorage interface {
-	StoreFile(fileInfo FileInfo) (FileDescriptor, error)
-	GetFile(desc FileDescriptor) (FileInfo, error)
+	StoreFile(fileInfo git.FileInfo) (FileDescriptor, error)
+	GetFile(desc FileDescriptor) (git.FileInfo, error)
 	RemoveFile(desc FileDescriptor) error
 }
