@@ -5,7 +5,7 @@ CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
 -- NOTE(nrydanov): Need to think of other types together
 CREATE TYPE block_type AS ENUM ('task', 'text');
 
-CREATE TABLE unit_type (
+CREATE TABLE unit_types (
     id uuid PRIMARY KEY,
     name varchar(64)
 );
@@ -24,33 +24,32 @@ CREATE TABLE users (
     password_salt BYTEA NOT NULL
 );
 
-CREATE TABLE unit (
+CREATE TABLE units (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     name varchar(128) NOT NULL,
-    unit_type uuid REFERENCES unit_type(id),
-    parent_id uuid REFERENCES unit(id),
+    unit_type uuid REFERENCES unit_types(id),
+    parent_id uuid REFERENCES units(id),
     owner_id uuid REFERENCES users(id)
 );
 
-CREATE TABLE block (
+CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     block_type TEXT NOT NULL,
     data jsonb NOT NULL,
-    course_id uuid, -- REFERENCES course(id)
+    course_id uuid, -- REFERENCES courses(id)
     position integer NOT NULL
 );
 
 -- NOTE(mchernigin): for example "Programming languages"
-CREATE TABLE discipline (
+CREATE TABLE disciplines (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     name varchar(64) NOT NULL
 );
 
-
 -- NOTE(mchernigin): for example "Programming languages (2024)"
-CREATE TABLE course (
+CREATE TABLE courses (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    discipline_id uuid NOT NULL REFERENCES discipline(id),
+    discipline_id uuid NOT NULL REFERENCES disciplines(id),
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
     -- Service info
@@ -61,13 +60,11 @@ CREATE TABLE course (
         UNIQUE (discipline_id, name)
 );
 
-
 -- NOTE(nrydanov): Specific student data
-CREATE TABLE student (
+CREATE TABLE students (
     user_id uuid NOT NULL REFERENCES users(id),
-    course_id uuid NOT NULL REFERENCES course(id),
+    course_id uuid NOT NULL REFERENCES courses(id),
     -- NOTE(mchernigin): leaf unit
-    unit_id uuid NOT NULL REFERENCES unit(id),
     admission_date date NOT NULL,
     expelled boolean NOT NULL,
 
@@ -75,9 +72,9 @@ CREATE TABLE student (
 );
 
 -- NOTE(nrydanov): Specific teacher data
-CREATE TABLE teacher (
+CREATE TABLE teachers (
     user_id uuid NOT NULL REFERENCES users(id),
-    course_id uuid NOT NULL REFERENCES course(id),
+    course_id uuid NOT NULL REFERENCES courses(id),
     promoted_by uuid NOT NULL REFERENCES users(id),
     promoted_at timestamp NOT NULL,
     -- TODO(nrydanov): Add additional required teacher data if required
@@ -86,20 +83,19 @@ CREATE TABLE teacher (
 );
 
 -- NOTE(nrydanov): Specific admin data
-CREATE table admin (
+CREATE table admins (
     user_id uuid NOT NULL REFERENCES users(id),
     promoted_by uuid NOT NULL REFERENCES users(id),
     promoted_at timestamp NOT NULL
 );
 
-
 -- NOTE(mchernigin): probably should give names to milestones
 -- NOTE(nrydanov): This relation should be used to determine in what milestone
 -- certain discipline become available for a student from some unit
 CREATE TABLE discipline_milestones (
-    discipline_id uuid NOT NULL REFERENCES discipline(id),
+    discipline_id uuid NOT NULL REFERENCES disciplines(id),
     -- NOTE(nrydanov): Leaf unit, most of the time
-    unit_id uuid NOT NULL REFERENCES unit(id),
+    unit_id uuid NOT NULL REFERENCES units(id),
     milestone integer NOT NULL,
 
     PRIMARY KEY (discipline_id, unit_id)
@@ -110,31 +106,27 @@ CREATE TABLE discipline_milestones (
 CREATE TABLE milestone_transitions (
     milestone integer NOT NULL,
     -- NOTE(nrydanov): Leaf unit, most of the time
-    unit_id uuid NOT NULL REFERENCES unit(id),
+    unit_id uuid NOT NULL REFERENCES units(id),
     transition_date date,
 
     PRIMARY KEY (milestone, unit_id)
 );
-
 
 CREATE TABLE groups (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     name varchar(64) NOT NULL
 );
 
-
 CREATE TABLE course_users_groups (
     user_id uuid NOT NULL REFERENCES users(id),
-    course_id uuid NOT NULL REFERENCES course(id),
+    course_id uuid NOT NULL REFERENCES courses(id),
     group_id uuid NOT NULL REFERENCES groups(id),
 
     PRIMARY KEY (user_id, course_id, group_id)
 );
 
-
-
-CREATE TABLE task (
-    block_id uuid PRIMARY KEY REFERENCES block(id),
+CREATE TABLE tasks (
+    block_id uuid PRIMARY KEY REFERENCES blocks(id),
     available_at timestamp,
     deadline_at timestamp,
     max_grade real NOT NULL,
@@ -142,15 +134,14 @@ CREATE TABLE task (
     lead_time time
 );
 
-
-CREATE TABLE attempt (
+CREATE TABLE attempts (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
-    task_id uuid NOT NULL REFERENCES task(block_id)
+    task_id uuid NOT NULL REFERENCES tasks(block_id)
 );
 
 CREATE TABLE attempt_transitions (
-    attempt_id uuid NOT NULL REFERENCES attempt(id),
+    attempt_id uuid NOT NULL REFERENCES attempts(id),
     state attempt_state NOT NULL,
     transition_at timestamp NOT NULL,
     -- Can be used to save additional transition data (unpredictable for now)
