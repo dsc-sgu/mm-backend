@@ -95,3 +95,9 @@ func (c *Service) Logout(
 		return nil
 	}
 }
+
+func (c *Service) GetSessionByID(
+	sessionID uuid.UUID,
+) (*session.Session, error) {
+	return c.sessionRepo.GetByID(sessionID)
+}

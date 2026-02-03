@@ -105,14 +105,21 @@ func (c *UserController) GetSession(
 		return nil, fuego.NotFoundError{Title: "Unrelated to user error"}
 	}
 
+	sessionID := session.SessionIDFromContext(ctx)
+	session, err := c.svc.GetSessionByID(sessionID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
 	response := users.GetUser{
-		FirstName:  user.FirstName,
-		LastName:   user.LastName,
-		Patronymic: user.Patronymic,
-		Username:   user.Username,
-		Email:      user.Email,
-		Role:       user.Role,
-		AvatarURL:  user.AvatarURL,
+		FirstName:        user.FirstName,
+		LastName:         user.LastName,
+		Patronymic:       user.Patronymic,
+		Username:         user.Username,
+		Email:            user.Email,
+		Role:             user.Role,
+		AvatarURL:        user.AvatarURL,
+		SessionExpiresAt: session.ExpiresAt,
 	}
 
 	return &response, nil
