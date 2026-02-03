@@ -73,4 +73,13 @@ func TestLoginUser(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedSession))
 
 	require.Equal(t, userID, recievedSession.UserID)
+
+	cookies := resp.Cookies()
+	require.Len(t, cookies, 1)
+
+	sessionCookie := cookies[0]
+	require.Equal(t, "SESSION_ID", sessionCookie.Name)
+	require.NotEmpty(t, sessionCookie.Value)
+	require.Equal(t, "/", sessionCookie.Path)
+	require.True(t, sessionCookie.HttpOnly)
 }
