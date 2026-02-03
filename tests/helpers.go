@@ -164,9 +164,9 @@ func clearPostgres(t *testing.T) {
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE 
 			users, 
-			discipline, 
-			course, 
-			block
+			disciplines,
+			courses,
+			blocks
 		RESTART IDENTITY CASCADE;
 	`)
 	require.NoError(t, err)
