@@ -31,13 +31,14 @@ type CreateUser struct {
 }
 
 type GetUser struct {
-	FirstName  string `json:"firstName"  binding:"required"`
-	LastName   string `json:"lastName"   binding:"required"`
-	Patronymic string `json:"patronymic" binding:"required"`
-	Username   string `json:"username"   binding:"required"`
-	Email      string `json:"email"      binding:"required"`
-	Role       string `json:"role"       binding:"required"`
-	AvatarURL  string `json:"avatarURL"  binding:"required"`
+	FirstName        string    `json:"firstName"        binding:"required"`
+	LastName         string    `json:"lastName"         binding:"required"`
+	Patronymic       string    `json:"patronymic"       binding:"required"`
+	Username         string    `json:"username"         binding:"required"`
+	Email            string    `json:"email"            binding:"required"`
+	Role             string    `json:"role"             binding:"required"`
+	AvatarURL        string    `json:"avatarURL"        binding:"required"`
+	SessionExpiresAt time.Time `json:"sessionExpiresAt" binding:"required"`
 }
 
 type LoginUser struct {
