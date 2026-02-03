@@ -14,40 +14,40 @@ import (
 
 const (
 	createCourseSQL = `
-		INSERT INTO course (discipline_id, owner_id, name, created_at)
+		INSERT INTO courses (discipline_id, owner_id, name, created_at)
 	VALUES (:discipline_id, :owner_id, :name, :created_at)
 		RETURNING id
 	`
 
 	getCourseByIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
-		FROM course
+		FROM courses
 		WHERE id = $1
 	`
 
 	getCourseByNameSQL = `
     SELECT id, discipline_id, owner_id, name, created_at
-    FROM course
+    FROM courses
     WHERE name = $1
   `
 
 	getAllCoursesByCourseIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
-		FROM course
+		FROM courses
 		WHERE id > $2
 		ORDER BY id
 		LIMIT $1
 	`
 
 	updateCourseByIdSQL = `
-		UPDATE course
+		UPDATE courses
 		SET owner_id = $1, name = $2
 		WHERE id = $3
 		RETURNING id, discipline_id, owner_id, name, created_at
 	`
 
 	deleteCourseByIdSQL = `
-		DELETE FROM course
+		DELETE FROM courses
 		WHERE id = $1
 	`
 )

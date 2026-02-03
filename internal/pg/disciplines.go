@@ -13,26 +13,26 @@ import (
 
 const (
 	createDisciplineSQL = `
-		INSERT INTO discipline (name)
+		INSERT INTO disciplines (name)
 		VALUES (:name)
 		RETURNING id
 	`
 
 	getDisciplineByIdSQL = `
 		SELECT id, name
-		FROM discipline
+		FROM disciplines
 		WHERE id = $1
 	`
 
 	updateDisciplineByIdSQL = `
-		UPDATE discipline
+		UPDATE disciplines
 		SET name = $1
 		WHERE id = $2
 		RETURNING id, name
 	`
 
 	deleteDisciplineByIdSQL = `
-		DELETE FROM discipline
+		DELETE FROM disciplines
 		WHERE id = $1
 	`
 )

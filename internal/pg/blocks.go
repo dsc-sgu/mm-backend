@@ -13,45 +13,45 @@ import (
 
 const (
 	createBlockSQL = `
-		INSERT INTO block (block_type, data, course_id, position)
+		INSERT INTO blocks (block_type, data, course_id, position)
 		VALUES (:block_type, :data, :course_id, :position)
 		RETURNING id
 	`
 
 	nextPositionSQL = `
 		SELECT COALESCE(MAX(position), 0)
-		FROM block
+		FROM blocks
 		WHERE course_id = $1
 	`
 
 	getBlockByIdSQL = `
 		SELECT id, block_type, data, course_id, position
-		FROM block
+		FROM blocks
 		WHERE id = $1
 	`
 
 	getAllBlocksByCourseIdSQL = `
 		SELECT *
-		FROM block
+		FROM blocks
 		WHERE course_id = $1
 	`
 
 	updateBlockByIdSQL = `
-		UPDATE block
+		UPDATE blocks
 		SET course_id = $1, data = $2, position = $3
 		WHERE id = $4
 		RETURNING id, block_type, data, course_id, position
 	`
 
 	UnlinkByIdSQL = `
-		UPDATE block
+		UPDATE blocks
 		SET course_id = NULL
 		WHERE course_id = $1 AND id = $2
 		RETURNING id, block_type, data, course_id, position
 	`
 
 	deleteBlockByIdSQL = `
-		DELETE FROM block
+		DELETE FROM blocks
 		WHERE id = $1
 	`
 )
