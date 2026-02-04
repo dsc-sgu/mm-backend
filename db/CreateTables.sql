@@ -61,13 +61,27 @@ CREATE TABLE courses (
         UNIQUE (discipline_id, name)
 );
 
+-- NOTE(Ezhkin-Kot): data for invite links to courses
+CREATE TABLE invites (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    course_id uuid NOT NULL REFERENCES courses(id),
+    -- NOTE(Ezhkin-Kot): which role will be given to invited users
+    provided_role course_member_role NOT NULL,
+    created_by uuid NOT NULL REFERENCES users(id),
+    created_at timestamp NOT NULL,
+    active_until timestamp,
+    is_revoked boolean NOT NULL
+);
+
 -- NOTE(Ezhkin-Kot): roles of users in courses
 -- Their specific data is stored in separate tables for each role
 CREATE TABLE course_members (
   user_id uuid NOT NULL REFERENCES users(id),
   course_id uuid NOT NULL REFERENCES courses(id),
   role course_member_role NOT NULL,
-  PRIMARY KEY (user_id, course_id)
+  invited_by uuid REFERENCES invites(id),
+
+  PRIMARY KEY (user_id, course_id),
 );
 
 -- NOTE(nrydanov): Specific student data
@@ -95,7 +109,7 @@ CREATE TABLE teachers (
 );
 
 -- NOTE(nrydanov): Specific admin data
-CREATE table admins (
+CREATE TABLE admins (
     user_id uuid NOT NULL REFERENCES users(id),
     promoted_by uuid NOT NULL REFERENCES users(id),
     promoted_at timestamp NOT NULL
