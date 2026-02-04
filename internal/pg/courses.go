@@ -19,6 +19,21 @@ const (
 		RETURNING id
 	`
 
+	createCourseMemberSQL = `
+    INSERT INTO course_members (user_id, course_id, role, invited_by)
+    VALUES (:user_id, :course_id, :role, :invited_by)
+  `
+
+	createStudentSQL = `
+    INSERT INTO students (user_id, course_id, admission_date, expelled)
+    VALUES (:user_id, :course_id, :admission_date, :expelled)
+	`
+
+	createTeacherSQL = `
+    INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at)
+    VALUES (:user_id, :course_id, :promoted_by, :promoted_at)
+	`
+
 	getCourseByIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM courses
@@ -56,7 +71,11 @@ func (r *PGRepo) CreateCourse(
 	model *courses.CreateCourse,
 	ownerID uuid.UUID,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", createCourseSQL))
+	tx, err := r.db.Beginx()
+	if err != nil {
+		return nil, fmt.Errorf("create course: begin transaction: %w", err)
+	}
+	defer tx.Rollback()
 
 	newCourse := courses.Course{
 		DisciplineID: model.DisciplineID,
@@ -65,20 +84,46 @@ func (r *PGRepo) CreateCourse(
 		CreatedAt:    time.Now(),
 	}
 
-	rows, err := r.db.NamedQuery(createCourseSQL, newCourse)
+	rows, err := tx.NamedQuery(createCourseSQL, newCourse)
 	if err != nil {
-		return nil, fmt.Errorf("create course: insert in db: %w", err)
+		return nil, fmt.Errorf("create course: insert course in db: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			zap.L().Error(err.Error())
-		}
-	}()
 
 	if rows.Next() {
 		if err := rows.Scan(&newCourse.ID); err != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				zap.L().Error(closeErr.Error())
+			}
 			return nil, fmt.Errorf("create course: scan course id: %w", err)
 		}
+	}
+	if err := rows.Close(); err != nil {
+		zap.L().Error(err.Error())
+	}
+
+	courseMember := courses.CourseMember{
+		UserID:   ownerID,
+		CourseID: newCourse.ID,
+		Role:     courses.TeacherRole,
+	}
+
+	if _, err := tx.NamedExec(createCourseMemberSQL, courseMember); err != nil {
+		return nil, fmt.Errorf("create course: insert course member: %w", err)
+	}
+
+	teacher := courses.Teacher{
+		UserID:     ownerID,
+		CourseID:   newCourse.ID,
+		PromotedBy: ownerID,
+		PromotedAt: time.Now(),
+	}
+
+	if _, err := tx.NamedExec(createTeacherSQL, teacher); err != nil {
+		return nil, fmt.Errorf("create course: insert teacher: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("create course: commit transaction: %w", err)
 	}
 
 	return &newCourse, nil
