@@ -1,6 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
+CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
 -- NOTE(nrydanov): Need to think of other types together
 CREATE TYPE block_type AS ENUM ('task', 'text');
@@ -60,26 +61,37 @@ CREATE TABLE courses (
         UNIQUE (discipline_id, name)
 );
 
+-- NOTE(Ezhkin-Kot): roles of users in courses
+-- Their specific data is stored in separate tables for each role
+CREATE TABLE course_members (
+  user_id uuid NOT NULL REFERENCES users(id),
+  course_id uuid NOT NULL REFERENCES courses(id),
+  role course_member_role NOT NULL,
+  PRIMARY KEY (user_id, course_id)
+);
+
 -- NOTE(nrydanov): Specific student data
 CREATE TABLE students (
-    user_id uuid NOT NULL REFERENCES users(id),
-    course_id uuid NOT NULL REFERENCES courses(id),
+    user_id uuid NOT NULL,
+    course_id uuid NOT NULL,
     -- NOTE(mchernigin): leaf unit
     admission_date date NOT NULL,
     expelled boolean NOT NULL,
 
-    PRIMARY KEY (user_id, course_id)
+    PRIMARY KEY (user_id, course_id),
+    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id) ON DELETE CASCADE
 );
 
 -- NOTE(nrydanov): Specific teacher data
 CREATE TABLE teachers (
-    user_id uuid NOT NULL REFERENCES users(id),
-    course_id uuid NOT NULL REFERENCES courses(id),
+    user_id uuid NOT NULL,
+    course_id uuid NOT NULL,
     promoted_by uuid NOT NULL REFERENCES users(id),
     promoted_at timestamp NOT NULL,
     -- TODO(nrydanov): Add additional required teacher data if required
 
-    PRIMARY KEY (user_id, course_id)
+    PRIMARY KEY (user_id, course_id),
+    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id) ON DELETE CASCADE
 );
 
 -- NOTE(nrydanov): Specific admin data
