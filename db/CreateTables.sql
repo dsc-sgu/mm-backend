@@ -81,7 +81,7 @@ CREATE TABLE course_members (
   role course_member_role NOT NULL,
   invited_by uuid REFERENCES invites(id),
 
-  PRIMARY KEY (user_id, course_id),
+  PRIMARY KEY (user_id, course_id)
 );
 
 -- NOTE(nrydanov): Specific student data
