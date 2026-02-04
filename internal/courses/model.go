@@ -32,3 +32,41 @@ type CoursePagination struct {
 type CreateResponse struct {
 	ID uuid.UUID `json:"id"`
 }
+
+type CourseMemberRole string
+
+const (
+	StudentRole CourseMemberRole = "STUDENT"
+	TeacherRole CourseMemberRole = "TEACHER"
+)
+
+type CourseMember struct {
+	UserID    uuid.UUID        `json:"userID"    db:"user_id"`
+	CourseID  uuid.UUID        `json:"courseID"  db:"course_id"`
+	Role      CourseMemberRole `json:"role"      db:"role"`
+	InvitedBy uuid.NullUUID    `json:"invitedBy" db:"invited_by"`
+}
+
+type Student struct {
+	UserID        uuid.UUID `json:"userID"        db:"user_id"`
+	CourseID      uuid.UUID `json:"courseID"      db:"course_id"`
+	AdmissionDate time.Time `json:"admissionDate" db:"admission_date"`
+	Expelled      bool      `json:"expelled"      db:"expelled"`
+}
+
+type Teacher struct {
+	UserID     uuid.UUID `json:"userID"     db:"user_id"`
+	CourseID   uuid.UUID `json:"courseID"   db:"course_id"`
+	PromotedBy uuid.UUID `json:"promotedBy" db:"promoted_by"`
+	PromotedAt time.Time `json:"promotedAt" db:"promoted_at"`
+}
+
+type Invite struct {
+	ID           uuid.UUID        `json:"id"           db:"id"`
+	CourseID     uuid.UUID        `json:"courseID"     db:"course_id"`
+	ProvidedRole CourseMemberRole `json:"providedRole" db:"provided_role"`
+	CreatedBy    uuid.UUID        `json:"createdBy"    db:"created_by"`
+	CreatedAt    time.Time        `json:"createdAt"    db:"created_at"`
+	ExpiresAt    time.Time        `json:"expiresAt"    db:"expires_at"`
+	IsRevoked    bool             `json:"isRevoked"    db:"is_revoked"`
+}
