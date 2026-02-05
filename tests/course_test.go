@@ -318,7 +318,11 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
@@ -345,7 +349,11 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&invite))
@@ -371,7 +379,11 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -399,7 +411,11 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -431,7 +447,11 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				t.Error(err)
+			}
+		}()
 
 		require.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
