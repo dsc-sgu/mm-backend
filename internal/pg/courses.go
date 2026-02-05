@@ -65,6 +65,12 @@ const (
 		WHERE user_id = $1 AND course_id = $2
 	`
 
+	getInviteByIdSQL = `
+		SELECT id, course_id, provided_role, created_by, created_at, expires_at, is_revoked
+		FROM invites
+		WHERE id = $1
+	`
+
 	updateCourseByIdSQL = `
 		UPDATE courses
 		SET owner_id = $1, name = $2
@@ -302,4 +308,78 @@ func (r *PGRepo) GetUserRole(
 	}
 
 	return &role, nil
+}
+
+func (r *PGRepo) GetInviteByID(
+	ctx context.Context,
+	inviteID uuid.UUID,
+) (*courses.Invite, error) {
+	zap.L().Debug("Executing query", zap.String("query", getInviteByIdSQL))
+
+	var invite courses.Invite
+	err := r.db.GetContext(ctx, &invite, getInviteByIdSQL, inviteID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &invite, nil
+}
+
+func (r *PGRepo) EnrollUserByInvite(
+	ctx context.Context,
+	userID uuid.UUID,
+	invite *courses.Invite,
+) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("enroll user: begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	courseMember := courses.CourseMember{
+		UserID:   userID,
+		CourseID: invite.CourseID,
+		Role:     invite.ProvidedRole,
+		InvitedBy: uuid.NullUUID{
+			UUID:  invite.ID,
+			Valid: true,
+		},
+	}
+
+	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
+		return fmt.Errorf("enroll user: insert course member in db: %w", err)
+	}
+
+	switch invite.ProvidedRole {
+	case courses.StudentRole:
+		student := courses.Student{
+			UserID:        userID,
+			CourseID:      invite.CourseID,
+			AdmissionDate: time.Now(),
+			Expelled:      false,
+		}
+		if _, err := tx.NamedExecContext(ctx, createStudentSQL, student); err != nil {
+			return fmt.Errorf("enroll user: insert student in db: %w", err)
+		}
+	case courses.TeacherRole:
+		teacher := courses.Teacher{
+			UserID:     userID,
+			CourseID:   invite.CourseID,
+			PromotedBy: invite.CreatedBy,
+			PromotedAt: time.Now(),
+		}
+		if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
+			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
+		}
+	default:
+		return fmt.Errorf("enroll user: unknown role %s", invite.ProvidedRole)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("enroll user: commit transaction: %w", err)
+	}
+
+	return nil
 }

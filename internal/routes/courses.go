@@ -2,6 +2,7 @@ package routes
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 
 	"github.com/go-fuego/fuego"
@@ -29,7 +30,7 @@ func NewCourseController(
 
 func (c *CourseController) CreateCourse(
 	ctx fuego.ContextWithBody[courses.CreateCourse],
-) (*courses.CreateResponse, error) {
+) (*courses.CourseIDResponse, error) {
 	body, err := ctx.Body()
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
@@ -45,7 +46,7 @@ func (c *CourseController) CreateCourse(
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	response := courses.CreateResponse{
+	response := courses.CourseIDResponse{
 		ID: course.ID,
 	}
 
@@ -194,4 +195,45 @@ func (c *CourseController) CreateInvite(
 	}
 
 	return invite, nil
+}
+
+func (c *CourseController) JoinCourseByInvite(
+	ctx fuego.ContextNoBody,
+) (*courses.CourseIDResponse, error) {
+	pathInviteID := ctx.PathParam("invite_id")
+
+	inviteID, err := uuid.Parse(pathInviteID)
+	if err != nil {
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+	}
+
+	err = c.courseService.JoinCourseByInvite(ctx.Context(), inviteID, userID)
+	if err != nil {
+		switch err {
+		case courses.ErrInviteNotFound:
+			return nil, fuego.NotFoundError{Detail: err.Error()}
+		case courses.ErrInviteRevoked, courses.ErrInviteExpired:
+			return nil, fuego.HTTPError{
+				Detail: err.Error(),
+				Status: http.StatusGone,
+			}
+		case courses.ErrAlreadyMember:
+			return nil, fuego.ConflictError{Detail: err.Error()}
+		default:
+			return nil, fuego.InternalServerError{Detail: err.Error()}
+		}
+	}
+
+	response := courses.CourseIDResponse{
+		ID: userID,
+	}
+
+	return &response, nil
 }

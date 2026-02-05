@@ -29,7 +29,7 @@ type CoursePagination struct {
 	LastID uuid.UUID `query:"last_id"`
 }
 
-type CreateResponse struct {
+type CourseIDResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
