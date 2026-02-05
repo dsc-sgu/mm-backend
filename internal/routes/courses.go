@@ -170,3 +170,28 @@ func (c *CourseController) DeleteCourse(
 
 	return nil, nil
 }
+
+func (c *CourseController) CreateInvite(
+	ctx fuego.ContextWithBody[courses.CreateInvite],
+) (*courses.Invite, error) {
+	body, err := ctx.Body()
+	if err != nil {
+		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+	}
+
+	invite, err := c.courseService.CreateInvite(
+		ctx.Context(),
+		&body,
+		userID,
+	)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return invite, nil
+}

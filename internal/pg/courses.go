@@ -34,6 +34,12 @@ const (
     VALUES (:user_id, :course_id, :promoted_by, :promoted_at)
 	`
 
+	createInviteSQL = `
+		INSERT INTO invites (course_id, provided_role, created_by, created_at, expires_at, is_revoked)
+		VALUES (:course_id, :provided_role, :created_by, :created_at, :expires_at, :is_revoked)
+		RETURNING id
+	`
+
 	getCourseByIdSQL = `
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM courses
@@ -52,6 +58,11 @@ const (
 		WHERE id > $2
 		ORDER BY id
 		LIMIT $1
+	`
+
+	getUserRoleSQL = `
+		SELECT role FROM course_members
+		WHERE user_id = $1 AND course_id = $2
 	`
 
 	updateCourseByIdSQL = `
@@ -232,4 +243,63 @@ func (r *PGRepo) DeleteCourseByID(id uuid.UUID) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (r *PGRepo) CreateInvite(
+	model *courses.CreateInvite,
+	createdBy uuid.UUID,
+) (*courses.Invite, error) {
+	zap.L().Debug("Executing query", zap.String("query", createInviteSQL))
+
+	newInvite := courses.Invite{
+		CourseID:     model.CourseID,
+		ProvidedRole: model.ProvidedRole,
+		CreatedBy:    createdBy,
+		CreatedAt:    time.Now(),
+		ExpiresAt:    model.ExpiresAt,
+		IsRevoked:    false,
+	}
+
+	rows, err := r.db.NamedQuery(createInviteSQL, newInvite)
+	if err != nil {
+		return nil, fmt.Errorf("create invite: insert in db: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			zap.L().Error(err.Error())
+		}
+	}()
+
+	if rows.Next() {
+		if err := rows.Scan(&newInvite.ID); err != nil {
+			return nil, fmt.Errorf("create invite: scan invite id: %w", err)
+		}
+	}
+
+	return &newInvite, nil
+}
+
+func (r *PGRepo) GetUserRole(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (*courses.CourseMemberRole, error) {
+	zap.L().Debug("Executing query", zap.String("query", getUserRoleSQL))
+
+	if userID == uuid.Nil {
+		return nil, fmt.Errorf("user id is nil")
+	}
+	if courseID == uuid.Nil {
+		return nil, fmt.Errorf("course id is nil")
+	}
+
+	var role courses.CourseMemberRole
+	err := r.db.GetContext(ctx, &role, getUserRoleSQL, userID, courseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &role, nil
 }
