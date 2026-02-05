@@ -70,3 +70,9 @@ type Invite struct {
 	ExpiresAt    time.Time        `json:"expiresAt"    db:"expires_at"`
 	IsRevoked    bool             `json:"isRevoked"    db:"is_revoked"`
 }
+
+type CreateInvite struct {
+	CourseID     uuid.UUID        `json:"courseID"     binding:"required"`
+	ProvidedRole CourseMemberRole `json:"providedRole" binding:"required"`
+	ExpiresAt    time.Time        `json:"expiresAt"    binding:"required"`
+}

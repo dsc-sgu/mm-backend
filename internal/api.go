@@ -136,6 +136,16 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
+	fuego.Post(
+		courseGroup,
+		"/invites",
+		func(ctx fuego.ContextWithBody[courses.CreateInvite]) (*courses.Invite, error) {
+			return courseController.CreateInvite(ctx)
+		},
+		option.Summary("Create invite link for course"),
+		option.DefaultStatusCode(http.StatusCreated),
+	)
+
 	disciplineGroup := fuego.Group(
 		privateGroup,
 		"/disciplines",

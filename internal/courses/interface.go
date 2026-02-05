@@ -12,4 +12,12 @@ type Repo interface {
 	GetPaginatedCourses(limit int, lastID uuid.UUID) ([]Course, error)
 	UpdateCourseByID(id uuid.UUID, update *UpdateCourse) (*Course, error)
 	DeleteCourseByID(id uuid.UUID) error
+	CreateInvite(
+		model *CreateInvite,
+		createdBy uuid.UUID,
+	) (*Invite, error)
+	GetUserRole(
+		ctx context.Context,
+		userID, courseID uuid.UUID,
+	) (*CourseMemberRole, error)
 }
