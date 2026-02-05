@@ -162,10 +162,14 @@ func clearPostgres(t *testing.T) {
 	t.Helper()
 
 	_, err := testPostgres.Exec(`
-		TRUNCATE TABLE 
-			users, 
+		TRUNCATE TABLE
+			users,
 			disciplines,
 			courses,
+			course_members,
+			students,
+			teachers,
+			invites,
 			blocks
 		RESTART IDENTITY CASCADE;
 	`)
@@ -366,4 +370,37 @@ func CreateTestBlock(
 	require.NoError(t, json.NewDecoder(blockResp.Body).Decode(&createdBlock))
 
 	return createdBlock.ID
+}
+
+func GetRoleInCourse(
+	t *testing.T,
+	port *nat.Port,
+	userID, courseID uuid.UUID,
+) *courses.CourseMemberRole {
+	t.Helper()
+
+	roleURL := fmt.Sprintf(
+		"http://localhost:%s/api/v1/courses/roles/%s?fake_user_id=%s",
+    port.Port(),
+		courseID,
+		userID,
+	)
+	roleReq, err := http.NewRequest(http.MethodGet, roleURL, nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(roleReq)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusInternalServerError {
+		return nil
+	}
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var roleResp courses.UserRoleResponse
+	err = json.NewDecoder(resp.Body).Decode(&roleResp)
+	require.NoError(t, err)
+
+	return &roleResp.Role
 }
