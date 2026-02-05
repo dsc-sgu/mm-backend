@@ -381,7 +381,7 @@ func GetRoleInCourse(
 
 	roleURL := fmt.Sprintf(
 		"http://localhost:%s/api/v1/courses/roles/%s?fake_user_id=%s",
-    port.Port(),
+		port.Port(),
 		courseID,
 		userID,
 	)
@@ -390,7 +390,12 @@ func GetRoleInCourse(
 
 	resp, err := http.DefaultClient.Do(roleReq)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusInternalServerError {
 		return nil
