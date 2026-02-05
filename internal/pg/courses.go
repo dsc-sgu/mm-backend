@@ -289,31 +289,6 @@ func (r *PGRepo) CreateInvite(
 	return &newInvite, nil
 }
 
-func (r *PGRepo) GetUserRole(
-	ctx context.Context,
-	userID, courseID uuid.UUID,
-) (*courses.CourseMemberRole, error) {
-	zap.L().Debug("Executing query", zap.String("query", getUserRoleSQL))
-
-	if userID == uuid.Nil {
-		return nil, fmt.Errorf("user id is nil")
-	}
-	if courseID == uuid.Nil {
-		return nil, fmt.Errorf("course id is nil")
-	}
-
-	var role courses.CourseMemberRole
-	err := r.db.GetContext(ctx, &role, getUserRoleSQL, userID, courseID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &role, nil
-}
-
 func (r *PGRepo) GetInviteByID(
 	ctx context.Context,
 	inviteID uuid.UUID,
@@ -390,4 +365,29 @@ func (r *PGRepo) EnrollUserByInvite(
 	}
 
 	return nil
+}
+
+func (r *PGRepo) GetUserRole(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (*courses.CourseMemberRole, error) {
+	zap.L().Debug("Executing query", zap.String("query", getUserRoleSQL))
+
+	if userID == uuid.Nil {
+		return nil, fmt.Errorf("user id is nil")
+	}
+	if courseID == uuid.Nil {
+		return nil, fmt.Errorf("course id is nil")
+	}
+
+	var role courses.CourseMemberRole
+	err := r.db.GetContext(ctx, &role, getUserRoleSQL, userID, courseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &role, nil
 }

@@ -48,39 +48,6 @@ func (s *Service) CreateInvite(
 	return s.Repo.CreateInvite(model, createdBy)
 }
 
-func (s *Service) JoinCourseByInvite(
-	ctx context.Context,
-	inviteID, userID uuid.UUID,
-) error {
-	invite, err := s.GetInviteByID(ctx, inviteID)
-	if err != nil {
-		return fmt.Errorf("join by invite: get invite: %w", err)
-	}
-	if invite == nil {
-		return ErrInviteNotFound
-	}
-	if invite.IsRevoked {
-		return ErrInviteRevoked
-	}
-	if time.Now().After(invite.ExpiresAt) {
-		return ErrInviteExpired
-	}
-
-	role, err := s.GetUserRole(ctx, userID, invite.CourseID)
-	if err != nil {
-		return fmt.Errorf("join by invite: check existing role: %w", err)
-	}
-	if role != nil {
-		return ErrAlreadyMember
-	}
-
-	if err := s.EnrollUserByInvite(ctx, userID, invite); err != nil {
-		return fmt.Errorf("join by invite: enroll user: %w", err)
-	}
-
-	return nil
-}
-
 func (s *Service) GetInviteDetails(
 	ctx context.Context,
 	inviteID uuid.UUID,
@@ -113,4 +80,37 @@ func (s *Service) GetInviteDetails(
 	}
 
 	return &details, nil
+}
+
+func (s *Service) JoinCourseByInvite(
+	ctx context.Context,
+	inviteID, userID uuid.UUID,
+) error {
+	invite, err := s.GetInviteByID(ctx, inviteID)
+	if err != nil {
+		return fmt.Errorf("join by invite: get invite: %w", err)
+	}
+	if invite == nil {
+		return ErrInviteNotFound
+	}
+	if invite.IsRevoked {
+		return ErrInviteRevoked
+	}
+	if time.Now().After(invite.ExpiresAt) {
+		return ErrInviteExpired
+	}
+
+	role, err := s.GetUserRole(ctx, userID, invite.CourseID)
+	if err != nil {
+		return fmt.Errorf("join by invite: check existing role: %w", err)
+	}
+	if role != nil {
+		return ErrAlreadyMember
+	}
+
+	if err := s.EnrollUserByInvite(ctx, userID, invite); err != nil {
+		return fmt.Errorf("join by invite: enroll user: %w", err)
+	}
+
+	return nil
 }
