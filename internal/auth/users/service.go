@@ -28,7 +28,6 @@ func NewService(
 }
 
 var (
-	ErrUserNotFound     = errors.New("user not found")
 	ErrWrongCredentials = errors.New("wrong credentials")
 	ErrSessionNotFound  = errors.New("session not found")
 )
@@ -45,11 +44,8 @@ func (c *Service) Login(
 		)
 	}
 
-	if user == nil {
-		return LoginResponse{}, http.Cookie{}, ErrUserNotFound
-	}
-
-	if !password.Valid(body.Password, user.PasswordHash, user.PasswordSalt) {
+	if user == nil ||
+		!password.Valid(body.Password, user.PasswordHash, user.PasswordSalt) {
 		return LoginResponse{}, http.Cookie{}, ErrWrongCredentials
 	}
 

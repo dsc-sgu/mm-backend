@@ -31,12 +31,15 @@ func (c *UserController) Login(
 	}
 
 	response, cookie, err := c.svc.Login(ctx.Context(), body)
+	if err == users.ErrWrongCredentials {
+		return nil, fuego.BadRequestError{Title: "WRONG_CREDENTIALS"}
+	}
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
-	} else {
-		ctx.SetCookie(cookie)
-		return &response, nil
 	}
+
+	ctx.SetCookie(cookie)
+	return &response, nil
 }
 
 func (c *UserController) Register(
