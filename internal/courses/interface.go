@@ -16,14 +16,14 @@ type Repo interface {
 		model *CreateInvite,
 		createdBy uuid.UUID,
 	) (*Invite, error)
-	GetUserRole(
-		ctx context.Context,
-		userID, courseID uuid.UUID,
-	) (*CourseMemberRole, error)
 	GetInviteByID(ctx context.Context, inviteID uuid.UUID) (*Invite, error)
 	EnrollUserByInvite(
 		ctx context.Context,
 		userID uuid.UUID,
 		invite *Invite,
 	) error
+	GetUserRole(
+		ctx context.Context,
+		userID, courseID uuid.UUID,
+	) (*CourseMemberRole, error)
 }
