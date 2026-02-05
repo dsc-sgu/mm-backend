@@ -87,3 +87,7 @@ type InviteDetails struct {
 	ExpiresAt    time.Time        `json:"expiresAt"`
 	IsRevoked    bool             `json:"isRevoked"`
 }
+
+type UserRoleResponse struct {
+	Role CourseMemberRole `json:"role"`
+}
