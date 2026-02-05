@@ -92,7 +92,11 @@ func (r *PGRepo) CreateCourse(
 	if err != nil {
 		return nil, fmt.Errorf("create course: begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			zap.L().Error(err.Error())
+		}
+	}()
 
 	newCourse := courses.Course{
 		DisciplineID: model.DisciplineID,
@@ -336,7 +340,11 @@ func (r *PGRepo) EnrollUserByInvite(
 	if err != nil {
 		return fmt.Errorf("enroll user: begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			zap.L().Error(err.Error())
+		}
+	}()
 
 	courseMember := courses.CourseMember{
 		UserID:   userID,
