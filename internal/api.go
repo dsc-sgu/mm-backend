@@ -144,6 +144,14 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusCreated),
 	)
 
+	fuego.Post(
+		courseGroup,
+		"/invites/{invite_id}",
+		courseController.JoinCourseByInvite,
+		option.Summary("Join a course using an invite link"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
 	disciplineGroup := fuego.Group(
 		privateGroup,
 		"/disciplines",

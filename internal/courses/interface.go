@@ -20,4 +20,10 @@ type Repo interface {
 		ctx context.Context,
 		userID, courseID uuid.UUID,
 	) (*CourseMemberRole, error)
+	GetInviteByID(ctx context.Context, inviteID uuid.UUID) (*Invite, error)
+	EnrollUserByInvite(
+		ctx context.Context,
+		userID uuid.UUID,
+		invite *Invite,
+	) error
 }
