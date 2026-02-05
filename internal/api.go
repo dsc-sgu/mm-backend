@@ -160,6 +160,14 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusOK),
 	)
 
+	fuego.Get(
+		courseGroup,
+		"/roles/{course_id}",
+		courseController.GetUserRoleInCourse,
+		option.Summary("Get role of current user in course"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
 	disciplineGroup := fuego.Group(
 		privateGroup,
 		"/disciplines",

@@ -257,3 +257,32 @@ func (c *CourseController) GetInviteDetails(
 
 	return details, nil
 }
+
+func (c *CourseController) GetUserRoleInCourse(
+	ctx fuego.ContextNoBody,
+) (*courses.UserRoleResponse, error) {
+	pathCourseID := ctx.PathParam("course_id")
+
+	courseID, err := uuid.Parse(pathCourseID)
+	if err != nil {
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
+	}
+
+	role, err := c.courseService.GetUserRole(ctx.Context(), userID, courseID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	response := courses.UserRoleResponse{
+		Role: *role,
+	}
+
+	return &response, nil
+}
