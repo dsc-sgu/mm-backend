@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -241,4 +242,197 @@ func TestUpdateCourse(t *testing.T) {
 	require.Equal(t, courseID, updatedCourse.ID)
 	require.Equal(t, "Updated Test Course", updatedCourse.Name)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
+}
+
+func TestCourseInviteWorkflow(t *testing.T) {
+	clearDatabases(t)
+
+	// Create a teacher user and a student user
+	teacherUser := CreateTestUser(
+		t,
+		&backendPort,
+		"Teacher",
+		"User",
+		"teacher",
+		"teacher@test.com",
+		"password",
+	)
+	studentUser := CreateTestUser(
+		t,
+		&backendPort,
+		"Student",
+		"User",
+		"student",
+		"student@test.com",
+		"password",
+	)
+	disciplineID := CreateTestDiscipline(
+		t,
+		&backendPort,
+		teacherUser,
+		"Test Discipline",
+	)
+
+	// Create a course as the teacher user
+	courseID := CreateTestCourse(
+		t,
+		&backendPort,
+		teacherUser,
+		disciplineID,
+		"Test Course",
+	)
+
+	// Verify that the course creator is automatically set as a teacher
+	role := GetRoleInCourse(t, &backendPort, teacherUser, courseID)
+	require.NotNil(t, role, "Course creator should have a role")
+	require.Equal(
+		t,
+		courses.TeacherRole,
+		*role,
+		"Course creator should be a teacher",
+	)
+
+	var inviteID uuid.UUID
+	var invite courses.Invite
+
+	// Run sub-tests for the invite workflow
+	t.Run("Fail to create invite as non-teacher", func(t *testing.T) {
+		inviteURL := fmt.Sprintf(
+			"http://localhost:%s/api/v1/courses/invites?fake_user_id=%s",
+			backendPort.Port(),
+			studentUser,
+		)
+		inviteBody, _ := json.Marshal(courses.CreateInvite{
+			CourseID:     courseID,
+			ProvidedRole: courses.StudentRole,
+			ExpiresAt:    time.Now().Add(24 * time.Hour),
+		})
+
+		req, err := http.NewRequest(
+			http.MethodPost,
+			inviteURL,
+			bytes.NewBuffer(inviteBody),
+		)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	})
+
+	t.Run("Successfully create invite as teacher", func(t *testing.T) {
+		inviteURL := fmt.Sprintf(
+			"http://localhost:%s/api/v1/courses/invites?fake_user_id=%s",
+			backendPort.Port(),
+			teacherUser,
+		)
+		inviteBody, _ := json.Marshal(courses.CreateInvite{
+			CourseID:     courseID,
+			ProvidedRole: courses.StudentRole,
+			ExpiresAt:    time.Now().Add(24 * time.Hour),
+		})
+
+		req, err := http.NewRequest(
+			http.MethodPost,
+			inviteURL,
+			bytes.NewBuffer(inviteBody),
+		)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&invite))
+		require.NotZero(t, invite.ID)
+		inviteID = invite.ID // Save for next steps
+	})
+
+	t.Run("Get invite details", func(t *testing.T) {
+		require.NotZero(
+			t,
+			inviteID,
+			"inviteID should be set from previous test",
+		)
+		detailsURL := fmt.Sprintf(
+			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			backendPort.Port(),
+			inviteID,
+			studentUser,
+		)
+
+		req, err := http.NewRequest(http.MethodGet, detailsURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var details courses.InviteDetails
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&details))
+		require.Equal(t, "Test Course", details.CourseName)
+		require.Equal(t, courses.StudentRole, details.ProvidedRole)
+	})
+
+	t.Run("Join course with invite", func(t *testing.T) {
+		require.NotZero(
+			t,
+			inviteID,
+			"inviteID should be set from previous test",
+		)
+		joinURL := fmt.Sprintf(
+			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			backendPort.Port(),
+			inviteID,
+			studentUser,
+		)
+
+		req, err := http.NewRequest(http.MethodPost, joinURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Verify new role
+		studentRole := GetRoleInCourse(t, &backendPort, studentUser, courseID)
+		require.NotNil(
+			t,
+			studentRole,
+			"Student should now have a role in the course",
+		)
+		require.Equal(t, courses.StudentRole, *studentRole)
+	})
+
+	t.Run("Fail to join course again", func(t *testing.T) {
+		require.NotZero(
+			t,
+			inviteID,
+			"inviteID should be set from previous test",
+		)
+		joinURL := fmt.Sprintf(
+			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			backendPort.Port(),
+			inviteID,
+			studentUser,
+		)
+
+		req, err := http.NewRequest(http.MethodPost, joinURL, nil)
+		require.NoError(t, err)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
 }
