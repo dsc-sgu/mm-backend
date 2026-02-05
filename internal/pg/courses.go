@@ -15,7 +15,7 @@ import (
 const (
 	createCourseSQL = `
 		INSERT INTO courses (discipline_id, owner_id, name, created_at)
-	VALUES (:discipline_id, :owner_id, :name, :created_at)
+		VALUES (:discipline_id, :owner_id, :name, :created_at)
 		RETURNING id
 	`
 
