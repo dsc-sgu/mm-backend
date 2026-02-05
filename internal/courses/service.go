@@ -18,6 +18,7 @@ func NewService(repo Repo) *Service {
 }
 
 var (
+	ErrCourseNotFound       = errors.New("course not found")
 	ErrPermissionDenied     = errors.New("permission denied")
 	ErrCourseMemberNotFound = errors.New("user is not a course member")
 	ErrInviteNotFound       = errors.New("invite not found")
@@ -78,4 +79,38 @@ func (s *Service) JoinCourseByInvite(
 	}
 
 	return nil
+}
+
+func (s *Service) GetInviteDetails(
+	ctx context.Context,
+	inviteID uuid.UUID,
+) (*InviteDetails, error) {
+	invite, err := s.GetInviteByID(ctx, inviteID)
+	if err != nil {
+		return nil, fmt.Errorf("get invite details: get invite: %w", err)
+	}
+	if invite == nil {
+		return nil, ErrInviteNotFound
+	}
+
+	course, err := s.GetCourseByID(ctx, invite.CourseID)
+	if err != nil {
+		return nil, fmt.Errorf("get invite details: get course: %w", err)
+	}
+	if course == nil {
+		return nil, ErrCourseNotFound
+	}
+
+	details := InviteDetails{
+		ID:           invite.ID,
+		CourseID:     invite.CourseID,
+		CourseName:   course.Name,
+		ProvidedRole: invite.ProvidedRole,
+		CreatedBy:    invite.CreatedBy,
+		CreatedAt:    invite.CreatedAt,
+		ExpiresAt:    invite.ExpiresAt,
+		IsRevoked:    invite.IsRevoked,
+	}
+
+	return &details, nil
 }

@@ -237,3 +237,23 @@ func (c *CourseController) JoinCourseByInvite(
 
 	return &response, nil
 }
+
+func (c *CourseController) GetInviteDetails(
+	ctx fuego.ContextNoBody,
+) (*courses.InviteDetails, error) {
+	pathInviteID := ctx.PathParam("invite_id")
+
+	inviteID, err := uuid.Parse(pathInviteID)
+	if err != nil {
+		return nil, fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+		}
+	}
+
+	details, err := c.courseService.GetInviteDetails(ctx.Context(), inviteID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return details, nil
+}
