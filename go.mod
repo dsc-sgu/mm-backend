@@ -153,7 +153,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.2
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/rs/cors v1.11.1
 	github.com/sethvargo/go-envconfig v1.3.0
