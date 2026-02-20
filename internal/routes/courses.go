@@ -121,7 +121,7 @@ func (c *CourseController) GetPaginatedCourses(
 
 func (c *CourseController) GetCourse(
 	ctx fuego.ContextNoBody,
-) (*courses.Course, error) {
+) (*courses.CourseWithBlocks, error) {
 	pathID := ctx.PathParam("course_id")
 
 	id, err := uuid.Parse(pathID)
@@ -131,12 +131,22 @@ func (c *CourseController) GetCourse(
 		}
 	}
 
+	blockList, err := c.blockService.GetAllBlocksByCourseID(id)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
 	course, err := c.courseService.GetCourseByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	return course, nil
+	result := &courses.CourseWithBlocks{
+		Course: course,
+		Blocks: blockList,
+	}
+
+	return result, nil
 }
 
 func (c *CourseController) PatchCourse(
