@@ -78,6 +78,13 @@ func TestGetCourseByID(t *testing.T) {
 	)
 	require.NotZero(t, courseID)
 
+	blockID := CreateTestBlock(
+		t,
+		&backendPort,
+		userID,
+		courseID,
+	)
+
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s?fake_user_id=%s",
 		backendPort.Port(),
@@ -99,12 +106,13 @@ func TestGetCourseByID(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var recievedCourse courses.Course
+	var recievedCourse courses.CourseWithBlocks
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedCourse))
 
-	require.Equal(t, courseID, recievedCourse.ID)
-	require.Equal(t, "Test Course", recievedCourse.Name)
-	require.Equal(t, disciplineID, recievedCourse.DisciplineID)
+	require.Equal(t, courseID, recievedCourse.Course.ID)
+	require.Equal(t, "Test Course", recievedCourse.Course.Name)
+	require.Equal(t, disciplineID, recievedCourse.Course.DisciplineID)
+	require.Equal(t, blockID, recievedCourse.Blocks[0].ID)
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
