@@ -57,6 +57,14 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusOK),
 	)
 
+	fuego.Get(
+		attemptGroup,
+		"/{task_id}/{participant_id}",
+		attemptController.GetAttempts,
+		option.Summary("Get all user attempts on task"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
 	blockGroup := fuego.Group(
 		privateGroup,
 		"/blocks",
