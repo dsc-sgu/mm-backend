@@ -10,7 +10,7 @@ import (
 )
 
 type PostgresConfig struct {
-	Host     string `env:"HOST,      default=localhost"`
+	Host     string `env:"HOST,      default=127.0.0.1"`
 	Port     int    `env:"PORT,      default=1301"`
 	User     string `env:"USER,      default=postgres"`
 	Password string `env:"PASSWORD,  default=postgres"`
@@ -29,7 +29,7 @@ func (p *PostgresConfig) GetURL() string {
 }
 
 type RedisConfig struct {
-	Host     string `env:"HOST,      default=localhost"`
+	Host     string `env:"HOST,      default=127.0.0.1"`
 	Port     int    `env:"PORT,      default=1302"`
 	Password string `env:"PASSWORD"`
 	Database int    `env:"DATABASE,  default=0"`
@@ -42,7 +42,7 @@ func (r *RedisConfig) GetURL() string {
 type OpenAPIConfig struct {
 	Title       string `env:"DOCS_TITLE,       default=MergeMinds API"`
 	Description string `env:"DOCS_DESCRIPTION, default=MergeMinds API documentation"`
-	Host        string `env:"HOST,          default=localhost"`
+	Host        string `env:"HOST,          default=127.0.0.1"`
 	Port        int    `env:"PORT,          default=8080"`
 }
 

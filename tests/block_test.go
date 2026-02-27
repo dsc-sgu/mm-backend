@@ -89,7 +89,7 @@ func TestGetBlockByID(t *testing.T) {
 	)
 
 	getBlockURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/blocks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/blocks/%s?fake_user_id=%s",
 		backendPort.Port(),
 		blockID,
 		userID,
@@ -159,7 +159,7 @@ func TestUnlinkBlock(t *testing.T) {
 	)
 
 	unlinkBlockURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/blocks/%s/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/blocks/%s/%s?fake_user_id=%s",
 		backendPort.Port(),
 		blockID,
 		courseID,

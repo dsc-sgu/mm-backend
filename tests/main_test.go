@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 	}()
 
 	dsn := fmt.Sprintf(
-		"host=localhost port=%s user=postgres password=postgres dbname=postgres sslmode=disable",
+		"host=127.0.0.1 port=%s user=postgres password=postgres dbname=postgres sslmode=disable",
 		pgPort.Port(),
 	)
 	pgDB, err := sql.Open("pgx", dsn)
@@ -72,7 +72,7 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
-	redisAddr := fmt.Sprintf("localhost:%s", redisPort.Port())
+	redisAddr := fmt.Sprintf("127.0.0.1:%s", redisPort.Port())
 	redisDB := redis.NewClient(&redis.Options{
 		Addr: redisAddr,
 	})
