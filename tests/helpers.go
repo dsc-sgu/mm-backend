@@ -37,6 +37,7 @@ func initBackend(
 		Entrypoint:   []string{"/app/server"},
 		ExposedPorts: []string{string(basePort)},
 		Env: map[string]string{
+			"HOST":          "0.0.0.0",
 			"HTTP_PORT":     basePort.Port(),
 			"POSTGRES_PORT": "5432",
 			"POSTGRES_HOST": "mm-postgres",
