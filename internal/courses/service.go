@@ -104,7 +104,7 @@ func (s *Service) JoinCourseByInvite(
 	if err != nil {
 		return fmt.Errorf("join by invite: check existing role: %w", err)
 	}
-	if courseMember.IsActive {
+	if courseMember != nil && courseMember.IsActive {
 		return ErrAlreadyMember
 	}
 
