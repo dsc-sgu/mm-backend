@@ -22,8 +22,8 @@ type Repo interface {
 		userID uuid.UUID,
 		invite *Invite,
 	) error
-	GetUserRole(
+	GetCourseMember(
 		ctx context.Context,
 		userID, courseID uuid.UUID,
-	) (*CourseMemberRole, error)
+	) (*CourseMember, error)
 }

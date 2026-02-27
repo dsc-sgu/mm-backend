@@ -45,13 +45,14 @@ type CourseMember struct {
 	CourseID  uuid.UUID        `json:"courseID"  db:"course_id"`
 	Role      CourseMemberRole `json:"role"      db:"role"`
 	InvitedBy uuid.NullUUID    `json:"invitedBy" db:"invited_by"`
+	IsActive  bool             `json:"isActive"  db:"is_active"`
 }
 
 type Student struct {
 	UserID        uuid.UUID `json:"userID"        db:"user_id"`
 	CourseID      uuid.UUID `json:"courseID"      db:"course_id"`
 	AdmissionDate time.Time `json:"admissionDate" db:"admission_date"`
-	Expelled      bool      `json:"expelled"      db:"expelled"`
+	IsActive      bool      `json:"isActive"      db:"is_active"`
 }
 
 type Teacher struct {
@@ -59,6 +60,7 @@ type Teacher struct {
 	CourseID   uuid.UUID `json:"courseID"   db:"course_id"`
 	PromotedBy uuid.UUID `json:"promotedBy" db:"promoted_by"`
 	PromotedAt time.Time `json:"promotedAt" db:"promoted_at"`
+	IsActive   bool      `json:"isActive"   db:"is_active"`
 }
 
 type Invite struct {

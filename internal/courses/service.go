@@ -34,14 +34,14 @@ func (s *Service) CreateInvite(
 	model *CreateInvite,
 	createdBy uuid.UUID,
 ) (*Invite, error) {
-	role, err := s.GetUserRole(ctx, createdBy, model.CourseID)
+	courseMember, err := s.GetCourseMember(ctx, createdBy, model.CourseID)
 	if err != nil {
 		return nil, fmt.Errorf("create invite: checking permissions: %w", err)
 	}
-	if role == nil {
+	if courseMember == nil {
 		return nil, ErrCourseMemberNotFound
 	}
-	if *role != TeacherRole {
+	if courseMember.Role != TeacherRole {
 		return nil, ErrPermissionDenied
 	}
 
@@ -100,11 +100,11 @@ func (s *Service) JoinCourseByInvite(
 		return ErrInviteExpired
 	}
 
-	role, err := s.GetUserRole(ctx, userID, invite.CourseID)
+	courseMember, err := s.GetCourseMember(ctx, userID, invite.CourseID)
 	if err != nil {
 		return fmt.Errorf("join by invite: check existing role: %w", err)
 	}
-	if role != nil {
+	if courseMember.IsActive {
 		return ErrAlreadyMember
 	}
 

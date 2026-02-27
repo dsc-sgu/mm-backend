@@ -80,6 +80,7 @@ CREATE TABLE course_members (
   course_id uuid NOT NULL REFERENCES courses(id),
   role course_member_role NOT NULL,
   invited_by uuid REFERENCES invites(id),
+  is_active boolean NOT NULL,
 
   PRIMARY KEY (user_id, course_id)
 );
@@ -90,10 +91,10 @@ CREATE TABLE students (
     course_id uuid NOT NULL,
     -- NOTE(mchernigin): leaf unit
     admission_date date NOT NULL,
-    expelled boolean NOT NULL,
+    is_active boolean NOT NULL,
 
     PRIMARY KEY (user_id, course_id),
-    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id)
 );
 
 -- NOTE(nrydanov): Specific teacher data
@@ -102,10 +103,11 @@ CREATE TABLE teachers (
     course_id uuid NOT NULL,
     promoted_by uuid NOT NULL REFERENCES users(id),
     promoted_at timestamp NOT NULL,
+    is_active boolean NOT NULL,
     -- TODO(nrydanov): Add additional required teacher data if required
 
     PRIMARY KEY (user_id, course_id),
-    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id, course_id) REFERENCES course_members(user_id, course_id)
 );
 
 -- NOTE(nrydanov): Specific admin data
