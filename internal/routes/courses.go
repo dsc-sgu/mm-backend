@@ -275,13 +275,20 @@ func (c *CourseController) GetUserRoleInCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	role, err := c.courseService.GetUserRole(ctx.Context(), userID, courseID)
+	courseMember, err := c.courseService.GetCourseMember(
+		ctx.Context(),
+		userID,
+		courseID,
+	)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
+	if !courseMember.IsActive {
+		return nil, fuego.NotFoundError{Detail: "course member not found"}
+	}
 
 	response := courses.UserRoleResponse{
-		Role: *role,
+		Role: courseMember.Role,
 	}
 
 	return &response, nil

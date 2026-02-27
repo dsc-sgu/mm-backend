@@ -20,18 +20,18 @@ const (
 	`
 
 	createCourseMemberSQL = `
-    INSERT INTO course_members (user_id, course_id, role, invited_by)
-    VALUES (:user_id, :course_id, :role, :invited_by)
+    INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
+    VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
   `
 
 	createStudentSQL = `
-    INSERT INTO students (user_id, course_id, admission_date, expelled)
-    VALUES (:user_id, :course_id, :admission_date, :expelled)
+    INSERT INTO students (user_id, course_id, admission_date, is_active)
+    VALUES (:user_id, :course_id, :admission_date, :is_active)
 	`
 
 	createTeacherSQL = `
-    INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at)
-    VALUES (:user_id, :course_id, :promoted_by, :promoted_at)
+    INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
+    VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
 	`
 
 	createInviteSQL = `
@@ -60,8 +60,9 @@ const (
 		LIMIT $1
 	`
 
-	getUserRoleSQL = `
-		SELECT role FROM course_members
+	getCourseMemberSQL = `
+    SELECT user_id, course_id, role, invited_by, is_active
+    FROM course_members
 		WHERE user_id = $1 AND course_id = $2
 	`
 
@@ -126,6 +127,7 @@ func (r *PGRepo) CreateCourse(
 		UserID:   ownerID,
 		CourseID: newCourse.ID,
 		Role:     courses.TeacherRole,
+		IsActive: true,
 	}
 
 	if _, err := tx.NamedExec(createCourseMemberSQL, courseMember); err != nil {
@@ -137,6 +139,7 @@ func (r *PGRepo) CreateCourse(
 		CourseID:   newCourse.ID,
 		PromotedBy: ownerID,
 		PromotedAt: time.Now(),
+		IsActive:   true,
 	}
 
 	if _, err := tx.NamedExec(createTeacherSQL, teacher); err != nil {
@@ -329,6 +332,7 @@ func (r *PGRepo) EnrollUserByInvite(
 			UUID:  invite.ID,
 			Valid: true,
 		},
+		IsActive: true,
 	}
 
 	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
@@ -341,7 +345,7 @@ func (r *PGRepo) EnrollUserByInvite(
 			UserID:        userID,
 			CourseID:      invite.CourseID,
 			AdmissionDate: time.Now(),
-			Expelled:      false,
+			IsActive:      true,
 		}
 		if _, err := tx.NamedExecContext(ctx, createStudentSQL, student); err != nil {
 			return fmt.Errorf("enroll user: insert student in db: %w", err)
@@ -352,6 +356,7 @@ func (r *PGRepo) EnrollUserByInvite(
 			CourseID:   invite.CourseID,
 			PromotedBy: invite.CreatedBy,
 			PromotedAt: time.Now(),
+			IsActive:   true,
 		}
 		if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
 			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
@@ -367,11 +372,11 @@ func (r *PGRepo) EnrollUserByInvite(
 	return nil
 }
 
-func (r *PGRepo) GetUserRole(
+func (r *PGRepo) GetCourseMember(
 	ctx context.Context,
 	userID, courseID uuid.UUID,
-) (*courses.CourseMemberRole, error) {
-	zap.L().Debug("Executing query", zap.String("query", getUserRoleSQL))
+) (*courses.CourseMember, error) {
+	zap.L().Debug("Executing query", zap.String("query", getCourseMemberSQL))
 
 	if userID == uuid.Nil {
 		return nil, fmt.Errorf("user id is nil")
@@ -380,8 +385,14 @@ func (r *PGRepo) GetUserRole(
 		return nil, fmt.Errorf("course id is nil")
 	}
 
-	var role courses.CourseMemberRole
-	err := r.db.GetContext(ctx, &role, getUserRoleSQL, userID, courseID)
+	var courseMember courses.CourseMember
+	err := r.db.GetContext(
+		ctx,
+		&courseMember,
+		getCourseMemberSQL,
+		userID,
+		courseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -389,5 +400,5 @@ func (r *PGRepo) GetUserRole(
 		return nil, err
 	}
 
-	return &role, nil
+	return &courseMember, nil
 }
