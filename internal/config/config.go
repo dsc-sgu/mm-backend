@@ -53,11 +53,11 @@ type Config struct {
 
 	EnableAuth          bool     `env:"ENABLE_AUTH, default=true"`
 	SessionCookieSecure bool     `env:"SESSION_COOKIE_SECURE, default=false"`
-	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=0.0.0.0"`
+	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=127.0.0.1"`
 	AllowOrigins        []string `env:"ALLOW_ORIGINS"`
 
 	GinMode  string `env:"GIN_MODE,              default=debug"`
-	Host     string `env:"HOST,                  default=0.0.0.0"`
+	Host     string `env:"HOST,                  default=127.0.0.1"`
 	HTTPPort int    `env:"HTTP_PORT,             default=8034"`
 	SSHPort  int    `env:"PORT,                  default=2222"`
 
