@@ -79,7 +79,7 @@ func TestGetCourseByID(t *testing.T) {
 	require.NotZero(t, courseID)
 
 	url := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s?fake_user_id=%s",
 		backendPort.Port(),
 		courseID,
 		userID,
@@ -144,7 +144,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	lastID := uuid.Nil
 
 	url := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
 		backendPort.Port(),
 		limit,
 		lastID,
@@ -206,7 +206,7 @@ func TestUpdateCourse(t *testing.T) {
 	require.NotZero(t, courseID)
 
 	url := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s?fake_user_id=%s",
 		backendPort.Port(),
 		courseID,
 		userID,
@@ -298,7 +298,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	// Run sub-tests for the invite workflow
 	t.Run("Fail to create invite as non-teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://localhost:%s/api/v1/courses/invites?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/courses/invites?fake_user_id=%s",
 			backendPort.Port(),
 			studentUser,
 		)
@@ -329,7 +329,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 	t.Run("Successfully create invite as teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://localhost:%s/api/v1/courses/invites?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/courses/invites?fake_user_id=%s",
 			backendPort.Port(),
 			teacherUser,
 		)
@@ -368,7 +368,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		detailsURL := fmt.Sprintf(
-			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
 			backendPort.Port(),
 			inviteID,
 			studentUser,
@@ -400,7 +400,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
 			backendPort.Port(),
 			inviteID,
 			studentUser,
@@ -436,7 +436,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://localhost:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
 			backendPort.Port(),
 			inviteID,
 			studentUser,

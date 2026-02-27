@@ -197,7 +197,7 @@ func CreateTestUser(
 ) uuid.UUID {
 	t.Helper()
 
-	userURL := fmt.Sprintf("http://localhost:%s/api/v1/auth/register",
+	userURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/auth/register",
 		port.Port(),
 	)
 
@@ -243,7 +243,7 @@ func CreateTestDiscipline(
 	t.Helper()
 
 	disciplineURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/disciplines?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/disciplines?fake_user_id=%s",
 		port.Port(),
 		userID,
 	)
@@ -290,7 +290,7 @@ func CreateTestCourse(
 	t.Helper()
 
 	courseURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?fake_user_id=%s",
 		port.Port(),
 		userID,
 	)
@@ -334,7 +334,7 @@ func CreateTestBlock(
 	t.Helper()
 
 	blockURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/blocks/%s/blocks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/blocks/%s/blocks?fake_user_id=%s",
 		port.Port(),
 		courseID,
 		userID,
@@ -381,7 +381,7 @@ func GetRoleInCourse(
 	t.Helper()
 
 	roleURL := fmt.Sprintf(
-		"http://localhost:%s/api/v1/courses/roles/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses/roles/%s?fake_user_id=%s",
 		port.Port(),
 		courseID,
 		userID,

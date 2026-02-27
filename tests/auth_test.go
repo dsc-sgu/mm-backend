@@ -41,7 +41,7 @@ func TestLoginUser(t *testing.T) {
 	)
 	require.NotZero(t, userID)
 
-	url := fmt.Sprintf("http://localhost:%s/api/v1/auth/login",
+	url := fmt.Sprintf("http://127.0.0.1:%s/api/v1/auth/login",
 		backendPort.Port(),
 	)
 
