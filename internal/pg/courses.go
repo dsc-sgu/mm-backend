@@ -239,10 +239,26 @@ func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	discipline_id uuid.UUID,
 ) ([]courses.Course, error) {
-	zap.L().
-		Debug("Executing query", zap.String("query", getAllCoursesByCourseIDSQL))
+	whereClause := `WHERE id > $2`
+	if discipline_id != uuid.Nil {
+		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	}
 
+	getAllCoursesByCourseIdSQL := fmt.Sprintf(`
+		SELECT id, discipline_id, owner_id, name, created_at
+		FROM courses
+		%s
+		ORDER BY id
+		LIMIT $1
+	`, whereClause)
+
+	fmt.Println("ABOBA")
+	fmt.Println(getAllCoursesByCourseIdSQL)
+	fmt.Println("ABOBA")
+
+	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
 	var course courses.Course
 	var courseList []courses.Course
 	rows, err := r.db.QueryxContext(
