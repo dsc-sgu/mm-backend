@@ -27,7 +27,7 @@ func (c *DisciplineController) CreateDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := c.svc.CreateDiscipline(&body)
+	discipline, err := c.svc.CreateDiscipline(ctx.Context(), &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -76,7 +76,7 @@ func (c *DisciplineController) PatchDiscipline(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	discipline, err := c.svc.UpdateDisciplineByID(id, &body)
+	discipline, err := c.svc.UpdateDisciplineByID(ctx.Context(), id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -101,7 +101,7 @@ func (c *DisciplineController) DeleteDiscipline(
 
 	// TODO: implement course detaching logic
 
-	err = c.svc.DeleteDisciplineByID(id)
+	err = c.svc.DeleteDisciplineByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

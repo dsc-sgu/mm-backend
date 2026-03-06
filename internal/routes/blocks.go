@@ -51,7 +51,7 @@ func (c *BlockController) GetAllBlocks(
 		}
 	}
 
-	block, err := c.svc.GetAllBlocksByCourseID(id)
+	block, err := c.svc.GetAllBlocksByCourseID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -96,7 +96,7 @@ func (c *BlockController) PatchBlock(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	block, err := c.svc.UpdateBlockByID(id, &body)
+	block, err := c.svc.UpdateBlockByID(ctx.Context(), id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -125,7 +125,7 @@ func (c *BlockController) UnlinkFromCourse(
 		}
 	}
 
-	block, err := c.svc.UnlinkBlockByID(courseID, blockID)
+	block, err := c.svc.UnlinkBlockByID(ctx.Context(), courseID, blockID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -143,7 +143,7 @@ func (c *BlockController) DeleteBlock(ctx fuego.ContextNoBody) (any, error) {
 		}
 	}
 
-	err = c.svc.DeleteBlockByID(id)
+	err = c.svc.DeleteBlockByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

@@ -38,6 +38,7 @@ const (
 )
 
 func (r *PGRepo) CreateDiscipline(
+	ctx context.Context,
 	model *disciplines.CreateDiscipline,
 ) (*disciplines.Discipline, error) {
 	zap.L().Debug("Executing query", zap.String("query", createDisciplineSQL))
@@ -46,7 +47,7 @@ func (r *PGRepo) CreateDiscipline(
 		Name: model.Name,
 	}
 
-	rows, err := r.db.NamedQuery(createDisciplineSQL, newDiscipline)
+	rows, err := r.db.NamedQueryContext(ctx, createDisciplineSQL, newDiscipline)
 	if err != nil {
 		return nil, fmt.Errorf("create discipline: insert in db: %w", err)
 	}
@@ -87,13 +88,15 @@ func (r *PGRepo) GetDisciplineByID(
 }
 
 func (r *PGRepo) UpdateDisciplineByID(
+	ctx context.Context,
 	id uuid.UUID,
 	model *disciplines.PatchDiscipline,
 ) (*disciplines.Discipline, error) {
 	zap.L().
 		Debug("Executing query", zap.String("query", updateDisciplineByIdSQL))
 
-	row := r.db.QueryRowx(
+	row := r.db.QueryRowxContext(
+		ctx,
 		updateDisciplineByIdSQL,
 		model.Name,
 		id,
@@ -109,11 +112,11 @@ func (r *PGRepo) UpdateDisciplineByID(
 	return &discipline, nil
 }
 
-func (r *PGRepo) DeleteDisciplineByID(id uuid.UUID) error {
+func (r *PGRepo) DeleteDisciplineByID(ctx context.Context, id uuid.UUID) error {
 	zap.L().
 		Debug("Executing query", zap.String("query", deleteDisciplineByIdSQL))
 
-	res, err := r.db.Exec(deleteDisciplineByIdSQL, id)
+	res, err := r.db.ExecContext(ctx, deleteDisciplineByIdSQL, id)
 	if err != nil {
 		return err
 	}

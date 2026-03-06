@@ -152,7 +152,10 @@ func (c *CourseController) DeleteCourse(
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
-	linkedBlocks, err := c.blockService.GetAllBlocksByCourseID(blockID)
+	linkedBlocks, err := c.blockService.GetAllBlocksByCourseID(
+		ctx.Context(),
+		blockID,
+	)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -163,7 +166,11 @@ func (c *CourseController) DeleteCourse(
 			Data:     block.Data,
 			Position: block.Position,
 		}
-		_, err := c.blockService.UpdateBlockByID(block.ID, &updatedBlock)
+		_, err := c.blockService.UpdateBlockByID(
+			ctx.Context(),
+			block.ID,
+			&updatedBlock,
+		)
 		if err != nil {
 			return nil, fuego.InternalServerError{Detail: err.Error()}
 		}

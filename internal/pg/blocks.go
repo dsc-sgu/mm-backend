@@ -83,7 +83,7 @@ func (r *PGRepo) CreateBlock(
 		Position:  position + 1,
 	}
 
-	rows, err := r.db.NamedQuery(createBlockSQL, newBlock)
+	rows, err := r.db.NamedQueryContext(ctx, createBlockSQL, newBlock)
 	if err != nil {
 		return nil, fmt.Errorf("create block: insert in db: %w", err)
 	}
@@ -120,11 +120,14 @@ func (r *PGRepo) GetBlockByID(
 	return &block, nil
 }
 
-func (r *PGRepo) GetAllBlocksByCourseID(id uuid.UUID) ([]*blocks.Block, error) {
+func (r *PGRepo) GetAllBlocksByCourseID(
+	ctx context.Context,
+	id uuid.UUID,
+) ([]*blocks.Block, error) {
 	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSQL))
 
 	var blockList []*blocks.Block
-	rows, err := r.db.Queryx(getAllBlocksByCourseIdSQL, id)
+	rows, err := r.db.QueryxContext(ctx, getAllBlocksByCourseIdSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -152,12 +155,14 @@ func (r *PGRepo) GetAllBlocksByCourseID(id uuid.UUID) ([]*blocks.Block, error) {
 }
 
 func (r *PGRepo) UpdateBlockByID(
+	ctx context.Context,
 	id uuid.UUID,
 	update *blocks.UpdateBlock,
 ) (*blocks.Block, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateBlockByIdSQL))
 
-	row := r.db.QueryRowx(
+	row := r.db.QueryRowxContext(
+		ctx,
 		updateBlockByIdSQL,
 		update.CourseID,
 		update.Data,
@@ -176,13 +181,15 @@ func (r *PGRepo) UpdateBlockByID(
 }
 
 func (r *PGRepo) UnlinkBlockByID(
+	ctx context.Context,
 	courseID uuid.UUID,
 	blockID uuid.UUID,
 ) (*blocks.Block, error) {
 	zap.L().
 		Debug("Executing query", zap.String("query", UnlinkByIdSQL))
 
-	row := r.db.QueryRowx(
+	row := r.db.QueryRowxContext(
+		ctx,
 		UnlinkByIdSQL,
 		courseID,
 		blockID,
@@ -198,10 +205,10 @@ func (r *PGRepo) UnlinkBlockByID(
 	return &unlinkedBlock, nil
 }
 
-func (r *PGRepo) DeleteBlockByID(id uuid.UUID) error {
+func (r *PGRepo) DeleteBlockByID(ctx context.Context, id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSQL))
 
-	res, err := r.db.Exec(deleteBlockByIdSQL, id)
+	res, err := r.db.ExecContext(ctx, deleteBlockByIdSQL, id)
 	if err != nil {
 		return err
 	}
