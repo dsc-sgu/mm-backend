@@ -6,6 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
+type UserRole string
+
+const (
+	RegularUserRole UserRole = "USER"
+	AdminUserRole   UserRole = "ADMIN"
+)
+
 type User struct {
 	ID           uuid.UUID `db:"id"`
 	CreatedAt    time.Time `db:"created_at"`
@@ -15,28 +22,28 @@ type User struct {
 	Username     string    `db:"username"`
 	Email        string    `db:"email"`
 	AvatarURL    string    `db:"avatar_url"`
-	Role         string    `db:"role"`
+	Role         UserRole  `db:"role"`
 	PasswordHash []byte    `db:"password_hash"`
 	PasswordSalt []byte    `db:"password_salt"`
 }
 
 type CreateUser struct {
-	FirstName  string `json:"firstName"  binding:"required"`
-	LastName   string `json:"lastName"   binding:"required"`
-	Patronymic string `json:"patronymic" binding:"required"`
-	Username   string `json:"username"   binding:"required"`
-	Email      string `json:"email"      binding:"required"`
-	Role       string `json:"role"       binding:"required"`
-	Password   string `json:"password"   binding:"password"`
+	FirstName  string   `json:"firstName"  binding:"required"`
+	LastName   string   `json:"lastName"   binding:"required"`
+	Patronymic string   `json:"patronymic" binding:"required"`
+	Username   string   `json:"username"   binding:"required"`
+	Email      string   `json:"email"      binding:"required"`
+	Role       UserRole `json:"role"       binding:"required"`
+	Password   string   `json:"password"   binding:"password"`
 }
 
-type GetUser struct {
+type CurrentUser struct {
 	FirstName        string    `json:"firstName"        binding:"required"`
 	LastName         string    `json:"lastName"         binding:"required"`
 	Patronymic       string    `json:"patronymic"       binding:"required"`
 	Username         string    `json:"username"         binding:"required"`
 	Email            string    `json:"email"            binding:"required"`
-	Role             string    `json:"role"             binding:"required"`
+	Role             UserRole  `json:"role"             binding:"required"`
 	AvatarURL        string    `json:"avatarURL"        binding:"required"`
 	SessionExpiresAt time.Time `json:"sessionExpiresAt" binding:"required"`
 }
