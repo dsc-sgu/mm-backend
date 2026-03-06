@@ -115,6 +115,8 @@ func SetupRoutes(
 		option.Summary("Get paginated courses"),
 		option.QueryInt("limit", "Number of courses in response"),
 		option.QueryInt("last_id", "Last ID from previous pagination request"),
+		option.Query("faculty", "An attribute to filter courses by their faculty"),
+		option.Query("discipline_id", "An attribute to filet courses by their discipline"),
 		option.DefaultStatusCode(http.StatusOK),
 	)
 

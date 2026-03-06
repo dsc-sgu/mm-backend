@@ -52,14 +52,6 @@ const (
     WHERE name = $1
   `
 
-	getAllCoursesByCourseIdSQL = `
-		SELECT id, discipline_id, owner_id, name, created_at
-		FROM courses
-		WHERE id > $2
-		ORDER BY id
-		LIMIT $1
-	`
-
 	getCourseMemberSQL = `
     SELECT user_id, course_id, role, invited_by, is_active
     FROM course_members
@@ -192,10 +184,26 @@ func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	discipline_id uuid.UUID,
 ) ([]courses.Course, error) {
-	zap.L().
-		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
+	whereClause := `WHERE id > $2`
+	if discipline_id != uuid.Nil {
+		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	}
 
+	getAllCoursesByCourseIdSQL := fmt.Sprintf(`
+		SELECT id, discipline_id, owner_id, name, created_at
+		FROM courses
+		%s
+		ORDER BY id
+		LIMIT $1
+	`, whereClause)
+
+	fmt.Println("ABOBA")
+	fmt.Println(getAllCoursesByCourseIdSQL)
+	fmt.Println("ABOBA")
+
+	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
 	var course courses.Course
 	var courseList []courses.Course
 	rows, err := r.db.QueryxContext(
@@ -345,7 +353,11 @@ func (r *PGRepo) EnrollUserByInvite(
 		IsActive: true,
 	}
 
-	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
+	if _, err := tx.NamedExecContext(
+		ctx,
+		createCourseMemberSQL,
+		courseMember,
+	); err != nil {
 		return fmt.Errorf("enroll user: insert course member in db: %w", err)
 	}
 
@@ -357,7 +369,11 @@ func (r *PGRepo) EnrollUserByInvite(
 			AdmissionDate: time.Now(),
 			IsActive:      true,
 		}
-		if _, err := tx.NamedExecContext(ctx, createStudentSQL, student); err != nil {
+		if _, err := tx.NamedExecContext(
+			ctx,
+			createStudentSQL,
+			student,
+		); err != nil {
 			return fmt.Errorf("enroll user: insert student in db: %w", err)
 		}
 	case courses.TeacherRole:
@@ -368,7 +384,11 @@ func (r *PGRepo) EnrollUserByInvite(
 			PromotedAt: time.Now(),
 			IsActive:   true,
 		}
-		if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
+		if _, err := tx.NamedExecContext(
+			ctx,
+			createTeacherSQL,
+			teacher,
+		); err != nil {
 			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
 		}
 	default:
