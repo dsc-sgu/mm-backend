@@ -57,7 +57,7 @@ func (c *UserController) Register(
 		Username:   body.Username,
 		Email:      body.Email,
 		Password:   body.Password,
-		Role:       "USER",
+		Role:       users.RegularUserRole,
 	}
 
 	user, err := c.svc.CreateUser(&createUser)
@@ -93,7 +93,7 @@ func (c *UserController) Logout(
 
 func (c *UserController) GetSession(
 	ctx fuego.ContextNoBody,
-) (*users.GetUser, error) {
+) (*users.CurrentUser, error) {
 	userID := session.UserIDFromContext(ctx.Context())
 	if userID == uuid.Nil {
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
@@ -114,7 +114,7 @@ func (c *UserController) GetSession(
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	response := users.GetUser{
+	response := users.CurrentUser{
 		FirstName:        user.FirstName,
 		LastName:         user.LastName,
 		Patronymic:       user.Patronymic,
