@@ -86,10 +86,11 @@ const (
 )
 
 func (r *PGRepo) CreateCourse(
+	ctx context.Context,
 	model *courses.CreateCourse,
 	ownerID uuid.UUID,
 ) (*courses.Course, error) {
-	tx, err := r.db.Beginx()
+	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create course: begin transaction: %w", err)
 	}
@@ -130,7 +131,7 @@ func (r *PGRepo) CreateCourse(
 		IsActive: true,
 	}
 
-	if _, err := tx.NamedExec(createCourseMemberSQL, courseMember); err != nil {
+	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
 		return nil, fmt.Errorf("create course: insert course member: %w", err)
 	}
 
@@ -142,7 +143,7 @@ func (r *PGRepo) CreateCourse(
 		IsActive:   true,
 	}
 
-	if _, err := tx.NamedExec(createTeacherSQL, teacher); err != nil {
+	if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
 		return nil, fmt.Errorf("create course: insert teacher: %w", err)
 	}
 
@@ -188,6 +189,7 @@ func (r *PGRepo) GetCourseByName(
 }
 
 func (r *PGRepo) GetPaginatedCourses(
+	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
 ) ([]courses.Course, error) {
@@ -196,7 +198,12 @@ func (r *PGRepo) GetPaginatedCourses(
 
 	var course courses.Course
 	var courseList []courses.Course
-	rows, err := r.db.Queryx(getAllCoursesByCourseIdSQL, limit, lastID)
+	rows, err := r.db.QueryxContext(
+		ctx,
+		getAllCoursesByCourseIdSQL,
+		limit,
+		lastID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -222,12 +229,14 @@ func (r *PGRepo) GetPaginatedCourses(
 }
 
 func (r *PGRepo) UpdateCourseByID(
+	ctx context.Context,
 	id uuid.UUID,
 	update *courses.UpdateCourse,
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSQL))
 
-	row := r.db.QueryRowx(
+	row := r.db.QueryRowxContext(
+		ctx,
 		updateCourseByIdSQL,
 		update.OwnerID,
 		update.Name,
@@ -244,10 +253,10 @@ func (r *PGRepo) UpdateCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) DeleteCourseByID(id uuid.UUID) error {
+func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSQL))
 
-	res, err := r.db.Exec(deleteCourseByIdSQL, id)
+	res, err := r.db.ExecContext(ctx, deleteCourseByIdSQL, id)
 	if err != nil {
 		return err
 	}
@@ -259,6 +268,7 @@ func (r *PGRepo) DeleteCourseByID(id uuid.UUID) error {
 }
 
 func (r *PGRepo) CreateInvite(
+	ctx context.Context,
 	model *courses.CreateInvite,
 	createdBy uuid.UUID,
 ) (*courses.Invite, error) {
@@ -273,7 +283,7 @@ func (r *PGRepo) CreateInvite(
 		IsRevoked:    false,
 	}
 
-	rows, err := r.db.NamedQuery(createInviteSQL, newInvite)
+	rows, err := r.db.NamedQueryContext(ctx, createInviteSQL, newInvite)
 	if err != nil {
 		return nil, fmt.Errorf("create invite: insert in db: %w", err)
 	}

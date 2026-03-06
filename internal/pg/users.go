@@ -43,7 +43,10 @@ const (
 	`
 )
 
-func (r *PGRepo) CreateUser(user *users.CreateUser) (*users.User, error) {
+func (r *PGRepo) CreateUser(
+	ctx context.Context,
+	user *users.CreateUser,
+) (*users.User, error) {
 	passwordSalt, err := password.GenerateSalt()
 	if err != nil {
 		return nil, nil
@@ -64,7 +67,7 @@ func (r *PGRepo) CreateUser(user *users.CreateUser) (*users.User, error) {
 		CreatedAt:    time.Now(),
 	}
 
-	rows, err := r.db.NamedQuery(createUserSQL, newUser)
+	rows, err := r.db.NamedQueryContext(ctx, createUserSQL, newUser)
 	if err != nil {
 		return nil, fmt.Errorf("create user: insert in db: %w", err)
 	}
@@ -137,8 +140,8 @@ func (r *PGRepo) GetUserByEmail(
 	return &u, nil
 }
 
-func (r *PGRepo) DeleteUserByID(id uuid.UUID) error {
+func (r *PGRepo) DeleteUserByID(ctx context.Context, id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteUserByIdSQL))
-	_, err := r.db.ExecContext(context.Background(), deleteUserByIdSQL, id)
+	_, err := r.db.ExecContext(ctx, deleteUserByIdSQL, id)
 	return err
 }

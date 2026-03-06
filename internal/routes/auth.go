@@ -60,7 +60,7 @@ func (c *UserController) Register(
 		Role:       users.RegularUserRole,
 	}
 
-	user, err := c.svc.CreateUser(&createUser)
+	user, err := c.svc.CreateUser(ctx.Context(), &createUser)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}

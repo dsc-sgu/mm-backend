@@ -7,8 +7,8 @@ import (
 )
 
 type Repo interface {
-	CreateUser(user *CreateUser) (*User, error)
+	CreateUser(cxt context.Context, user *CreateUser) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (*User, error)
-	DeleteUserByID(id uuid.UUID) error
+	DeleteUserByID(ctx context.Context, id uuid.UUID) error
 }

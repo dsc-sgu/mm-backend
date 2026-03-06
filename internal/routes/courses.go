@@ -41,7 +41,7 @@ func (c *CourseController) CreateCourse(
 		return nil, fuego.UnauthorizedError{Title: "WRONG_CREDENTIALS"}
 	}
 
-	course, err := c.courseService.CreateCourse(&body, userID)
+	course, err := c.courseService.CreateCourse(ctx.Context(), &body, userID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -76,7 +76,7 @@ func (c *CourseController) GetPaginatedCourses(
 		}
 	}
 
-	course, err := c.courseService.GetPaginatedCourses(limit, id)
+	course, err := c.courseService.GetPaginatedCourses(ctx.Context(), limit, id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -121,7 +121,7 @@ func (c *CourseController) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	course, err := c.courseService.UpdateCourseByID(id, &body)
+	course, err := c.courseService.UpdateCourseByID(ctx.Context(), id, &body)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -148,7 +148,7 @@ func (c *CourseController) DeleteCourse(
 		}
 	}
 
-	err = c.courseService.DeleteCourseByID(id)
+	err = c.courseService.DeleteCourseByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
