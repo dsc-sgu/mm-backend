@@ -7,12 +7,25 @@ import (
 )
 
 type Repo interface {
-	CreateCourse(model *CreateCourse, ownerID uuid.UUID) (*Course, error)
+	CreateCourse(
+		ctx context.Context,
+		model *CreateCourse,
+		ownerID uuid.UUID,
+	) (*Course, error)
 	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
-	GetPaginatedCourses(limit int, lastID uuid.UUID) ([]Course, error)
-	UpdateCourseByID(id uuid.UUID, update *UpdateCourse) (*Course, error)
-	DeleteCourseByID(id uuid.UUID) error
+	GetPaginatedCourses(
+		ctx context.Context,
+		limit int,
+		lastID uuid.UUID,
+	) ([]Course, error)
+	UpdateCourseByID(
+		ctx context.Context,
+		id uuid.UUID,
+		update *UpdateCourse,
+	) (*Course, error)
+	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
 	CreateInvite(
+		ctx context.Context,
 		model *CreateInvite,
 		createdBy uuid.UUID,
 	) (*Invite, error)

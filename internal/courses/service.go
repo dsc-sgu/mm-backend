@@ -45,7 +45,7 @@ func (s *Service) CreateInvite(
 		return nil, ErrPermissionDenied
 	}
 
-	return s.Repo.CreateInvite(model, createdBy)
+	return s.Repo.CreateInvite(ctx, model, createdBy)
 }
 
 func (s *Service) GetInviteDetails(
