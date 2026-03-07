@@ -13,7 +13,15 @@ type Repo interface {
 		ownerID uuid.UUID,
 	) (*Course, error)
 	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
-	GetPaginatedCourses(ctx context.Context, limit int, lastID uuid.UUID, discipline uuid.UUID) ([]Course, error)
+	GetPaginatedCourses(
+		ctx context.Context,
+		limit int,
+		lastID uuid.UUID,
+		discipline uuid.UUID,
+		userID uuid.UUID,
+		isTeacher bool,
+		isStudent bool,
+	) ([]Course, error)
 	UpdateCourseByID(ctx context.Context, id uuid.UUID, update *UpdateCourse) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
 	CreateInvite(ctx context.Context, model *CreateInvite, createdBy uuid.UUID) (*Invite, error)

@@ -60,25 +60,30 @@ func (c *CourseController) GetPaginatedCourses(
 	pathLimit := ctx.QueryParam("limit")
 	pathID := ctx.QueryParam("last_id")
 	disciplineID := ctx.QueryParam("discipline_id")
+	teacherStr := ctx.QueryParam("is_teacher")
+	studentStr := ctx.QueryParam("is_student")
 
-	fmt.Println("ABOBA")
-	fmt.Println(disciplineID)
-	fmt.Println("ABOBA")
-
-	discipline, err := uuid.Parse(disciplineID)
-	if err != nil {
-		if disciplineID == "" {
-			discipline = uuid.Nil
-		} else {
-			return nil, fuego.BadRequestError{
-				Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
-			}
+	var err error
+	teacherBool := false
+	if teacherStr != "" {
+		teacherBool, err = strconv.ParseBool(teacherStr)
+		if err != nil {
+			return nil, fuego.BadRequestError{Detail: err.Error()}
 		}
 	}
 
-	fmt.Println("ABOBA")
-	fmt.Println(discipline)
-	fmt.Println("ABOBA")
+	studentBool := false
+	if studentStr != "" {
+		studentBool, err = strconv.ParseBool(studentStr)
+		if err != nil {
+			return nil, fuego.BadRequestError{Detail: err.Error()}
+		}
+	}
+
+	userID := uuid.Nil
+	if teacherBool || studentBool {
+		userID = session.UserIDFromContext(ctx.Context())
+	}
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
@@ -96,8 +101,17 @@ func (c *CourseController) GetPaginatedCourses(
 		}
 	}
 
-	course, err := c.courseService.GetPaginatedCourses(ctx.Context(), limit, id, discipline)
-
+	discipline, err := uuid.Parse(disciplineID)
+	if err != nil {
+		if disciplineID == "" {
+			discipline = uuid.Nil
+		} else {
+			return nil, fuego.BadRequestError{
+				Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+			}
+		}
+	}
+	course, err := c.courseService.GetPaginatedCourses(ctx, limit, id, discipline, userID, teacherBool, studentBool)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
