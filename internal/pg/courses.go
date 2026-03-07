@@ -240,10 +240,27 @@ func (r *PGRepo) GetPaginatedCourses(
 	limit int,
 	lastID uuid.UUID,
 	discipline_id uuid.UUID,
+	userID uuid.UUID,
+	isTeacher bool,
+	isStudent bool,
 ) ([]courses.Course, error) {
 	whereClause := `WHERE id > $2`
 	if discipline_id != uuid.Nil {
 		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	}
+
+	if userID != uuid.Nil {
+		if isTeacher {
+			whereClause += fmt.Sprintf(` AND id IN (
+			SELECT course_id 
+			FROM course_members 
+			WHERE user_id = '%s' AND role = 'TEACHER')`, userID)
+		} else if isStudent {
+			whereClause += fmt.Sprintf(` AND id IN (
+			SELECT course_id 
+			FROM course_members 
+			WHERE user_id = '%s' AND role = 'STUDENT')`, userID)
+		}
 	}
 
 	getAllCoursesByCourseIdSQL := fmt.Sprintf(`
@@ -253,10 +270,6 @@ func (r *PGRepo) GetPaginatedCourses(
 		ORDER BY id
 		LIMIT $1
 	`, whereClause)
-
-	fmt.Println("ABOBA")
-	fmt.Println(getAllCoursesByCourseIdSQL)
-	fmt.Println("ABOBA")
 
 	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
 	var course courses.Course
