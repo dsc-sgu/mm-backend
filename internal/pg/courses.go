@@ -212,7 +212,7 @@ func (r *PGRepo) GetPaginatedCourses(
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM courses
 		%s
-		ORDER BY id
+		ORDER BY name
 		LIMIT $1
 	`, whereClause)
 
