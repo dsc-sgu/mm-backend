@@ -131,7 +131,7 @@ func (c *CourseController) GetCourse(
 		}
 	}
 
-	blockList, err := c.blockService.GetAllBlocksByCourseID(id)
+	blockList, err := c.blockService.GetAllBlocksByCourseID(ctx, id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
