@@ -15,7 +15,8 @@ import (
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/charmbracelet/wish/logging"
-	"github.com/go-fuego/fuego"
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/jmoiron/sqlx"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/cors"
@@ -33,14 +34,13 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
-	"github.com/dsc-sgu/mm-backend/internal/routes"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type App struct {
 	redis      *redis.Client
 	database   *sqlx.DB
-	httpServer *fuego.Server
+	httpServer *http.Server
 	sshServer  *ssh.Server
 }
 
@@ -97,7 +97,6 @@ func (app *App) onShutdown(
 	}()
 
 	errs := make([]error, 0)
-
 	for err := range errCh {
 		errs = append(errs, err)
 	}
@@ -112,15 +111,12 @@ func main() {
 	}
 
 	conf := zap.NewDevelopmentConfig()
-
 	conf.Level = config.LogLevel
-
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
 
 	dbConn, err := db.CreateDB(config.Postgres.GetURL())
 	if err != nil {
-		zap.S().
-			Fatalf("establishing database connection: %s", err.Error())
+		zap.S().Fatalf("establishing database connection: %s", err.Error())
 	} else {
 		zap.L().Info("Database connection is established")
 	}
@@ -149,13 +145,17 @@ func main() {
 		},
 	})
 
-	httpServer := fuego.NewServer(
-		fuego.WithAddr(fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)),
-		fuego.WithGlobalMiddlewares(
-			corsMiddleware.Handler,
-			logger.ZapMiddleware(),
-		),
-	)
+	mux := http.NewServeMux()
+
+	sessionRepo := session.NewRedisRepo(redisClient)
+
+	humaConfig := huma.DefaultConfig(config.OpenAPI.Title, "1.0.0")
+	humaConfig.Info.Description = config.OpenAPI.Description
+	humaConfig.DocsPath = "/docs"
+	humaConfig.DocsRenderer = huma.DocsRendererScalar
+
+	humaAPI := humago.New(mux, humaConfig)
+	v1 := huma.NewGroup(humaAPI, "/api/v1")
 
 	cookieConfig := cookie.DefaultCookieConfig()
 	cookieConfig.Secure = config.SessionCookieSecure
@@ -163,32 +163,38 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
-	sessionRepo := session.NewRedisRepo(redisClient)
 	blockService := blocks.NewService(pgRepo)
 	courseService := courses.NewService(pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
 
-	// Controller initialization
-	userController := routes.NewUserController(userService)
-	blockController := routes.NewBlockController(blockService)
-	courseController := routes.NewCourseController(courseService, blockService)
-	disciplineController := routes.NewDisciplineController(disciplineService)
-	gitController := routes.NewGitController(gitService)
-
-	v1 := fuego.Group(httpServer, "/api/v1")
+	userHandler := users.NewHandler(userService)
+	blockHandler := blocks.NewHandler(blockService)
+	courseHandler := courses.NewHandler(courseService, blockService)
+	disciplineHandler := disciplines.NewHandler(disciplineService)
+	gitHandler := git.NewHandler(gitService)
 
 	api.SetupRoutes(
 		v1,
-		blockController,
-		courseController,
-		disciplineController,
-		userController,
-		gitController,
+		blockHandler,
+		courseHandler,
+		disciplineHandler,
+		userHandler,
+		gitHandler,
 		sessionRepo,
 		config,
 	)
+
+	var handler http.Handler = mux
+	handler = logger.ZapMiddleware()(handler)
+	handler = corsMiddleware.Handler(handler)
+
+	addr := fmt.Sprintf("%s:%d", config.Host, config.HTTPPort)
+	httpServer := &http.Server{
+		Addr:    addr,
+		Handler: handler,
+	}
 
 	ctx, stop := signal.NotifyContext(
 		context.Background(),
@@ -196,6 +202,7 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
+
 	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(
@@ -223,36 +230,25 @@ func main() {
 
 	wg := sync.WaitGroup{}
 
-	zap.S().Infof("Starting HTTP server on %s:%d", config.Host, config.HTTPPort)
+	zap.S().Infof("Starting HTTP server on %s", addr)
 	wg.Go(func() {
-		if err := httpServer.Run(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			zap.S().Error(err.Error())
 		}
 	})
+
 	zap.S().Infof("Starting SSH server on %s:%d", config.Host, config.SSHPort)
 	wg.Go(func() {
-		if err := sshServer.ListenAndServe(); err != nil &&
-			err != http.ErrServerClosed {
+		if err := sshServer.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			zap.S().Errorw("Could not start server", "error", err)
 		}
 	})
 
-	done := make(chan struct{})
-
-	go func() {
-		wg.Wait()
-		<-done
-	}()
-
-	zap.L().Info("Server is successfully started")
-
+	zap.L().Info("Server running")
 	<-ctx.Done()
 	zap.L().Info("Shutting down server. Terminating all active sessions.")
 
-	shutdownCtx, cancel := context.WithTimeout(
-		context.Background(),
-		5*time.Second,
-	)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := app.onShutdown(redisClient, dbConn, shutdownCtx); err != nil {

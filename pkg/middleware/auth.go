@@ -3,67 +3,58 @@ package middleware
 import (
 	"net/http"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 )
 
-func AuthMiddleware(
-	sessionRepo session.Repo,
-) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie(session.CookieName)
-			if err != nil {
-				http.Error(w, "WRONG_CREDENTIALS", http.StatusUnauthorized)
-				return
-			}
+// AuthMiddleware validates the session cookie and injects session data into
+// the request context. Apply to protected route groups only.
+func AuthMiddleware(sessionRepo session.Repo) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		r, w := humago.Unwrap(ctx)
 
-			sessionID, err := uuid.Parse(cookie.Value)
-			if err != nil {
-				http.Error(
-					w,
-					"Unexpected error in authorization occured",
-					http.StatusInternalServerError,
-				)
-				return
-			}
+		cookie, err := r.Cookie(session.CookieName)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-			s, err := sessionRepo.GetByID(sessionID)
-			if err != nil {
-				http.Error(w, "WRONG_CREDENTIALS", http.StatusUnauthorized)
-				return
-			}
+		sessionID, err := uuid.Parse(cookie.Value)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-			ctx := session.WithSessionID(r.Context(), sessionID)
-			ctx = session.WithUserID(ctx, s.UserID)
-			r = r.WithContext(ctx)
+		s, err := sessionRepo.GetByID(sessionID)
+		if err != nil || s == nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-			next.ServeHTTP(w, r)
-		})
+		goCtx := session.WithSessionID(r.Context(), sessionID)
+		goCtx = session.WithUserID(goCtx, s.UserID)
+		next(humago.NewContext(ctx.Operation(), r.WithContext(goCtx), w))
 	}
 }
 
-func FakeAuthMiddleware() func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			var u uuid.UUID
-			if r.URL.Query().Get("fake_user_id") != "" {
-				var err error
-				u, err = uuid.Parse(r.URL.Query().Get("fake_user_id"))
-				if err != nil {
-					http.Error(
-						w,
-						"Unexpected error in authorization occured",
-						http.StatusInternalServerError,
-					)
-					return
-				}
-			}
+// FakeAuthMiddleware injects a user ID from the fake_user_id query parameter.
+// Used for local development only (EnableAuth=false).
+func FakeAuthMiddleware() func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		r, w := humago.Unwrap(ctx)
 
-			ctx := session.WithUserID(r.Context(), u)
-			r = r.WithContext(ctx)
-			next.ServeHTTP(w, r)
-		})
+		var userID uuid.UUID
+		if fakeID := r.URL.Query().Get("fake_user_id"); fakeID != "" {
+			parsed, err := uuid.Parse(fakeID)
+			if err == nil {
+				userID = parsed
+			}
+		}
+
+		goCtx := session.WithUserID(r.Context(), userID)
+		next(humago.NewContext(ctx.Operation(), r.WithContext(goCtx), w))
 	}
 }
