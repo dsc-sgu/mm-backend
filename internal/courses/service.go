@@ -85,32 +85,32 @@ func (s *Service) GetInviteDetails(
 func (s *Service) JoinCourseByInvite(
 	ctx context.Context,
 	inviteID, userID uuid.UUID,
-) error {
+) (uuid.UUID, error) {
 	invite, err := s.GetInviteByID(ctx, inviteID)
 	if err != nil {
-		return fmt.Errorf("join by invite: get invite: %w", err)
+		return uuid.Nil, fmt.Errorf("join by invite: get invite: %w", err)
 	}
 	if invite == nil {
-		return ErrInviteNotFound
+		return uuid.Nil, ErrInviteNotFound
 	}
 	if invite.IsRevoked {
-		return ErrInviteRevoked
+		return uuid.Nil, ErrInviteRevoked
 	}
 	if time.Now().After(invite.ExpiresAt) {
-		return ErrInviteExpired
+		return uuid.Nil, ErrInviteExpired
 	}
 
 	courseMember, err := s.GetCourseMember(ctx, userID, invite.CourseID)
 	if err != nil {
-		return fmt.Errorf("join by invite: check existing role: %w", err)
+		return uuid.Nil, fmt.Errorf("join by invite: check existing role: %w", err)
 	}
 	if courseMember != nil && courseMember.IsActive {
-		return ErrAlreadyMember
+		return uuid.Nil, ErrAlreadyMember
 	}
 
 	if err := s.EnrollUserByInvite(ctx, userID, invite); err != nil {
-		return fmt.Errorf("join by invite: enroll user: %w", err)
+		return uuid.Nil, fmt.Errorf("join by invite: enroll user: %w", err)
 	}
 
-	return nil
+	return invite.CourseID, nil
 }

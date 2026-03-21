@@ -3,275 +3,196 @@ package api
 import (
 	"net/http"
 
-	"github.com/go-fuego/fuego"
-	"github.com/go-fuego/fuego/option"
+	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
-	"github.com/dsc-sgu/mm-backend/internal/routes"
 	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 func SetupRoutes(
-	g *fuego.Server,
-	blockController *routes.BlockController,
-	courseController *routes.CourseController,
-	disciplineController *routes.DisciplineController,
-	userController *routes.UserController,
-	gitController *routes.GitController,
+	api huma.API,
+	blockHandler *blocks.Handler,
+	courseHandler *courses.Handler,
+	disciplineHandler *disciplines.Handler,
+	userHandler *users.Handler,
+	gitHandler *git.Handler,
 	sessionRepo session.Repo,
-	config *config.Config,
+	cfg *config.Config,
 ) {
-	var mws []func(http.Handler) http.Handler
-	if config.EnableAuth {
-		mws = append(mws, middleware.AuthMiddleware(sessionRepo))
+	public := huma.NewGroup(api, "")
+	private := huma.NewGroup(api, "")
+	if cfg.EnableAuth {
 		zap.L().Info("Authorization is enabled")
+		private.UseMiddleware(middleware.AuthMiddleware(sessionRepo))
 	} else {
-		mws = append(mws, middleware.FakeAuthMiddleware())
 		zap.L().Info("Authorization is disabled")
+		private.UseMiddleware(middleware.FakeAuthMiddleware())
 	}
 
-	privateGroup := fuego.Group(
-		g,
-		"",
-		option.Middleware(mws...),
-	)
+	setupUserRoutes(public, private, userHandler)
+	setupBlockRoutes(private, blockHandler)
+	setupCourseRoutes(private, courseHandler)
+	setupDisciplineRoutes(private, disciplineHandler)
+	setupGitRoutes(private, gitHandler)
+}
 
-	blockGroup := fuego.Group(
-		privateGroup,
-		"/blocks",
-		option.Summary("Block API"),
-	)
+func setupUserRoutes(public, private huma.API, uc *users.Handler) {
+	huma.Register(public, huma.Operation{
+		Method: http.MethodPost, Path: "/auth/login",
+		Summary: "Login user", DefaultStatus: http.StatusOK,
+		Tags: []string{"Auth"},
+	}, uc.Login)
 
-	fuego.Get(
-		blockGroup,
-		"/{block_id}",
-		blockController.GetBlock,
-		option.Summary("Get block by id"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(public, huma.Operation{
+		Method: http.MethodPost, Path: "/auth/register",
+		Summary: "Register new user", DefaultStatus: http.StatusCreated,
+		Tags: []string{"Auth"},
+	}, uc.Register)
 
-	fuego.Post(
-		blockGroup,
-		"/{course_id}/blocks",
-		blockController.CreateBlock,
-		option.Summary("Create new block on course"),
-		option.DefaultStatusCode(http.StatusCreated),
-	)
+	huma.Register(private, huma.Operation{
+		Method: http.MethodPost, Path: "/auth/logout",
+		Summary: "Logout user", DefaultStatus: http.StatusNoContent,
+		Tags: []string{"Auth"},
+	}, uc.Logout)
 
-	fuego.Patch(
-		blockGroup,
-		"/{block_id}",
-		blockController.PatchBlock,
-		option.Summary("Update existing block"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(private, huma.Operation{
+		Method: http.MethodGet, Path: "/auth/session",
+		Summary: "Get session", DefaultStatus: http.StatusOK,
+		Tags: []string{"Auth"},
+	}, uc.GetSession)
+}
 
-	fuego.Delete(
-		blockGroup,
-		"/{block_id}/{course_id}",
-		blockController.UnlinkFromCourse,
-		option.Summary("Unlink block from course"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+func setupBlockRoutes(api huma.API, bh *blocks.Handler) {
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/blocks/{block_id}",
+		Summary: "Get block by id", DefaultStatus: http.StatusOK,
+		Tags: []string{"Block"},
+	}, bh.GetBlock)
 
-	fuego.Delete(
-		blockGroup,
-		"/{block_id}",
-		blockController.DeleteBlock,
-		option.Summary("Delete block from course"),
-		option.DefaultStatusCode(http.StatusNoContent),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/blocks/{course_id}/blocks",
+		Summary: "Create new block on course", DefaultStatus: http.StatusCreated,
+		Tags: []string{"Block"},
+	}, bh.CreateBlock)
 
-	courseGroup := fuego.Group(
-		privateGroup,
-		"/courses",
-		option.Summary("Course API"),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPatch, Path: "/blocks/{block_id}",
+		Summary: "Update existing block", DefaultStatus: http.StatusOK,
+		Tags: []string{"Block"},
+	}, bh.PatchBlock)
 
-	fuego.Post(
-		courseGroup,
-		"",
-		courseController.CreateCourse,
-		option.Summary("Create new course"),
-		option.DefaultStatusCode(http.StatusCreated),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodDelete, Path: "/blocks/{block_id}/{course_id}",
+		Summary: "Unlink block from course", DefaultStatus: http.StatusOK,
+		Tags: []string{"Block"},
+	}, bh.UnlinkFromCourse)
 
-	fuego.Get(
-		courseGroup,
-		"/{course_id}",
-		courseController.GetCourse,
-		option.Summary("Get existing course by id"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodDelete, Path: "/blocks/{block_id}",
+		Summary: "Delete block", DefaultStatus: http.StatusNoContent,
+		Tags: []string{"Block"},
+	}, bh.DeleteBlock)
+}
 
-	fuego.Get(
-		courseGroup,
-		"",
-		courseController.GetPaginatedCourses,
-		option.Summary("Get paginated courses"),
-		option.QueryInt("limit", "Number of courses in response"),
-		option.QueryInt("last_id", "Last ID from previous pagination request"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+func setupCourseRoutes(api huma.API, ch *courses.Handler) {
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/courses",
+		Summary: "Create new course", DefaultStatus: http.StatusCreated,
+		Tags: []string{"Course"},
+	}, ch.CreateCourse)
 
-	fuego.Patch(
-		courseGroup,
-		"/{course_id}",
-		func(ctx fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			return courseController.PatchCourse(ctx)
-		},
-		option.Summary("Update existing course"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/courses/{course_id}",
+		Summary: "Get existing course by id", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.GetCourse)
 
-	fuego.Delete(
-		courseGroup,
-		"/{course_id}",
-		courseController.DeleteCourse,
-		option.Summary("Delete course"),
-		option.DefaultStatusCode(http.StatusNoContent),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/courses",
+		Summary: "Get paginated courses", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.GetPaginatedCourses)
 
-	fuego.Post(
-		courseGroup,
-		"/invites",
-		courseController.CreateInvite,
-		option.Summary("Create invite link for course"),
-		option.DefaultStatusCode(http.StatusCreated),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPatch, Path: "/courses/{course_id}",
+		Summary: "Update existing course", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.PatchCourse)
 
-	fuego.Get(
-		courseGroup,
-		"/invites/{invite_id}",
-		courseController.GetInviteDetails,
-		option.Summary("Get invite link details"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodDelete, Path: "/courses/{course_id}",
+		Summary: "Delete course", DefaultStatus: http.StatusNoContent,
+		Tags: []string{"Course"},
+	}, ch.DeleteCourse)
 
-	fuego.Post(
-		courseGroup,
-		"/invites/{invite_id}",
-		courseController.JoinCourseByInvite,
-		option.Summary("Join course by invite link"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/courses/invites",
+		Summary: "Create invite link for course", DefaultStatus: http.StatusCreated,
+		Tags: []string{"Course"},
+	}, ch.CreateInvite)
 
-	fuego.Get(
-		courseGroup,
-		"/roles/{course_id}",
-		courseController.GetUserRoleInCourse,
-		option.Summary("Get role of current user in course"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/courses/invites/{invite_id}",
+		Summary: "Get invite link details", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.GetInviteDetails)
 
-	disciplineGroup := fuego.Group(
-		privateGroup,
-		"/disciplines",
-		option.Summary("Discipline API"),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/courses/invites/{invite_id}",
+		Summary: "Join course by invite link", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.JoinCourseByInvite)
 
-	fuego.Post(
-		disciplineGroup,
-		"",
-		disciplineController.CreateDiscipline,
-		option.Summary("Create new discipline"),
-		option.DefaultStatusCode(http.StatusCreated),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/courses/roles/{course_id}",
+		Summary: "Get role of current user in course", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course"},
+	}, ch.GetUserRoleInCourse)
+}
 
-	fuego.Get(
-		disciplineGroup,
-		"/{discipline_id}",
-		disciplineController.GetDiscipline,
-		option.Summary("Get discipline by id"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+func setupDisciplineRoutes(api huma.API, dh *disciplines.Handler) {
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/disciplines",
+		Summary: "Create new discipline", DefaultStatus: http.StatusCreated,
+		Tags: []string{"Discipline"},
+	}, dh.CreateDiscipline)
 
-	fuego.Patch(
-		disciplineGroup,
-		"/{discipline_id}",
-		disciplineController.PatchDiscipline,
-		option.Summary("Update existing discipline"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/disciplines/{discipline_id}",
+		Summary: "Get discipline by id", DefaultStatus: http.StatusOK,
+		Tags: []string{"Discipline"},
+	}, dh.GetDiscipline)
 
-	fuego.Delete(
-		disciplineGroup,
-		"/{discipline_id}",
-		disciplineController.DeleteDiscipline,
-		option.Summary("Delete discipline"),
-		option.DefaultStatusCode(http.StatusNoContent),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPatch, Path: "/disciplines/{discipline_id}",
+		Summary: "Update existing discipline", DefaultStatus: http.StatusOK,
+		Tags: []string{"Discipline"},
+	}, dh.PatchDiscipline)
 
-	gitGroup := fuego.Group(
-		privateGroup,
-		"/git",
-		option.Summary("Git API"),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodDelete, Path: "/disciplines/{discipline_id}",
+		Summary: "Delete discipline", DefaultStatus: http.StatusNoContent,
+		Tags: []string{"Discipline"},
+	}, dh.DeleteDiscipline)
+}
 
-	fuego.Post(
-		gitGroup,
-		"/add_key",
-		func(ctx fuego.ContextWithBody[git.AddSshKey]) (any, error) {
-			return gitController.AddSshKey(ctx)
-		},
-		option.Summary("Add new SSH key"),
-		option.DefaultStatusCode(http.StatusAccepted),
-	)
+func setupGitRoutes(api huma.API, gh *git.Handler) {
+	huma.Register(api, huma.Operation{
+		Method: http.MethodPost, Path: "/git/add_key",
+		Summary: "Add new SSH key", DefaultStatus: http.StatusAccepted,
+		Tags: []string{"Git"},
+	}, gh.AddSshKey)
 
-	fuego.Delete(
-		gitGroup,
-		"/delete_key",
-		func(ctx fuego.ContextWithBody[git.DeleteSshKey]) (any, error) {
-			return gitController.DeleteSshKey(ctx)
-		},
-		option.Summary("Delete SSH key"),
-		option.DefaultStatusCode(http.StatusNoContent),
-	)
-
-	authGroup := fuego.Group(g, "/auth", option.Summary("Auth API"))
-
-	privateAuthGroup := fuego.Group(
-		privateGroup,
-		"/auth",
-		option.Summary("Auth API"),
-		option.Middleware(mws...),
-	)
-
-	fuego.Post(
-		authGroup,
-		"/login",
-		userController.Login,
-		option.Summary("Login user"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
-
-	fuego.Post(
-		authGroup,
-		"/register",
-		userController.Register,
-		option.Summary("Register new user"),
-		option.DefaultStatusCode(http.StatusCreated),
-	)
-
-	// Logout
-	fuego.Post(
-		privateAuthGroup,
-		"/logout",
-		userController.Logout,
-		option.Summary("Logout user"),
-		option.DefaultStatusCode(http.StatusNoContent),
-	)
-
-	// Session
-	fuego.Get(
-		privateAuthGroup,
-		"/session",
-		userController.GetSession,
-		option.Summary("Get session"),
-		option.DefaultStatusCode(http.StatusOK),
-	)
+	huma.Register(api, huma.Operation{
+		Method: http.MethodDelete, Path: "/git/delete_key",
+		Summary: "Delete SSH key", DefaultStatus: http.StatusNoContent,
+		Tags: []string{"Git"},
+	}, gh.DeleteSshKey)
 }
