@@ -7,11 +7,7 @@ import (
 )
 
 type Repo interface {
-	CreateCourse(
-		ctx context.Context,
-		model *CreateCourse,
-		ownerID uuid.UUID,
-	) (*Course, error)
+	CreateCourse(ctx context.Context, model *CreateCourse, ownerID uuid.UUID) (*Course, error)
 	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
 	GetPaginatedCourses(
 		ctx context.Context,
