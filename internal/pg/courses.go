@@ -263,7 +263,7 @@ func (r *PGRepo) GetPaginatedCourses(
 		}
 	}
 
-	getAllCoursesByCourseIdSQL := fmt.Sprintf(`
+	getCoursesByFilter := fmt.Sprintf(`
 		SELECT id, discipline_id, owner_id, name, created_at
 		FROM courses
 		%s
@@ -271,12 +271,12 @@ func (r *PGRepo) GetPaginatedCourses(
 		LIMIT $1
 	`, whereClause)
 
-	zap.L().Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", getCoursesByFilter))
 	var course courses.Course
 	var courseList []courses.Course
 	rows, err := r.db.QueryxContext(
 		ctx,
-		getAllCoursesByCourseIDSQL,
+		getCoursesByFilter,
 		limit,
 		lastID,
 	)
