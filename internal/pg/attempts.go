@@ -3,26 +3,29 @@ package pg
 import (
 	"database/sql"
 
-	"github.com/dsc-sgu/mm-backend/internal/attempt"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/dsc-sgu/mm-backend/internal/attempt"
 )
 
-const (
-	GetAttemptsSql = `
-		SELECT a.id AS attempt_id, a.user_id, a.task_id, att.state, att.transition_at, att.transition_data
-		FROM attempt_transitions att
-		JOIN attempt a ON att.attempt_id = a.id
-		WHERE a.user_id = $1 AND a.task_id = $2
-		ORDER BY att.transition_at ASC;
-	`
-)
+const GetAttemptsSql = `
+	SELECT 
+		a.id AS attempt_id, 
+		a.user_id, 
+		a.task_id, 
+		att.state, 
+		att.transition_at, 
+		att.transition_data
+	FROM attempt_transitions att
+	JOIN attempts a ON att.attempt_id = a.id
+	WHERE a.user_id = $1 AND a.task_id = $2
+	ORDER BY att.transition_at ASC;
+`
 
-func (r *PGRepo) GetAttempts(
-	userId uuid.UUID,
-	taskId uuid.UUID,
-) ([]attempt.Attempt, error) {
+func (r *PGRepo) GetAttempts(userId, taskId uuid.UUID) ([]attempt.Attempt, error) {
 	var attemptList []attempt.Attempt
+
 	rows, err := r.db.Queryx(GetAttemptsSql, userId, taskId)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -33,7 +36,7 @@ func (r *PGRepo) GetAttempts(
 
 	defer func() {
 		if err := rows.Close(); err != nil {
-			zap.L().Error(err.Error())
+			zap.L().Error("Failed to close rows", zap.Error(err))
 		}
 	}()
 
@@ -44,8 +47,10 @@ func (r *PGRepo) GetAttempts(
 		}
 		attemptList = append(attemptList, attempt)
 	}
+
 	if err = rows.Err(); err != nil {
-		return attemptList, err
+		return nil, err
 	}
+
 	return attemptList, nil
 }
