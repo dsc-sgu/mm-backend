@@ -41,7 +41,7 @@ const (
 	`
 
 	getCourseByIdSQL = `
-		SELECT id, discipline_id, owner_id, name, created_at
+		SELECT id, discipline_id, owner_id, name, created_at, version
 		FROM courses
 		WHERE id = $1
 	`
@@ -74,9 +74,9 @@ const (
 
 	updateCourseByIdSQL = `
 		UPDATE courses
-		SET owner_id = $1, name = $2
-		WHERE id = $3
-		RETURNING id, discipline_id, owner_id, name, created_at
+		SET name = :name, version = :version
+		WHERE id = :id AND version = :version - 1
+		RETURNING id, discipline_id, owner_id, name, created_at, version
 	`
 
 	deleteCourseByIdSQL = `
@@ -231,26 +231,81 @@ func (r *PGRepo) GetPaginatedCourses(
 func (r *PGRepo) UpdateCourseByID(
 	ctx context.Context,
 	id uuid.UUID,
-	update *courses.UpdateCourse,
+	update *courses.UpdateCourseRequest,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSQL))
-
-	row := r.db.QueryRowxContext(
-		ctx,
-		updateCourseByIdSQL,
-		update.OwnerID,
-		update.Name,
-		id,
-	)
-
-	var course courses.Course
-
-	err := row.StructScan(&course)
+	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return &course, err
+		return nil, fmt.Errorf("update course: begin transaction: %w", err)
 	}
 
-	return &course, nil
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Get current course and lock the row
+	var currentCourse courses.Course
+	if err := tx.GetContext(ctx, &currentCourse, "SELECT * FROM courses WHERE id = $1 FOR UPDATE", id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, courses.ErrCourseNotFound
+		}
+		return nil, fmt.Errorf("update course: get course: %w", err)
+	}
+
+	// Check version
+	if currentCourse.Version != update.Version {
+		return nil, courses.ErrVersionMismatch
+	}
+
+	// Delete all blocks for the course
+	if _, err := tx.ExecContext(ctx, "DELETE FROM blocks WHERE course_id = $1", id); err != nil {
+		return nil, fmt.Errorf("update course: delete blocks: %w", err)
+	}
+
+	// Create new blocks
+	for i, block := range update.Blocks {
+		block.CourseID = id
+		block.Position = i
+		if _, err := tx.NamedExecContext(ctx, createBlockSQL, block); err != nil {
+			return nil, fmt.Errorf("update course: create block: %w", err)
+		}
+	}
+
+	// Update course
+	currentCourse.Name = update.Name
+	currentCourse.Version++
+
+	rows, err := tx.NamedQuery(updateCourseByIdSQL, currentCourse)
+	if err != nil {
+		return nil, fmt.Errorf("update course: update course query: %w", err)
+	}
+
+	var updatedCourse courses.Course
+	if rows.Next() {
+		if err := rows.StructScan(&updatedCourse); err != nil {
+			if closeErr := rows.Close(); closeErr != nil {
+				zap.L().Error(closeErr.Error())
+			}
+			return nil, fmt.Errorf(
+				"update course: scan updated course: %w",
+				err,
+			)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		zap.L().Error(err.Error())
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("update course: commit transaction: %w", err)
+	}
+
+	return &updatedCourse, nil
 }
 
 func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {

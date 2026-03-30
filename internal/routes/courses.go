@@ -1,30 +1,41 @@
 package routes
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/lock"
+)
+
+const (
+	lockTTL = 60 * time.Second
 )
 
 type CourseController struct {
 	courseService *courses.Service
 	blockService  *blocks.Service
+	lockManager   lock.Manager
 }
 
 func NewCourseController(
 	courseService *courses.Service,
 	blockService *blocks.Service,
+	lockManager lock.Manager,
 ) *CourseController {
 	return &CourseController{
 		courseService: courseService,
 		blockService:  blockService,
+		lockManager:   lockManager,
 	}
 }
 
@@ -104,12 +115,12 @@ func (c *CourseController) GetCourse(
 	return course, nil
 }
 
-func (c *CourseController) PatchCourse(
-	ctx fuego.ContextWithBody[courses.UpdateCourse],
+func (c *CourseController) UpdateCourse(
+	ctx fuego.ContextWithBody[courses.UpdateCourseRequest],
 ) (*courses.Course, error) {
 	pathID := ctx.PathParam("course_id")
 
-	id, err := uuid.Parse(pathID)
+	courseID, err := uuid.Parse(pathID)
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -121,12 +132,128 @@ func (c *CourseController) PatchCourse(
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	course, err := c.courseService.UpdateCourseByID(ctx.Context(), id, &body)
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{}
+	}
+
+	// Check lock
+	lockerID, err := c.lockManager.GetLocker(ctx.Context(), courseID)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+	if lockerID != userID {
+		return nil, fuego.HTTPError{
+			Status: http.StatusLocked,
+			Detail: "course is locked by another user",
+		}
+	}
+
+	course, err := c.courseService.UpdateCourse(ctx.Context(), courseID, &body)
+	if err != nil {
+		if errors.Is(err, courses.ErrVersionMismatch) {
+			return nil, fuego.ConflictError{Detail: err.Error()}
+		}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	// Release lock after successful update
+	if err := c.lockManager.Release(ctx.Context(), courseID, userID); err != nil {
+		// Log the error but don't fail the request, as the primary operation succeeded.
+		zap.L().Error("failed to release lock after update", zap.Error(err))
+	}
+
+	return course, nil
+}
+
+func (c *CourseController) LockCourse(ctx fuego.ContextNoBody) (any, error) {
+	pathID := ctx.PathParam("course_id")
+	courseID, err := uuid.Parse(pathID)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: "invalid course id"}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{}
+	}
+
+	// TODO: check if user is a teacher of the course
+
+	lockerID, err := c.lockManager.GetLocker(ctx.Context(), courseID)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	return course, nil
+	if lockerID != uuid.Nil && lockerID != userID {
+		return nil, fuego.HTTPError{
+			Status: http.StatusLocked,
+			Detail: "course is locked by another user",
+		}
+	}
+
+	ok, err := c.lockManager.Acquire(ctx.Context(), courseID, userID, lockTTL)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	if !ok {
+		return nil, fuego.HTTPError{
+			Status: http.StatusLocked,
+			Detail: "failed to acquire lock",
+		}
+	}
+
+	return nil, nil
+}
+
+func (c *CourseController) Heartbeat(ctx fuego.ContextNoBody) (any, error) {
+	pathID := ctx.PathParam("course_id")
+	courseID, err := uuid.Parse(pathID)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: "invalid course id"}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{}
+	}
+
+	err = c.lockManager.Heartbeat(ctx.Context(), courseID, userID, lockTTL)
+	if err != nil {
+		if errors.Is(err, lock.ErrLockNotAcquired) {
+			return nil, fuego.ConflictError{
+				Detail: "lock is not acquired or expired",
+			}
+		}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return nil, nil
+}
+
+func (c *CourseController) UnlockCourse(ctx fuego.ContextNoBody) (any, error) {
+	pathID := ctx.PathParam("course_id")
+	courseID, err := uuid.Parse(pathID)
+	if err != nil {
+		return nil, fuego.BadRequestError{Detail: "invalid course id"}
+	}
+
+	userID := session.UserIDFromContext(ctx.Context())
+	if userID == uuid.Nil {
+		return nil, fuego.UnauthorizedError{}
+	}
+
+	err = c.lockManager.Release(ctx.Context(), courseID, userID)
+	if err != nil {
+		if errors.Is(err, lock.ErrLockNotAcquired) {
+			// It's fine if the lock was already released or expired
+			return nil, nil
+		}
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return nil, nil
 }
 
 func (c *CourseController) DeleteCourse(

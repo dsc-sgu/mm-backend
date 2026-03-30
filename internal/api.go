@@ -9,7 +9,6 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/config"
-	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	"github.com/dsc-sgu/mm-backend/pkg/middleware"
@@ -118,12 +117,10 @@ func SetupRoutes(
 		option.DefaultStatusCode(http.StatusOK),
 	)
 
-	fuego.Patch(
+	fuego.Put(
 		courseGroup,
 		"/{course_id}",
-		func(ctx fuego.ContextWithBody[courses.UpdateCourse]) (*courses.Course, error) {
-			return courseController.PatchCourse(ctx)
-		},
+		courseController.UpdateCourse,
 		option.Summary("Update existing course"),
 		option.DefaultStatusCode(http.StatusOK),
 	)
@@ -133,6 +130,31 @@ func SetupRoutes(
 		"/{course_id}",
 		courseController.DeleteCourse,
 		option.Summary("Delete course"),
+		option.DefaultStatusCode(http.StatusNoContent),
+	)
+
+	// Course locking
+	fuego.Post(
+		courseGroup,
+		"/{course_id}/lock",
+		courseController.LockCourse,
+		option.Summary("Lock course for editing"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Post(
+		courseGroup,
+		"/{course_id}/heartbeat",
+		courseController.Heartbeat,
+		option.Summary("Heartbeat to keep lock alive"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Delete(
+		courseGroup,
+		"/{course_id}/lock",
+		courseController.UnlockCourse,
+		option.Summary("Unlock course"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 

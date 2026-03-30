@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
 type Course struct {
@@ -12,6 +14,7 @@ type Course struct {
 	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
 	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
+	Version      int       `json:"version"      db:"version"`
 }
 
 type CreateCourse struct {
@@ -19,9 +22,10 @@ type CreateCourse struct {
 	Name         string    `json:"name"         db:"name"          binding:"required"`
 }
 
-type UpdateCourse struct {
-	OwnerID uuid.UUID `json:"ownerID" db:"owner_id"`
-	Name    string    `json:"name"    db:"name"`
+type UpdateCourseRequest struct {
+	Name    string         `json:"name"`
+	Version int            `json:"version"`
+	Blocks  []blocks.Block `json:"blocks"`
 }
 
 type CoursePagination struct {

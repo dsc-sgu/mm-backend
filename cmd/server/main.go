@@ -28,6 +28,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/lock"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
@@ -164,6 +165,7 @@ func main() {
 	pgRepo := pg.NewPGRepo(dbConn)
 
 	sessionRepo := session.NewRedisRepo(redisClient)
+	lockManager := lock.NewRedisManager(redisClient)
 	blockService := blocks.NewService(pgRepo)
 	courseService := courses.NewService(pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
@@ -173,7 +175,11 @@ func main() {
 	// Controller initialization
 	userController := routes.NewUserController(userService)
 	blockController := routes.NewBlockController(blockService)
-	courseController := routes.NewCourseController(courseService, blockService)
+	courseController := routes.NewCourseController(
+		courseService,
+		blockService,
+		lockManager,
+	)
 	disciplineController := routes.NewDisciplineController(disciplineService)
 	gitController := routes.NewGitController(gitService)
 

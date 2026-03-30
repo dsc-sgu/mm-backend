@@ -27,6 +27,7 @@ var (
 	ErrAlreadyMember        = errors.New(
 		"user is already a member of this course",
 	)
+	ErrVersionMismatch = errors.New("version mismatch")
 )
 
 func (s *Service) CreateInvite(
@@ -113,4 +114,13 @@ func (s *Service) JoinCourseByInvite(
 	}
 
 	return nil
+}
+
+func (s *Service) UpdateCourse(
+	ctx context.Context,
+	courseID uuid.UUID,
+	req *UpdateCourseRequest,
+) (*Course, error) {
+	// TODO: Add permission check
+	return s.UpdateCourseByID(ctx, courseID, req)
 }

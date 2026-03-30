@@ -54,7 +54,22 @@ const (
 		DELETE FROM blocks
 		WHERE id = $1
 	`
+
+	deleteBlocksByCourseIdSQL = `
+		DELETE FROM blocks
+		WHERE course_id = $1
+	`
 )
+
+func (r *PGRepo) DeleteBlocksByCourseID(
+	ctx context.Context,
+	courseID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing query", zap.String("query", deleteBlocksByCourseIdSQL))
+	_, err := r.db.ExecContext(ctx, deleteBlocksByCourseIdSQL, courseID)
+	return err
+}
 
 func (r *PGRepo) CreateBlock(
 	ctx context.Context,

@@ -21,7 +21,7 @@ type Repo interface {
 	UpdateCourseByID(
 		ctx context.Context,
 		id uuid.UUID,
-		update *UpdateCourse,
+		update *UpdateCourseRequest,
 	) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
 	CreateInvite(

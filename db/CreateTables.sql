@@ -55,11 +55,14 @@ CREATE TABLE courses (
     name varchar(128) NOT NULL,
     -- Service info
     created_at timestamp NOT NULL,
+    version integer NOT NULL DEFAULT 1,
 
     -- NOTE(Ezhkin-Kot): unique course names in one discipline
     CONSTRAINT course_discipline_name_unique
         UNIQUE (discipline_id, name)
 );
+
+CREATE INDEX idx_courses_id_version ON courses(id, version);
 
 -- NOTE(Ezhkin-Kot): data for invite links to courses
 CREATE TABLE invites (
