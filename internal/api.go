@@ -168,7 +168,7 @@ func SetupRoutes(
 
 	fuego.Get(
 		courseGroup,
-		"/invites/{invite_id}",
+		"/{invite_id}/invites",
 		courseController.GetInviteDetails,
 		option.Summary("Get invite link details"),
 		option.DefaultStatusCode(http.StatusOK),
@@ -176,7 +176,7 @@ func SetupRoutes(
 
 	fuego.Post(
 		courseGroup,
-		"/invites/{invite_id}",
+		"/{invite_id}/invites",
 		courseController.JoinCourseByInvite,
 		option.Summary("Join course by invite link"),
 		option.DefaultStatusCode(http.StatusOK),
@@ -184,7 +184,7 @@ func SetupRoutes(
 
 	fuego.Get(
 		courseGroup,
-		"/roles/{course_id}",
+		"/{course_id}/role",
 		courseController.GetUserRoleInCourse,
 		option.Summary("Get role of current user in course"),
 		option.DefaultStatusCode(http.StatusOK),
