@@ -1,9 +1,14 @@
 package attempt
 
-import "github.com/dsc-sgu/mm-backend/internal/git"
+import (
+	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/git"
+)
 
 type Repo interface {
 	GetAttempts(taskId, participantId uuid.UUID) ([]Attempt, error)
+	GetDiff(id1 uuid.UUID, id2 uuid.UUID) ([]string, error)
 }
 
 type FileDescriptor = string
