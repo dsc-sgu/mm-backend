@@ -45,6 +45,7 @@ func TestCreateCourse(t *testing.T) {
 		&testUser,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 	require.NotZero(t, courseID)
 }
@@ -76,6 +77,7 @@ func TestGetCourseByID(t *testing.T) {
 		&backendPort,
 		&testUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
@@ -158,6 +160,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 			userID2,
 			disciplineID2,
 			fmt.Sprintf("Course2 %d", i),
+			"Test Course",
 		)
 		require.NotZero(t, id2)
 
@@ -167,6 +170,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 			&testUser,
 			disciplineID,
 			fmt.Sprintf("Course %d", i),
+			"Test Course",
 		)
 		require.NotZero(t, id)
 	}
@@ -300,7 +304,6 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Len(t, recievedCourses4, 0)
 
->>>>>>> cb671d0 (feat: add tests)
 }
 
 func TestUpdateCourse(t *testing.T) {
@@ -330,6 +333,7 @@ func TestUpdateCourse(t *testing.T) {
 		&backendPort,
 		&testUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
@@ -369,7 +373,7 @@ func TestUpdateCourse(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updatedCourse))
 
 	require.Equal(t, courseID, updatedCourse.ID)
-	require.Equal(t, "Updated Test Course", updatedCourse.Name)
+	require.Equal(t, "Updated Test Course", updatedCourse.DisplayName)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
 	require.NotNil(t, updatedCourse.ActiveSnapshotID)
 	require.Equal(t, 1, updatedCourse.Version)
@@ -410,6 +414,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		&backendPort,
 		&teacherTestUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 
