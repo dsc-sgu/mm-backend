@@ -393,6 +393,7 @@ func CreateTestCourse(
 	testUser *TestUser,
 	disciplineID uuid.UUID,
 	name string,
+	displayName string,
 ) uuid.UUID {
 	t.Helper()
 
@@ -404,6 +405,7 @@ func CreateTestCourse(
 	courseBody, _ := json.Marshal(courses.CreateCourse{
 		DisciplineID: disciplineID,
 		Name:         name,
+		DisplayName:  displayName,
 	})
 
 	courseReq, err := http.NewRequest(

@@ -47,6 +47,7 @@ CREATE TABLE courses (
     active_snapshot_id uuid, -- REFERENCES course_snapshots(id)
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
+    display_name varchar(128) NOT NULL,
     -- Service info
     version integer NOT NULL DEFAULT 0,
     created_at timestamp NOT NULL,

@@ -37,6 +37,7 @@ func TestCreateBlock(t *testing.T) {
 		&testUser,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 
 	draftSnapshotID := LockCourse(
@@ -84,6 +85,7 @@ func TestGetBlockByID(t *testing.T) {
 		&backendPort,
 		&testUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 
@@ -142,6 +144,7 @@ func TestDeleteBlock(t *testing.T) {
 		&backendPort,
 		&testUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 
