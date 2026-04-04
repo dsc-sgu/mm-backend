@@ -53,6 +53,7 @@ CREATE TABLE courses (
     discipline_id uuid NOT NULL REFERENCES disciplines(id),
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
+    display_name varchar(128) NOT NULL,
     -- Service info
     created_at timestamp NOT NULL,
 

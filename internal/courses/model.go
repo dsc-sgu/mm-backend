@@ -11,17 +11,20 @@ type Course struct {
 	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
 	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
-	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
+
+	CreatedAt time.Time `json:"createdAt" db:"created_at" binding:"required"`
 }
 
 type CreateCourse struct {
 	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
 }
 
 type UpdateCourse struct {
-	OwnerID uuid.UUID `json:"ownerID" db:"owner_id"`
-	Name    string    `json:"name"    db:"name"`
+	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"`
+	DisplayName string    `json:"displayName" db:"display_name" binding:"required"`
 }
 
 type CoursePagination struct {

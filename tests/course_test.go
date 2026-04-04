@@ -43,6 +43,7 @@ func TestCreateCourse(t *testing.T) {
 		userID,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 	require.NotZero(t, courseID)
 }
@@ -74,6 +75,7 @@ func TestGetCourseByID(t *testing.T) {
 		&backendPort,
 		userID,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
@@ -155,6 +157,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 			userID2,
 			disciplineID2,
 			fmt.Sprintf("Course2 %d", i),
+			"Test Course",
 		)
 		require.NotZero(t, id2)
 
@@ -164,6 +167,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 			userID,
 			disciplineID,
 			fmt.Sprintf("Course %d", i),
+			"Test Course",
 		)
 		require.NotZero(t, id)
 	}
@@ -328,6 +332,7 @@ func TestUpdateCourse(t *testing.T) {
 		userID,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 	require.NotZero(t, courseID)
 
@@ -339,8 +344,8 @@ func TestUpdateCourse(t *testing.T) {
 	)
 
 	body, _ := json.Marshal(courses.UpdateCourse{
-		OwnerID: userID,
-		Name:    "Updated Test Course",
+		OwnerID:     userID,
+		DisplayName: "Updated Test Course",
 	})
 
 	req, err := http.NewRequest(
@@ -366,7 +371,7 @@ func TestUpdateCourse(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updatedCourse))
 
 	require.Equal(t, courseID, updatedCourse.ID)
-	require.Equal(t, "Updated Test Course", updatedCourse.Name)
+	require.Equal(t, "Updated Test Course", updatedCourse.DisplayName)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
 }
 
@@ -405,6 +410,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		&backendPort,
 		teacherUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 

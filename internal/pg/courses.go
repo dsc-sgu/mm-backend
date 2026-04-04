@@ -14,24 +14,24 @@ import (
 
 const (
 	createCourseSQL = `
-		INSERT INTO courses (discipline_id, owner_id, name, created_at)
-		VALUES (:discipline_id, :owner_id, :name, :created_at)
+		INSERT INTO courses (discipline_id, owner_id, name, display_name, created_at)
+		VALUES (:discipline_id, :owner_id, :name, :display_name, :created_at)
 		RETURNING id
 	`
 
 	createCourseMemberSQL = `
-    INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
-    VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
+    	INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
+    	VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
   `
 
 	createStudentSQL = `
-    INSERT INTO students (user_id, course_id, admission_date, is_active)
-    VALUES (:user_id, :course_id, :admission_date, :is_active)
+    	INSERT INTO students (user_id, course_id, admission_date, is_active)
+    	VALUES (:user_id, :course_id, :admission_date, :is_active)
 	`
 
 	createTeacherSQL = `
-    INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
-    VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
+    	INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
+    	VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
 	`
 
 	createInviteSQL = `
@@ -41,20 +41,20 @@ const (
 	`
 
 	getCourseByIdSQL = `
-		SELECT id, discipline_id, owner_id, name, created_at
+		SELECT id, discipline_id, owner_id, name, display_name, created_at
 		FROM courses
 		WHERE id = $1
 	`
 
 	getCourseByNameSQL = `
-    SELECT id, discipline_id, owner_id, name, created_at
-    FROM courses
-    WHERE name = $1
-  `
+    	SELECT id, discipline_id, owner_id, name, display_name, created_at
+    	FROM courses
+    	WHERE name = $1
+  	`
 
 	getCourseMemberSQL = `
-    SELECT user_id, course_id, role, invited_by, is_active
-    FROM course_members
+    	SELECT user_id, course_id, role, invited_by, is_active
+    	FROM course_members
 		WHERE user_id = $1 AND course_id = $2
 	`
 
@@ -66,9 +66,9 @@ const (
 
 	updateCourseByIdSQL = `
 		UPDATE courses
-		SET owner_id = $1, name = $2
+		SET owner_id = $1, display_name = $2
 		WHERE id = $3
-		RETURNING id, discipline_id, owner_id, name, created_at
+		RETURNING id, discipline_id, owner_id, name, display_name, created_at
 	`
 
 	deleteCourseByIdSQL = `
@@ -96,6 +96,7 @@ func (r *PGRepo) CreateCourse(
 		DisciplineID: model.DisciplineID,
 		OwnerID:      ownerID,
 		Name:         model.Name,
+		DisplayName:  model.DisplayName,
 		CreatedAt:    time.Now(),
 	}
 
@@ -260,7 +261,7 @@ func (r *PGRepo) UpdateCourseByID(
 		ctx,
 		updateCourseByIdSQL,
 		update.OwnerID,
-		update.Name,
+		update.DisplayName,
 		id,
 	)
 
