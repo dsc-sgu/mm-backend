@@ -17,8 +17,8 @@ import (
 
 const (
 	createCourseSQL = `
-		INSERT INTO courses (discipline_id, owner_id, name, created_at)
-		VALUES (:discipline_id, :owner_id, :name, :created_at)
+		INSERT INTO courses (discipline_id, owner_id, name, display_name, created_at)
+		VALUES (:discipline_id, :owner_id, :name, :display_name, :created_at)
 		RETURNING id
 	`
 
@@ -147,6 +147,7 @@ func (r *PGRepo) createCourseTx(
 		DisciplineID: model.DisciplineID,
 		OwnerID:      ownerID,
 		Name:         model.Name,
+		DisplayName:  model.DisplayName,
 		CreatedAt:    time.Now(),
 	}
 
