@@ -27,7 +27,6 @@ const (
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
 	`
-
 	getCourseByNameSQL = `
 		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
 		FROM courses
@@ -219,19 +218,16 @@ func (r *PGRepo) GetCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) GetCourseByName(
-	ctx context.Context,
-	name string,
-) (*courses.Course, error) {
+func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
 	err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return &course, err
 		}
-		return nil, err
+		return &course, err
 	}
 	return &course, nil
 }
