@@ -8,6 +8,9 @@ import (
 
 type Repo interface {
 	GetAttempts(taskId, participantId uuid.UUID) ([]Attempt, error)
+}
+
+type RepoManager interface {
 	GetDiff(id1 uuid.UUID, id2 uuid.UUID) ([]string, error)
 }
 
