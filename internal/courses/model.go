@@ -3,6 +3,7 @@ package courses
 import (
 	"time"
 
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/google/uuid"
 )
 
@@ -31,6 +32,11 @@ type CoursePagination struct {
 
 type CourseIDResponse struct {
 	ID uuid.UUID `json:"id"`
+}
+
+type CourseWithBlocks struct {
+	Course *Course         `json:"course"`
+	Blocks []*blocks.Block `json:"blocks"`
 }
 
 type CourseMemberRole string

@@ -59,6 +59,31 @@ func (c *CourseController) GetPaginatedCourses(
 ) ([]courses.Course, error) {
 	pathLimit := ctx.QueryParam("limit")
 	pathID := ctx.QueryParam("last_id")
+	disciplineID := ctx.QueryParam("discipline_id")
+	teacherStr := ctx.QueryParam("is_teacher")
+	studentStr := ctx.QueryParam("is_student")
+
+	var err error
+	teacherBool := false
+	if teacherStr != "" {
+		teacherBool, err = strconv.ParseBool(teacherStr)
+		if err != nil {
+			return nil, fuego.BadRequestError{Detail: err.Error()}
+		}
+	}
+
+	studentBool := false
+	if studentStr != "" {
+		studentBool, err = strconv.ParseBool(studentStr)
+		if err != nil {
+			return nil, fuego.BadRequestError{Detail: err.Error()}
+		}
+	}
+
+	userID := uuid.Nil
+	if teacherBool || studentBool {
+		userID = session.UserIDFromContext(ctx.Context())
+	}
 
 	limit, err := strconv.Atoi(pathLimit)
 	if err != nil {
@@ -76,7 +101,17 @@ func (c *CourseController) GetPaginatedCourses(
 		}
 	}
 
-	course, err := c.courseService.GetPaginatedCourses(ctx.Context(), limit, id)
+	discipline, err := uuid.Parse(disciplineID)
+	if err != nil {
+		if disciplineID == "" {
+			discipline = uuid.Nil
+		} else {
+			return nil, fuego.BadRequestError{
+				Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
+			}
+		}
+	}
+	course, err := c.courseService.GetPaginatedCourses(ctx, limit, id, discipline, userID, teacherBool, studentBool)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
@@ -86,7 +121,7 @@ func (c *CourseController) GetPaginatedCourses(
 
 func (c *CourseController) GetCourse(
 	ctx fuego.ContextNoBody,
-) (*courses.Course, error) {
+) (*courses.CourseWithBlocks, error) {
 	pathID := ctx.PathParam("course_id")
 
 	id, err := uuid.Parse(pathID)
@@ -96,12 +131,22 @@ func (c *CourseController) GetCourse(
 		}
 	}
 
+	blockList, err := c.blockService.GetAllBlocksByCourseID(ctx, id)
+	if err != nil {
+		return nil, fuego.InternalServerError{Detail: err.Error()}
+	}
+
 	course, err := c.courseService.GetCourseByID(ctx.Context(), id)
 	if err != nil {
 		return nil, fuego.InternalServerError{Detail: err.Error()}
 	}
 
-	return course, nil
+	result := &courses.CourseWithBlocks{
+		Course: course,
+		Blocks: blockList,
+	}
+
+	return result, nil
 }
 
 func (c *CourseController) PatchCourse(
