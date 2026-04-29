@@ -21,6 +21,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package git provides custom SSH server which allows to inject reaction on push/fetch events.
+// You can write implementation of `Hooks` interface and inject it into `Middleware` to get any custom logic you want.
 package git
 
 import (
