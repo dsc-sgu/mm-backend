@@ -134,7 +134,7 @@ func initRedis(
 
 	req := testcontainers.ContainerRequest{
 		Name:         "mm-redis",
-		Image:        "docker.dragonflydb.io/dragonflydb/dragonfly",
+		Image:        "valkey/valkey:8",
 		ExposedPorts: []string{string(redisPort)},
 		WaitingFor:   wait.ForListeningPort(redisPort),
 		Networks:     []string{net.Name},

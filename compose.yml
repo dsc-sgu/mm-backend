@@ -7,7 +7,7 @@ services:
       - "${PORT:-8080}:80"
     depends_on:
       - postgres
-      - dragonfly
+      - valkey
     env_file:
       - path: .env
         required: false
@@ -32,12 +32,10 @@ services:
       - path: .env
         required: false
 
-  dragonfly:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly
-    ulimits:
-      memlock: -1
+  valkey:
+    image: valkey/valkey:8
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 3
