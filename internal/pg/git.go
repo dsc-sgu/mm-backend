@@ -19,6 +19,11 @@ const (
 		DELETE FROM ssh_keys
 		WHERE owner_id = $1 AND fingerprint = $2
 	`
+
+	getParticipantIdSQL = `
+		SELECT owner_id FROM ssh_keys
+		WHERE fingerprint = $1
+	`
 )
 
 func (r *PGRepo) AddSshKey(model *git.SshKey) error {
@@ -50,11 +55,19 @@ func GetTask(name string) (uuid.UUID, error) {
 	return uuid.Parse("e7cf6012-1348-434b-9d54-bd89c9e6e95e")
 }
 
-// realise via db
-func GetParticipant(fingerprint string) (uuid.UUID, error) {
-	if fingerprint == "SHA256:AH71wflD7hbxs0bGhssvTy77dLoszYUWXkeK798ph04" {
-		return uuid.Parse("681ae49f-1f56-4632-bd1b-7ca3ab09a467")
-	} else {
-		return uuid.Parse("e7cf6012-1348-434b-9d54-bd89c9e6e95e")
+func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", getParticipantIdSQL))
+
+	var ownerID uuid.UUID
+
+	err := r.db.QueryRow(getParticipantIdSQL, fingerprint).Scan(&ownerID)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, nil
+		}
+		return uuid.Nil, err
 	}
+
+	return ownerID, nil
 }
