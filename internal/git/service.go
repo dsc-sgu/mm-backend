@@ -164,6 +164,7 @@ func (s *Service) CreateAttemptTag(repoID RepoID, files []FileInfo) (string, err
 // 	return a.Access
 // }
 
+// ment to return struct RepoID from 3 parametres that we get from user when he writes "git clone" for example
 func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if strings.HasPrefix(path, string(os.PathSeparator)) {
 		path = path[len(string(os.PathSeparator)):]
