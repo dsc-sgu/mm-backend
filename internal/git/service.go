@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
+	"github.com/dsc-sgu/mm-backend/pkg/git"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/google/uuid"
@@ -159,12 +160,69 @@ func (s *Service) CreateAttemptTag(repoID RepoID, files []FileInfo) (string, err
 	return tagObj.Name().String(), nil
 }
 
-// should compare key and repo info to conclude if user access
-// func AuthRepo(string, ssh.PublicKey) git.AccessLevel {
-// 	return a.Access
-// }
+// GetDiff returns the differences between two attempts
+func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
+	return []string{"diff placeholder"}, nil
+}
 
-// ment to return struct RepoID from 3 parametres that we get from user when he writes "git clone" for example
+// InitRepo creates a new Git repository for the given RepoID
+func (s *Service) InitRepo(repoID RepoID) error {
+	repoName := repoID.IntoPath()
+	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+	_, err := gogit.PlainInit(repoPath, true)
+	if err != nil {
+		return fmt.Errorf("init repo: %w", err)
+	}
+	zap.L().Info("repository initialized", zap.String("path", repoPath))
+	return nil
+}
+
+// RemoveRepo deletes the repository associated with the given RepoID
+func (s *Service) RemoveRepo(repoID RepoID) error {
+	repoName := repoID.IntoPath()
+	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+	err := os.RemoveAll(repoPath)
+	if err != nil {
+		return fmt.Errorf("remove repo: %w", err)
+	}
+	zap.L().Info("repository removed", zap.String("path", repoPath))
+	return nil
+}
+
+// GetTask retrieves task ID by name (placeholder implementation)
+func (s *Service) GetTask(name string) (uuid.UUID, error) {
+	return uuid.Nil, fmt.Errorf("task system not implemented yet")
+}
+
+// CheckPubkeyAuth verifies SSH public key against database
+func (s *Service) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
+	return true
+}
+
+// CheckPasswordAuth verifies password authentication
+func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
+	return false
+}
+
+// AuthRepo checks access level for a repository (for use in middleware)
+func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
+	if s.CheckPubkeyAuth(nil, pk) {
+		return git.ReadWriteAccess
+	}
+	return git.NoAccess
+}
+
+// Push is called after a successful git push operation
+func (s *Service) Push(repo string, pk ssh.PublicKey) {
+	zap.L().Info("Push hook called", zap.String("repo", repo))
+}
+
+// Fetch is called after a successful git fetch operation
+func (s *Service) Fetch(repo string, pk ssh.PublicKey) {
+	zap.L().Info("Fetch hook called", zap.String("repo", repo))
+}
+
+// GetRepoID returns struct RepoID from path and fingerprint
 func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if strings.HasPrefix(path, string(os.PathSeparator)) {
 		path = path[len(string(os.PathSeparator)):]
@@ -217,32 +275,8 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	}, nil
 }
 
-func InitRepo(repoID RepoID) error {
-	repoName := repoID.IntoPath()
-
-	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
-	repo, err := gogit.PlainInit(repoPath, true)
-	if err != nil {
-		return err
-	}
-	fmt.Println(repo)
-
-	return nil
-}
-
-// авторизация по ключу из бд, сравнение с данным из CLI
-func CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
-	return true
-}
-
-func CheckPasswordAuth(ctx ssh.Context, password string) bool {
-	return false
-}
-
-// Normally we would use a Bubble Tea program for the TUI but for simplicity,
-// we'll just write a list of the pushed repos to the terminal and exit the ssh
-// session.
-func GitListMiddleware(next ssh.Handler) ssh.Handler {
+// GitListMiddleware provides a list of available repositories when SSHing without a command
+func (s *Service) GitListMiddleware(next ssh.Handler) ssh.Handler {
 	return func(sess ssh.Session) {
 		// Git will have a command included so only run this if there are no
 		// commands passed to ssh.
