@@ -165,12 +165,12 @@ func main() {
 	pgRepo := pg.NewPGRepo(dbConn)
 
 	sessionRepo := session.NewRedisRepo(redisClient)
-	attemptService := attempt.NewService()
-	blockService := blocks.NewService(pgRepo)
 	courseService := courses.NewService(pgRepo)
+	blockService := blocks.NewService(pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
+	attemptService := attempt.NewService(gitService, pgRepo)
 
 	// Controller initialization
 	attemptController := routes.NewAttemptController(attemptService)
@@ -200,17 +200,16 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
-	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
-		ssh.PublicKeyAuth(git.CheckPubkeyAuth),
-		ssh.PasswordAuth(git.CheckPasswordAuth),
+		ssh.PublicKeyAuth(gitService.CheckPubkeyAuth),
+		ssh.PasswordAuth(gitService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			pkggit.Middleware("repos", git.RepoRename, a),
-			git.GitListMiddleware,
+			pkggit.Middleware("repos", gitService.RepoRename, gitService),
+			gitService.GitListMiddleware,
 			logging.Middleware(),
 		),
 	)

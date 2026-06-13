@@ -7,6 +7,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
+	"github.com/dsc-sgu/mm-backend/internal/git"
 )
 
 type PGRepo struct {
@@ -23,4 +24,5 @@ var (
 	_ blocks.Repo      = (*PGRepo)(nil)
 	_ courses.Repo     = (*PGRepo)(nil)
 	_ disciplines.Repo = (*PGRepo)(nil)
+	_ git.Repo         = (*PGRepo)(nil)
 )
