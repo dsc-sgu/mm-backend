@@ -14,6 +14,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
+	"github.com/dsc-sgu/mm-backend/internal/git"
 )
 
 type PGRepo struct {
@@ -41,4 +42,5 @@ var (
 	_ snapshots.Repo   = (*PGRepo)(nil)
 	_ locks.Repo       = (*PGRepo)(nil)
 	_ membership.Repo  = (*PGRepo)(nil)
+	_ git.Repo         = (*PGRepo)(nil)
 )

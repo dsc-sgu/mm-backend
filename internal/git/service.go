@@ -13,12 +13,13 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	"github.com/dsc-sgu/mm-backend/pkg/git"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -27,22 +28,17 @@ const (
 	repoDir = "repos"
 )
 
-// An example git server. This will list all available repos if you ssh
-// directly to the server. To test `ssh -p 23233 localhost` once it's running.
-
 type Service struct {
-	repo    Repo
-	repo_db DBRepo
-	helpers Helpers
+	Repo
 }
 
-func NewService(repo Repo, repo_db DBRepo, helpers Helpers) *Service {
-	return &Service{repo, repo_db, helpers}
+func NewService(repo Repo) *Service {
+	return &Service{repo}
 }
 
 func (s *Service) RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
 	fingerprint := gossh.FingerprintSHA256(publicKey)
-	repoID, err := s.repo.GetRepoID(original, fingerprint)
+	repoID, err := s.GetRepoID(original, fingerprint)
 	if err != nil {
 		return "", err
 	}
@@ -72,11 +68,11 @@ func (s *Service) AddSshKey(sessionId uuid.UUID, model *AddSshKey) error {
 		Fingerprint: fingerprint,
 		CreatedAt:   time.Now(),
 	}
-	return s.repo_db.AddSshKey(&key)
+	return s.Repo.AddSshKey(&key)
 }
 
 func (s *Service) DeleteSshKey(sessionId uuid.UUID, model *DeleteSshKey) error {
-	return s.repo_db.DeleteSshKey(sessionId, model.Fingerprint)
+	return s.Repo.DeleteSshKey(sessionId, model.Fingerprint)
 }
 
 func (s *Service) CreateAttemptTag(repoID RepoID, files []FileInfo) (string, error) {
@@ -160,12 +156,10 @@ func (s *Service) CreateAttemptTag(repoID RepoID, files []FileInfo) (string, err
 	return tagObj.Name().String(), nil
 }
 
-// GetDiff returns the differences between two attempts
 func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
 	return []string{"diff placeholder"}, nil
 }
 
-// InitRepo creates a new Git repository for the given RepoID
 func (s *Service) InitRepo(repoID RepoID) error {
 	repoName := repoID.IntoPath()
 	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
@@ -177,7 +171,6 @@ func (s *Service) InitRepo(repoID RepoID) error {
 	return nil
 }
 
-// RemoveRepo deletes the repository associated with the given RepoID
 func (s *Service) RemoveRepo(repoID RepoID) error {
 	repoName := repoID.IntoPath()
 	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
@@ -189,22 +182,6 @@ func (s *Service) RemoveRepo(repoID RepoID) error {
 	return nil
 }
 
-// GetTask retrieves task ID by name (placeholder implementation)
-func (s *Service) GetTask(name string) (uuid.UUID, error) {
-	return uuid.Nil, fmt.Errorf("task system not implemented yet")
-}
-
-// CheckPubkeyAuth verifies SSH public key against database
-func (s *Service) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
-	return true
-}
-
-// CheckPasswordAuth verifies password authentication
-func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
-	return false
-}
-
-// AuthRepo checks access level for a repository (for use in middleware)
 func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
 	if s.CheckPubkeyAuth(nil, pk) {
 		return git.ReadWriteAccess
@@ -212,17 +189,14 @@ func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
 	return git.NoAccess
 }
 
-// Push is called after a successful git push operation
 func (s *Service) Push(repo string, pk ssh.PublicKey) {
 	zap.L().Info("Push hook called", zap.String("repo", repo))
 }
 
-// Fetch is called after a successful git fetch operation
 func (s *Service) Fetch(repo string, pk ssh.PublicKey) {
 	zap.L().Info("Fetch hook called", zap.String("repo", repo))
 }
 
-// GetRepoID returns struct RepoID from path and fingerprint
 func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if strings.HasPrefix(path, string(os.PathSeparator)) {
 		path = path[len(string(os.PathSeparator)):]
@@ -242,28 +216,23 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 
 	fmt.Println(pathList, len(pathList))
 
-	// TODO: this garbage of a language doesn't have optionals, so I don't know what could go
-	// wrong because these are unset. Probably nothing, since all the errors are returned.
 	var courseID uuid.UUID
 	var taskID uuid.UUID
 	if len(pathList) == 1 {
-		// TODO: right now, i don't know what will be the interface for getting a task that
-		// is course-wide.
-		// answer is 0
 		return RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
 	} else if len(pathList) == 2 {
 		var err error
-		courseID, err = s.helpers.GetCourse(pathList[0])
+		courseID, err = s.GetCourse(pathList[0])
 		if err != nil {
 			return RepoID{}, err
 		}
-		taskID, err = s.repo.GetTask(pathList[0])
+		taskID, err = s.GetTask(pathList[1])
 		if err != nil {
 			return RepoID{}, err
 		}
 	}
 
-	participantID, err := s.repo_db.GetParticipant(fingerprint)
+	participantID, err := s.GetParticipant(fingerprint)
 	if err != nil {
 		return RepoID{}, err
 	}
@@ -275,11 +244,8 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	}, nil
 }
 
-// GitListMiddleware provides a list of available repositories when SSHing without a command
 func (s *Service) GitListMiddleware(next ssh.Handler) ssh.Handler {
 	return func(sess ssh.Session) {
-		// Git will have a command included so only run this if there are no
-		// commands passed to ssh.
 		if len(sess.Command()) != 0 {
 			next(sess)
 			return

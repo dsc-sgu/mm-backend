@@ -221,11 +221,11 @@ func main() {
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
-		ssh.PublicKeyAuth(git.CheckPubkeyAuth),
-		ssh.PasswordAuth(git.CheckPasswordAuth),
+		ssh.PublicKeyAuth(gitService.CheckPubkeyAuth),
+		ssh.PasswordAuth(gitService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			pkggit.Middleware("repos", git.RepoRename, a),
-			git.GitListMiddleware,
+			pkggit.Middleware("repos", gitService.RepoRename, gitService),
+			gitService.GitListMiddleware,
 			logging.Middleware(),
 		),
 	)
