@@ -24,5 +24,5 @@ var (
 	_ blocks.Repo      = (*PGRepo)(nil)
 	_ courses.Repo     = (*PGRepo)(nil)
 	_ disciplines.Repo = (*PGRepo)(nil)
-	_ git.Repo         = (*PGRepo)(nil)
+	_ git.DBRepo       = (*PGRepo)(nil)
 )
