@@ -43,4 +43,5 @@ var (
 	_ locks.Repo       = (*PGRepo)(nil)
 	_ membership.Repo  = (*PGRepo)(nil)
 	_ git.Repo         = (*PGRepo)(nil)
+	_ git.DBRepo       = (*PGRepo)(nil)
 )

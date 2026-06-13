@@ -29,11 +29,11 @@ const (
 )
 
 type Service struct {
-	Repo
+	repo_db DBRepo
 }
 
-func NewService(repo Repo) *Service {
-	return &Service{repo}
+func NewService(repo_db DBRepo) *Service {
+	return &Service{repo_db: repo_db}
 }
 
 func (s *Service) RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
@@ -68,11 +68,11 @@ func (s *Service) AddSshKey(sessionId uuid.UUID, model *AddSshKey) error {
 		Fingerprint: fingerprint,
 		CreatedAt:   time.Now(),
 	}
-	return s.Repo.AddSshKey(&key)
+	return s.repo_db.AddSshKey(&key)
 }
 
 func (s *Service) DeleteSshKey(sessionId uuid.UUID, model *DeleteSshKey) error {
-	return s.Repo.DeleteSshKey(sessionId, model.Fingerprint)
+	return s.repo_db.DeleteSshKey(sessionId, model.Fingerprint)
 }
 
 func (s *Service) CreateAttemptTag(repoID RepoID, files []FileInfo) (string, error) {
@@ -182,8 +182,16 @@ func (s *Service) RemoveRepo(repoID RepoID) error {
 	return nil
 }
 
+func (s *Service) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
+	return s.repo_db.CheckPubkeyAuth(ctx, pk)
+}
+
+func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
+	return s.repo_db.CheckPasswordAuth(ctx, password)
+}
+
 func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
-	if s.CheckPubkeyAuth(nil, pk) {
+	if s.repo_db.CheckPubkeyAuth(nil, pk) {
 		return git.ReadWriteAccess
 	}
 	return git.NoAccess
@@ -222,17 +230,17 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 		return RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
 	} else if len(pathList) == 2 {
 		var err error
-		courseID, err = s.GetCourse(pathList[0])
+		courseID, err = s.repo_db.GetCourse(pathList[0])
 		if err != nil {
 			return RepoID{}, err
 		}
-		taskID, err = s.GetTask(pathList[1])
+		taskID, err = s.repo_db.GetTask(pathList[1])
 		if err != nil {
 			return RepoID{}, err
 		}
 	}
 
-	participantID, err := s.GetParticipant(fingerprint)
+	participantID, err := s.repo_db.GetParticipant(fingerprint)
 	if err != nil {
 		return RepoID{}, err
 	}
