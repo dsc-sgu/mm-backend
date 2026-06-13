@@ -11,6 +11,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/dsc-sgu/mm-backend/internal/git"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -86,6 +87,10 @@ func (r *PGRepo) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
 
 func (r *PGRepo) CheckPasswordAuth(ctx ssh.Context, password string) bool {
 	return false
+}
+
+func (r *PGRepo) AuthRepo(repo string, pk ssh.PublicKey) pkggit.AccessLevel {
+	return pkggit.ReadWriteAccess
 }
 
 func (r *PGRepo) GetTask(name string) (uuid.UUID, error) {
