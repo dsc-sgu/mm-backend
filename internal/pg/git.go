@@ -1,10 +1,14 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 
+	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/dsc-sgu/mm-backend/internal/git"
 )
@@ -23,6 +27,12 @@ const (
 	getParticipantIdSQL = `
 		SELECT owner_id FROM ssh_keys
 		WHERE fingerprint = $1
+	`
+
+	getTaskSQL = `
+		SELECT t.block_id FROM tasks t
+		JOIN blocks b ON b.id = t.block_id
+		WHERE b.data->>'name' = $1
 	`
 )
 
@@ -51,10 +61,6 @@ func (r *PGRepo) DeleteSshKey(ownerId uuid.UUID, fingerprint string) error {
 	return nil
 }
 
-func GetTask(name string) (uuid.UUID, error) {
-	return uuid.Parse("e7cf6012-1348-434b-9d54-bd89c9e6e95e")
-}
-
 func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", getParticipantIdSQL))
 
@@ -64,10 +70,46 @@ func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return uuid.Nil, nil
+			return uuid.Nil, fmt.Errorf("ssh key %q not found", fingerprint)
 		}
 		return uuid.Nil, err
 	}
 
 	return ownerID, nil
+}
+
+func (r *PGRepo) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
+	fingerprint := gossh.FingerprintSHA256(pk)
+	_, err := r.GetParticipant(fingerprint)
+	return err == nil
+}
+
+func (r *PGRepo) CheckPasswordAuth(ctx ssh.Context, password string) bool {
+	return false
+}
+
+func (r *PGRepo) GetTask(name string) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskSQL))
+
+	var taskID uuid.UUID
+
+	err := r.db.QueryRow(getTaskSQL, name).Scan(&taskID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, fmt.Errorf("task %q not found", name)
+		}
+		return uuid.Nil, err
+	}
+
+	return taskID, nil
+}
+
+func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
+	ctx := context.Background()
+	course, err := r.GetCourseByName(ctx, name)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("course %q: %w", name, err)
+	}
+
+	return course.ID, nil
 }

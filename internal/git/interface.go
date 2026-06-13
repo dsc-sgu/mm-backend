@@ -8,29 +8,18 @@ import (
 	"github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
-// functions that use database directly
-type DBRepo interface {
-	AddSshKey(model *SshKey) error
-	DeleteSshKey(ownerId uuid.UUID, fingerprint string) error
-	GetParticipant(fingerprint string) (uuid.UUID, error)
-	AuthRepo(string, ssh.PublicKey) git.AccessLevel
-}
-
-// functions that are not used directly by api
-type Helpers interface {
-	GetCourse(name string) (uuid.UUID, error)
-}
-
-// main functions for api
 type Repo interface {
-	CreateAttemptTag(repoID RepoID, files []FileInfo) error
-	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
-	InitRepo(repoID RepoID) error
-	RemoveRepo(repoID RepoID) error
-	RepoRename(original string, publicKey gossh.PublicKey) (string, error)
-	GetTask(name string) (uuid.UUID, error) // there is no tasks yet
-	GetRepoID(path string, fingerprint string) (RepoID, error)
-	CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool
-	CheckPasswordAuth(ctx ssh.Context, password string) bool
-	GitListMiddleware(next ssh.Handler) ssh.Handler
+	AddSshKey(model *SshKey) error                                         // Done
+	DeleteSshKey(ownerId uuid.UUID, fingerprint string) error              // Done
+	GetParticipant(fingerprint string) (uuid.UUID, error)                  // Done
+	GetTask(name string) (uuid.UUID, error)                                // Done
+	GetCourse(name string) (uuid.UUID, error)                              // Done
+	CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool                // Done
+	CheckPasswordAuth(ctx ssh.Context, password string) bool               // TODO
+	InitRepo(repoID RepoID) error                                          // Probably Done
+	RepoRename(original string, publicKey gossh.PublicKey) (string, error) // Probably Done
+	RemoveRepo(repoID RepoID) error                                        // Probably Done
+	AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel                // Probably Done
+	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)            // TODO
+	GetRepoID(path string, fingerprint string) (RepoID, error)             // Probably Done
 }
