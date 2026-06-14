@@ -35,9 +35,9 @@ CREATE TABLE units (
 
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     position varchar(64) NOT NULL,
     deleted_at timestamp
     -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
