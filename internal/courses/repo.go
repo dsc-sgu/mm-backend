@@ -16,12 +16,15 @@ const (
 
 // Course is the database representation of a course.
 type Course struct {
-	ID           uuid.UUID `json:"id"           db:"id"            binding:"required"`
-	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
-	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
-	Name         string    `json:"name"         db:"name"          binding:"required"`
-	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
-	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
+	ID               uuid.UUID `json:"id"               db:"id"                 binding:"required"`
+	DisciplineID     uuid.UUID `json:"disciplineID"     db:"discipline_id"`
+	ActiveSnapshotID uuid.UUID `json:"activeSnapshotID" db:"active_snapshot_id"`
+	OwnerID          uuid.UUID `json:"ownerID"          db:"owner_id"           binding:"required"`
+	Name             string    `json:"name"             db:"name"               binding:"required"`
+	DisplayName      string    `json:"displayName"      db:"display_name"       binding:"required"`
+	Version          int       `json:"version"          db:"version"            binding:"required"`
+	CreatedAt        time.Time `json:"createdAt"        db:"created_at"         binding:"required"`
+	DeletedAt        time.Time `json:"deletedAt"        db:"deleted_at"`
 }
 
 // CreateCourse is the input for creating a course, used by both the service and repository layers.
@@ -41,6 +44,14 @@ type UpdateCourse struct {
 type CoursePagination struct {
 	Limit  int       `query:"limit"`
 	LastID uuid.UUID `query:"last_id"`
+}
+
+// CourseLock is the database representation of a course lock.
+type CourseLock struct {
+	CourseID  uuid.UUID `json:"courseID"  db:"course_id"  binding:"required"`
+	UserID    uuid.UUID `json:"userID"    db:"user_id"    binding:"required"`
+	SessionID uuid.UUID `json:"sessionID" db:"session_id" binding:"required"`
+	ExpiresAt time.Time `json:"expiresAt" db:"expires_at" binding:"required"`
 }
 
 // CourseMember is the database representation of a course member.
