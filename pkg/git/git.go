@@ -26,11 +26,14 @@
 package git
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/log"
@@ -81,7 +84,7 @@ type GitHooks = Hooks // nolint: revive
 // Implementers return the appropriate AccessLevel.
 type Hooks interface {
 	AuthRepo(string, ssh.PublicKey) AccessLevel
-	Push(string, ssh.PublicKey)
+	Push(string, ssh.PublicKey, []string)
 	Fetch(string, ssh.PublicKey)
 }
 
@@ -110,11 +113,11 @@ func Middleware(
 				case "git-receive-pack":
 					switch access {
 					case ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
+						pushOptions, err := gitPack(s, gc, repoDir, repo)
 						if err != nil {
 							Fatal(s, ErrSystemMalfunction)
 						} else {
-							gh.Push(repo, pk)
+							gh.Push(cmd[1], pk, pushOptions)
 						}
 					default:
 						Fatal(s, ErrNotAuthed)
@@ -123,7 +126,7 @@ func Middleware(
 				case "git-upload-archive", "git-upload-pack":
 					switch access {
 					case ReadOnlyAccess, ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
+						_, err := gitPack(s, gc, repoDir, repo)
 						switch err {
 						case ErrInvalidRepo:
 							Fatal(s, ErrInvalidRepo)
@@ -144,36 +147,57 @@ func Middleware(
 	}
 }
 
-func gitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
+func gitPack(s ssh.Session, gitCmd string, repoDir string, repo string) ([]string, error) {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
 	switch gitCmd {
 	case "git-upload-archive", "git-upload-pack":
 		exists, err := fileExists(rp)
 		if !exists {
-			return ErrInvalidRepo
+			return nil, ErrInvalidRepo
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return runGit(s, "", cmd, rp)
+		return nil, runGit(s, "", cmd, rp)
 	case "git-receive-pack":
 		err := EnsureRepo(repoDir, repo)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		err = runGit(s, "", cmd, rp)
-		if err != nil {
-			return err
+
+		pr, pw := io.Pipe()
+
+		usi := exec.CommandContext(s.Context(), "git", "-c", "receive.advertisePushOptions=true", cmd, rp)
+		usi.Stdout = s
+		usi.Stdin = pr
+
+		if err := usi.Start(); err != nil {
+			return nil, err
 		}
+
+		var pushOptions []string
+		optsCh := make(chan []string, 1)
+		go func() {
+			opts := extractPushOptions(s, pw)
+			optsCh <- opts
+		}()
+
+		runErr := usi.Wait()
+		pushOptions = <-optsCh
+
+		if runErr != nil {
+			return nil, runErr
+		}
+
 		err = ensureDefaultBranch(s, rp)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		// Needed for git dumb http server
-		return runGit(s, rp, "update-server-info")
+
+		return pushOptions, runGit(s, rp, "update-server-info")
 	default:
-		return fmt.Errorf("unknown git command: %s", gitCmd)
+		return nil, fmt.Errorf("unknown git command: %s", gitCmd)
 	}
 }
 
@@ -236,6 +260,90 @@ func runGit(s ssh.Session, dir string, args ...string) error {
 		return err
 	}
 	return nil
+}
+
+// readPktLine reads one pkt-line from git protocol.
+// Returns (data, isFlush, error).
+func readPktLine(r io.Reader) ([]byte, bool, error) {
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(r, header); err != nil {
+		return nil, false, err
+	}
+	if string(header) == "0000" {
+		return nil, true, nil
+	}
+	length, err := strconv.ParseUint(string(header), 16, 16)
+	if err != nil {
+		return nil, false, fmt.Errorf("parse pkt-len: %w", err)
+	}
+	if length < 4 {
+		return nil, false, fmt.Errorf("invalid pkt-len: %d", length)
+	}
+	data := make([]byte, length-4)
+	if _, err := io.ReadFull(r, data); err != nil {
+		return nil, false, err
+	}
+	return data, false, nil
+}
+
+// extractPushOptions reads from r, extracts push options from git-receive-pack
+// pkt-lines, and forwards all original data (including what was consumed for
+// parsing) to w. Returns the extracted options. w is closed when all data
+// has been forwarded.
+//
+// Must be called after git receive-pack has started (so the client has already
+// received the reference advertisement and begun sending data).
+func extractPushOptions(r io.Reader, w io.WriteCloser) []string {
+	buf := &bytes.Buffer{}
+	tr := io.TeeReader(r, buf)
+
+	var options []string
+
+	// Read ref-update pkt-lines until flush
+	for {
+		_, flush, err := readPktLine(tr)
+		if err != nil {
+			break
+		}
+		if flush {
+			break
+		}
+	}
+
+	// Peek at next 4 bytes to detect push options vs packfile
+	peek := make([]byte, 4)
+	if _, err := io.ReadFull(tr, peek); err != nil {
+		goto forward
+	}
+
+	if string(peek) != "PACK" {
+		for {
+			hexLen := string(peek)
+			if hexLen == "0000" {
+				break
+			}
+			length, err := strconv.ParseUint(hexLen, 16, 16)
+			if err != nil {
+				break
+			}
+			data := make([]byte, length-4)
+			if _, err := io.ReadFull(tr, data); err != nil {
+				break
+			}
+			options = append(options, string(data))
+			if _, err := io.ReadFull(tr, peek); err != nil {
+				break
+			}
+		}
+	}
+
+forward:
+	go func() {
+		io.Copy(w, io.MultiReader(buf, r))
+		w.Close()
+	}()
+
+	return options
 }
 
 func ensureDefaultBranch(s ssh.Session, repoPath string) error {
