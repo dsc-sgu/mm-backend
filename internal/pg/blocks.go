@@ -22,7 +22,7 @@ const (
 	getBlockByIdSQL = `
 		SELECT id, snapshot_id, block_type, data, position, deleted_at
 		FROM blocks
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	getAllBlocksBySnapshotIdSQL = `
