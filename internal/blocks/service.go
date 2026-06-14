@@ -84,7 +84,7 @@ func (s *Service) MoveBlock(
 }
 
 // rebalanceSnapshotPositions shrinks overgrown position lines,
-// distributing them evenly with a fixed step
+// distributing them evenly across the available ASCII range
 func (s *Service) rebalanceSnapshotPositions(
 	ctx context.Context,
 	snapshotID uuid.UUID,
@@ -99,12 +99,15 @@ func (s *Service) rebalanceSnapshotPositions(
 		return
 	}
 
-	// Redistribute positions: generate clean ordered indexes like "0100", "0200", "0300"
-	for i, block := range blocksList {
-		cleanPosition := fmt.Sprintf("%04d", (i+1)*100)
+	// Redistribute positions:
+	// first block gets the middle position of the range,
+	// every next block gets the position between previous and the end of the range ("~" character)
+	currentPrev := ""
+	for _, block := range blocksList {
+		newPos := CalculateMiddlePosition(currentPrev, "")
 
-		if block.Position != cleanPosition {
-			err = s.Repo.UpdateBlockPosition(ctx, block.ID, cleanPosition)
+		if block.Position != newPos {
+			err = s.Repo.UpdateBlockPosition(ctx, block.ID, newPos)
 			if err != nil {
 				zap.L().Error(
 					"rebalance positions: failed to update block position",
@@ -113,6 +116,7 @@ func (s *Service) rebalanceSnapshotPositions(
 				)
 			}
 		}
+		currentPrev = newPos
 	}
 	zap.L().
 		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
