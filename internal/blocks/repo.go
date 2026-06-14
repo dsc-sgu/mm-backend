@@ -3,6 +3,7 @@ package blocks
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -22,25 +23,31 @@ type QuizData struct {
 
 // Block is the database representation of a block.
 type Block struct {
-	ID        uuid.UUID       `json:"id"        db:"id"         binding:"required"`
-	BlockType string          `json:"blockType" db:"block_type" binding:"required"`
-	Data      json.RawMessage `json:"data"      db:"data"       binding:"required"`
-	CourseID  uuid.UUID       `json:"courseID"  db:"course_id"  binding:"required"`
-	Position  int             `json:"position"  db:"position"   binding:"required"`
+	ID         uuid.UUID       `json:"id"         db:"id"          binding:"required"`
+	SnapshotID uuid.UUID       `json:"snapshotID" db:"snapshot_id" binding:"required"`
+	BlockType  string          `json:"blockType"  db:"block_type"  binding:"required"`
+	Data       json.RawMessage `json:"data"       db:"data"        binding:"required"`
+	Position   string          `json:"position"   db:"position"    binding:"required"`
+	DeletedAt  *time.Time      `json:"deletedAt"  db:"deleted_at"`
 }
 
 // CreateBlock is the input for creating a block, used by both the service and repository layers.
 type CreateBlock struct {
-	CourseID  uuid.UUID       `json:"courseID"  db:"course_id" binding:"required"`
-	BlockType string          `json:"blockType"                binding:"required"`
-	Data      json.RawMessage `json:"data"                     binding:"required" swaggertype:"object"`
+	SnapshotID   uuid.UUID       `json:"snapshotID"   db:"snapshot_id" binding:"required"`
+	BlockType    string          `json:"blockType"    db:"block_type"  binding:"required"`
+	Data         json.RawMessage `json:"data"         db:"data"                           swaggertype:"object"`
+	AfterBlockID *uuid.UUID      `json:"afterBlockID"`
 }
 
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
 type UpdateBlock struct {
-	CourseID uuid.UUID       `json:"courseID" db:"course_id" binding:"required"`
-	Data     json.RawMessage `json:"data"                                       swaggertype:"object"`
-	Position int             `json:"position"`
+	BlockType string          `json:"blockType" db:"block_type"`
+	Data      json.RawMessage `json:"data"      db:"data"       swaggertype:"object"`
+}
+
+// MoveBlock is the input for moving a block.
+type MoveBlock struct {
+	AfterBlockID uuid.NullUUID `json:"afterBlockID" binding:"required"`
 }
 
 // DeleteBlockFromCourse is the input for unlinking a block from a course, used by both the service and repository layers.
