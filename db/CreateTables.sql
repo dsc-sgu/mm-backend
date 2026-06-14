@@ -36,9 +36,9 @@ CREATE TABLE units (
 
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     block_type TEXT NOT NULL,
     data jsonb NOT NULL,
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     position varchar(64) NOT NULL,
     deleted_at timestamp
 );
