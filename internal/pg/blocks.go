@@ -176,12 +176,12 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 func (r *PGRepo) GetPositionsForMove(
 	ctx context.Context,
 	snapshotID uuid.UUID,
-	afterBlockID uuid.NullUUID,
+	afterBlockID *uuid.UUID,
 ) (string, string, error) {
 	var leftPos, rightPos string
 
 	// If after_block_id is null, get first block position
-	if !afterBlockID.Valid {
+	if afterBlockID == nil {
 		zap.L().
 			Debug("Executing query", zap.String("query", getFirstBlockPositionSQL))
 		err := r.db.GetContext(
@@ -202,13 +202,13 @@ func (r *PGRepo) GetPositionsForMove(
 		ctx,
 		&leftPos,
 		getBlockPositionSQL,
-		afterBlockID.UUID,
+		*afterBlockID,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", "", fmt.Errorf(
 				"after_block_id %s not found",
-				afterBlockID.UUID,
+				*afterBlockID,
 			)
 		}
 		return "", "", fmt.Errorf("get prev block position: %w", err)
