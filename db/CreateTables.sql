@@ -4,6 +4,7 @@ CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
 CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task');
+CREATE TYPE snapshot_status AS ENUM ('draft', 'published', 'stale');
 
 CREATE TABLE unit_types (
     id uuid PRIMARY KEY,
@@ -36,9 +37,9 @@ CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
-    course_id uuid, -- REFERENCES courses(id)
-    position integer NOT NULL,
-
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
+    position varchar(64) NOT NULL,
+    deleted_at timestamp
     -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
     UNIQUE (id, block_type)
 );
@@ -52,16 +53,38 @@ CREATE TABLE disciplines (
 -- NOTE(mchernigin): for example "Programming languages (2024)"
 CREATE TABLE courses (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    discipline_id uuid NOT NULL REFERENCES disciplines(id),
+    discipline_id uuid REFERENCES disciplines(id),
+    active_snapshot_id uuid REFERENCES course_snapshots(id),
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
     display_name varchar(128) NOT NULL,
     -- Service info
+    version integer NOT NULL DEFAULT 1,
     created_at timestamp NOT NULL,
+    deleted_at timestamp,
 
     -- NOTE(Ezhkin-Kot): unique course names in one discipline
     CONSTRAINT course_discipline_name_unique
         UNIQUE (discipline_id, name)
+);
+
+CREATE TABLE course_snapshots (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    course_id uuid NOT NULL REFERENCES courses(id),
+    version integer NOT NULL,
+    status snapshot_status NOT NULL DEFAULT 'draft',
+    created_by uuid NOT NULL REFERENCES users(id),
+    created_at timestamp NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id, version) WHERE (status = 'published');
+
+-- NOTE(Ezhkin-Kot): pessimistic locking for course editing
+CREATE TABLE course_locks (
+    course_id uuid PRIMARY KEY REFERENCES courses(id),
+    user_id uuid NOT NULL REFERENCES users(id),
+    session_id uuid NOT NULL,
+    expires_at timestamp NOT NULL
 );
 
 -- NOTE(Ezhkin-Kot): data for invite links to courses
