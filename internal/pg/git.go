@@ -11,7 +11,6 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/dsc-sgu/mm-backend/internal/git"
-	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -89,10 +88,6 @@ func (r *PGRepo) CheckPasswordAuth(ctx ssh.Context, password string) bool {
 	return false
 }
 
-func (r *PGRepo) AuthRepo(repo string, pk ssh.PublicKey) pkggit.AccessLevel {
-	return pkggit.ReadWriteAccess
-}
-
 func (r *PGRepo) GetTask(name string) (uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskSQL))
 
@@ -117,4 +112,23 @@ func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
 	}
 
 	return course.ID, nil
+}
+
+const saveAttemptSQL = `
+	WITH new_attempt AS (
+		INSERT INTO attempts (user_id, task_id)
+		VALUES ($1, $2)
+		RETURNING id
+	)
+	INSERT INTO attempt_transitions (attempt_id, state, transition_at, transition_data)
+	VALUES ((SELECT id FROM new_attempt), 'submitted', NOW(), $3::jsonb)
+`
+
+func (r *PGRepo) SaveAttempt(repoID git.RepoID, commitHash string) error {
+	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
+	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, repoID.TaskID, transitionData)
+	if err != nil {
+		return fmt.Errorf("save attempt: %w", err)
+	}
+	return nil
 }
