@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 // TextData is the database representation of a text block's data.
@@ -47,30 +48,40 @@ type UpdateBlock struct {
 
 // MoveBlock is the input for moving a block.
 type MoveBlock struct {
-	AfterBlockID uuid.NullUUID `json:"afterBlockID" binding:"required"`
-}
-
-// DeleteBlockFromCourse is the input for unlinking a block from a course, used by both the service and repository layers.
-type DeleteBlockFromCourse struct {
-	CourseID uuid.UUID `json:"courseID" db:"course_id" binding:"required"`
-	ID       uuid.UUID `json:"id"       db:"id"        binding:"required"`
+	AfterBlockID *uuid.UUID `json:"afterBlockID" binding:"required"`
 }
 
 type Repo interface {
-	CreateBlock(ctx context.Context, model *CreateBlock) (*Block, error)
-	GetBlockByID(ctx context.Context, id uuid.UUID) (*Block, error)
-	GetAllBlocksByCourseID(
+	CreateBlock(
 		ctx context.Context,
-		courseID uuid.UUID,
+		model *CreateBlock,
+		position string,
+	) (*Block, error)
+	GetBlockByID(ctx context.Context, id uuid.UUID) (*Block, error)
+	GetAllBlocksBySnapshotID(
+		ctx context.Context,
+		snapshotID uuid.UUID,
 	) ([]*Block, error)
-	UpdateBlockByID(
+	GetPositionsForMove(
+		ctx context.Context,
+		snapshotID uuid.UUID,
+		afterBlockID *uuid.UUID,
+	) (string, string, error)
+	UpdateBlockContent(
 		ctx context.Context,
 		id uuid.UUID,
-		update *UpdateBlock,
+		blockType string,
+		data []byte,
 	) (*Block, error)
-	UnlinkBlockByID(
+	UpdateBlockPosition(
 		ctx context.Context,
-		courseID, blockID uuid.UUID,
-	) (*Block, error)
+		id uuid.UUID,
+		newPosition string,
+	) error
 	DeleteBlockByID(ctx context.Context, id uuid.UUID) error
+	DeleteAllBlocksByCourseID(
+		ctx context.Context,
+		tx *sqlx.Tx,
+		courseID uuid.UUID,
+	) error
 }
