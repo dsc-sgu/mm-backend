@@ -198,12 +198,7 @@ func (r *PGRepo) GetPositionsForMove(
 
 	// Else get prev and next block positions
 	zap.L().Debug("Executing query", zap.String("query", getBlockPositionSQL))
-	err := r.db.GetContext(
-		ctx,
-		&leftPos,
-		getBlockPositionSQL,
-		*afterBlockID,
-	)
+	err := r.db.GetContext(ctx, &leftPos, getBlockPositionSQL, *afterBlockID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", "", fmt.Errorf(
@@ -239,7 +234,7 @@ func (r *PGRepo) UpdateBlockContent(
 	zap.L().Debug("Executing query", zap.String("query", updateBlockContentSQL))
 
 	var block blocks.Block
-	err := r.db.QueryRowxContext(ctx, updateBlockContentSQL, blockType, data, id).
+	err := r.db.QueryRowxContext(ctx, updateBlockContentSQL, blockType, string(data), id).
 		StructScan(&block)
 	if err != nil {
 		return nil, fmt.Errorf("update block content: %w", err)
