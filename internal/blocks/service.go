@@ -5,7 +5,12 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
+
+// TODO: Move to config
+// Maximum length of position string to trigger lazy position rebalancing
+const maxPositionLengthThreshold = 20
 
 type Service struct {
 	Repo
@@ -34,7 +39,17 @@ func (s *Service) CreateBlock(
 
 	calculatedPos := CalculateMiddlePosition(leftPos, rightPos)
 
-	return s.Repo.CreateBlock(ctx, model, calculatedPos)
+	block, err := s.Repo.CreateBlock(ctx, model, calculatedPos)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if rebalance is needed
+	if len(calculatedPos) > maxPositionLengthThreshold {
+		go s.rebalanceSnapshotPositions(context.Background(), model.SnapshotID)
+	}
+
+	return block, nil
 }
 
 // MoveBlock calculates new block position and updates it in DB
@@ -60,10 +75,50 @@ func (s *Service) MoveBlock(
 		return fmt.Errorf("service move block: save position: %w", err)
 	}
 
+	// Check if rebalance is needed
+	if len(newPosition) > maxPositionLengthThreshold {
+		go s.rebalanceSnapshotPositions(context.Background(), snapshotID)
+	}
+
 	return nil
 }
 
-// CalculateMiddlePosition calculates a string that falls lexicographically between two other strings.
+// rebalanceSnapshotPositions shrinks overgrown position lines,
+// distributing them evenly with a fixed step
+func (s *Service) rebalanceSnapshotPositions(
+	ctx context.Context,
+	snapshotID uuid.UUID,
+) {
+	zap.L().
+		Info("Starting lazy position rebalancing for snapshot", zap.String("snapshot_id", snapshotID.String()))
+
+	blocksList, err := s.Repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
+	if err != nil {
+		zap.L().
+			Error("rebalance positions: failed to fetch blocks", zap.Error(err))
+		return
+	}
+
+	// Redistribute positions: generate clean ordered indexes like "0100", "0200", "0300"
+	for i, block := range blocksList {
+		cleanPosition := fmt.Sprintf("%04d", (i+1)*100)
+
+		if block.Position != cleanPosition {
+			err = s.Repo.UpdateBlockPosition(ctx, block.ID, cleanPosition)
+			if err != nil {
+				zap.L().Error(
+					"rebalance positions: failed to update block position",
+					zap.String("block_id", block.ID.String()),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+	zap.L().
+		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
+}
+
+// CalculateMiddlePosition calculates a string that falls lexicographically between two other strings
 func CalculateMiddlePosition(prev, next string) string {
 	if prev == "" {
 		prev = " "
