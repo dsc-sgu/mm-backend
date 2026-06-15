@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -115,22 +116,31 @@ func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
 	return git.NoAccess
 }
 
-func (s *Service) Push(repo string, pk ssh.PublicKey, options []string) {
-	zap.L().Info("Push hook called", zap.String("repo", repo), zap.Strings("options", options))
-
-	if !hasAttemptConfirm(options) {
-		return
-	}
+func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
+	zap.L().Info("Push hook called", zap.String("path", originalPath))
 
 	fingerprint := gossh.FingerprintSHA256(pk)
-	repoID, err := s.GetRepoID(repo, fingerprint)
+	repoID, err := s.GetRepoID(originalPath, fingerprint)
 	if err != nil {
 		zap.L().Error("Push: get repoID", zap.Error(err))
 		return
 	}
 
-	repoPath := filepath.Join(repoDir, repoID.IntoPath()+".git")
-	bareRepo, err := gogit.PlainOpen(repoPath)
+	shaPath := repoID.IntoPath() + ".git"
+	optionsPath := filepath.Join(repoDir, shaPath, "push-options")
+
+	optionsData, err := os.ReadFile(optionsPath)
+	if err != nil {
+		return
+	}
+	defer os.Remove(optionsPath)
+
+	options := strings.Split(strings.TrimSpace(string(optionsData)), "\n")
+	if !hasAttemptConfirm(options) {
+		return
+	}
+
+	bareRepo, err := gogit.PlainOpen(filepath.Join(repoDir, shaPath))
 	if err != nil {
 		zap.L().Error("Push: open repo", zap.Error(err))
 		return
@@ -148,12 +158,7 @@ func (s *Service) Push(repo string, pk ssh.PublicKey, options []string) {
 }
 
 func hasAttemptConfirm(options []string) bool {
-	for _, opt := range options {
-		if opt == "attempt=confirm" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(options, "submit")
 }
 
 func (s *Service) Fetch(repo string, pk ssh.PublicKey) {
