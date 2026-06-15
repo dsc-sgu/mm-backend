@@ -1,31 +1,76 @@
-# CLI часть и процессы за ней. 
+# Git Service — Architecture & User Flow
+--- 
+## Overall Description
+---
+This API allows participants to make work on their study projects using our git server and also register attempts.
+- In CLI, participants can use command `git push -o "submit"` and so, their last commit becomes an attempt that can be further revied by teacher.
+- In web version, participants can upload their files to make an attempt.
+## Full User Flow in CLI 
+---
+```mermaid
+flowchart TD
+  subgraph Client["Client"]
+    A1[git clone / git push<br/>ssh://host:2222/course/task]
+  end
 
-## 1. База 
+  subgraph SSH["SSH Server :2222"]
+    B1[charmbracelet/wish]
+    B2[PublicKeyAuth / PasswordAuth]
+    B3[pkg/git Middleware]
+  end
 
-У нас имеется ssh-сервер, для каждого задания из курса там существуют репозитории. 
-Каждый репозиторий имеет `RepoID`, а то есть сочетание `CourseID`, `TaskID`, `ParticipantID`. На сервере название репозиториев --- хеш-функция от ранее упомянутых 3-х ID. 
+  subgraph MW["pkg/git Middleware<br/>(per session)"]
+    C1[repoRename cmd[1], pk<br/>course/task → hash.git]
+    C2[gh.AuthRepo repo, pk<br/>check access in ssh_keys]
+    C3{switch gc}
+    C4{switch access}
+    C5[gitPack: git receive-pack<br/>with advertisePushOptions]
+    C6[post-receive hook<br/>writes push-options file]
+    C7[gh.Push cmd[1], pk]
+    C8[gitPack: git upload-pack]
+    C9[gh.Fetch repo, pk]
+  end
 
-На данном этапе требуются функции: 
-- `GetRepoID` --- образование структуры из переданной юзером строки, 
-- `InitRepo` --- создание репозитория из структуры,
-- `RepoRename`--- создание имени (хеш-строки) из переданной юзером строки.
+  subgraph Service["internal/git Service<br/>Push callback"]
+    D1[Read push-options file]
+    D2{Has attempt=confirm?}
+    D3[Open bare repo via go-git]
+    D4[Read HEAD commit hash]
+    D5[repo_db.SaveAttempt]
+  end
 
-## 2. Пользователь и права 
+  subgraph DB["PostgreSQL"]
+    E1[ssh_keys: fingerprint → owner_id]
+    E2[courses / blocks: name → ID]
+    E3[INSERT attempts + attempt_transitions]
+  end
 
-Существует 2 типа взаимодействия: через клиент и через сервер. В обоих случая требуется авторизация пользователя.
-В базе хранится таблица `ssh_keys`, которая объединяет `user_id`, а то есть пользователей с их `ssh` и `fingerprint`. По данным из этой таблицы происходит проверка прав. При этом сам middleware проверяет права доступа с помощью хука, который как раз должен вызывать наши функции.
-При выполнении определенных команд middleware проверяет наличие соответствующих прав (чтение, запись и чтение, админские права). Очевидно, запись в случае прав только на чтение невозможно и это уже реализовано. 
+  A1 -->|SSH connect & auth| B1
+  B1 --> B2
+  B2 -->|authenticated session| B3
+  B3 --> C1
+  C1 -.->|course/task name→ID| E2
+  C1 --> C2
+  C2 -.->|fingerprint lookup| E1
+  C2 --> C3
 
-На данном этапе требуются функции: 
-- `CheckPubkeyAuth` --- авторизация по ключу из бд, *не реализовано*
-- `CheckPasswordAuth` --- авторизация по паролю, *не реализовано*
-- `AddSshKey` --- добавление ключа для пользователя, 
-- `AuthRepo` --- функция, отвечающая за проверку прав, используемая в middleware и обращающаяся к бд. При этом она возвращает `git.AccessLevel` *не реализовано* 
+  C3 -->|git-receive-pack| C4
+  C4 -->|ReadWrite / Admin| C5
+  C4 -->|NoAccess| F1[Fatal: ErrNotAuthed]
+  C5 -->|inside system git| C6
+  C6 -->|gitPack returns| C7
+  C7 --> D1
 
-## 3. Взаимодействие с репозиторием
+  C3 -->|git-upload-pack /<br/>git-upload-archive| C4b{switch access}
+  C4b -->|ReadOnly / ReadWrite / Admin| C8
+  C4b -->|NoAccess| F1
+  C8 -->|gitPack returns| C9
+  C9 --> F2[Log fetch event]
 
-Взаимодействие с репозиторием происходит с помощью обыкновенных команд git. При этом middleware имеет специальные хуки, при выполнении определенных команд по типу `git push`, `git fetch` следует выполнение кастомного функционала. Например, таким функционалом может выступать добавление тегов к коммитам при `git push`
-
-На данном этапе требуются функции (не реализованные): 
-- `GetDiff` --- разница между двумя попытками студента, для дальнейшей инспекции преподавателем
-- `GetAttempts` --- все попытки студента для проверки преподавателем.    
+  D1 --> D2
+  D2 -->|no| F3[Return: no attempt]
+  D2 -->|yes| D3
+  D3 --> D4
+  D4 --> D5
+  D5 --> E3
+```
