@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 type CourseMemberRole string
@@ -44,6 +45,12 @@ type UpdateCourse struct {
 type CoursePagination struct {
 	Limit  int       `query:"limit"`
 	LastID uuid.UUID `query:"last_id"`
+}
+
+type PublishSnapshot struct {
+	CourseID        uuid.UUID `json:"courseID"`
+	NewSnapshotID   uuid.UUID `json:"newSnapshotID"`
+	ExpectedVersion int       `json:"expectedVersion"`
 }
 
 // CourseMember is the database representation of a course member.
@@ -105,6 +112,7 @@ type InviteDetails struct {
 type Repo interface {
 	CreateCourse(
 		ctx context.Context,
+		tx *sqlx.Tx,
 		model *CreateCourse,
 		ownerID uuid.UUID,
 	) (*Course, error)
@@ -125,6 +133,11 @@ type Repo interface {
 		update *UpdateCourse,
 	) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
+	PublishSnapshotToCourse(
+		ctx context.Context,
+		tx *sqlx.Tx,
+		model *PublishSnapshot,
+	) error
 	CreateInvite(
 		ctx context.Context,
 		model *CreateInvite,
