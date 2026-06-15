@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
@@ -33,6 +34,14 @@ const (
 		SELECT t.block_id FROM tasks t
 		JOIN blocks b ON b.id = t.block_id
 		WHERE b.data->>'name' = $1
+	`
+	saveAttemptSQL = `
+		WITH new_attempt AS (
+			INSERT INTO attempts (user_id, task_id)
+			VALUES ($1, $2)
+			RETURNING id )
+		INSERT INTO attempt_transitions (attempt_id, state, transition_at, transition_data)
+		VALUES ((SELECT id FROM new_attempt), 'submitted', $3, $4::jsonb)
 	`
 )
 
@@ -114,19 +123,9 @@ func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
 	return course.ID, nil
 }
 
-const saveAttemptSQL = `
-	WITH new_attempt AS (
-		INSERT INTO attempts (user_id, task_id)
-		VALUES ($1, $2)
-		RETURNING id
-	)
-	INSERT INTO attempt_transitions (attempt_id, state, transition_at, transition_data)
-	VALUES ((SELECT id FROM new_attempt), 'submitted', NOW(), $3::jsonb)
-`
-
 func (r *PGRepo) SaveAttempt(repoID git.RepoID, commitHash string) error {
 	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
-	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, repoID.TaskID, transitionData)
+	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, repoID.TaskID, time.Now(), transitionData)
 	if err != nil {
 		return fmt.Errorf("save attempt: %w", err)
 	}
