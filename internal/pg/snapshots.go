@@ -45,11 +45,17 @@ const (
 		WHERE course_id = $1 AND status != 'stale'
 	`
 
-	copyBlocksToNewSnapshotSQL = `
+	copyBlocksToSnapshotSQL = `
 		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
 		SELECT $1, block_type, data, position, NOW()
 		FROM blocks
 		WHERE snapshot_id = $2 AND deleted_at IS NULL
+	`
+
+	deleteBlocksBySnapshotIdSQL = `
+		UPDATE blocks
+		SET deleted_at = NOW()
+		WHERE snapshot_id = $1 AND deleted_at IS NULL
 	`
 )
 
@@ -62,15 +68,13 @@ func (r *PGRepo) CreateSnapshot(
 		Debug("Executing query within transaction", zap.String("query", createSnapshotSQL))
 
 	var newSnapshot snapshots.Snapshot
-	err := tx.QueryRowxContext(
-		ctx,
-		createSnapshotSQL,
-		snapshot.CourseID,
-		snapshot.Version,
-		snapshot.Status,
-		snapshot.CreatedBy,
-		snapshot.CreatedAt,
-	).StructScan(&newSnapshot)
+	stmt, err := tx.PrepareNamedContext(ctx, createSnapshotSQL)
+	if err != nil {
+		return nil, fmt.Errorf("tx prepare named statement: %w", err)
+	}
+	defer stmt.Close()
+
+	err = stmt.GetContext(ctx, &newSnapshot, snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("tx create snapshot: %w", err)
 	}
@@ -163,10 +167,10 @@ func (r *PGRepo) CreateDraftFromActual(
 	}
 
 	zap.L().
-		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToNewSnapshotSQL))
+		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
 	_, err = tx.ExecContext(
 		ctx,
-		copyBlocksToNewSnapshotSQL,
+		copyBlocksToSnapshotSQL,
 		createdDraft.ID,
 		actualSnapshotID,
 	)
@@ -175,6 +179,43 @@ func (r *PGRepo) CreateDraftFromActual(
 	}
 
 	return createdDraft, nil
+}
+
+// SwitchSnapshotContent deletes current draft blocks and copies blocks from target snapshot
+func (r *PGRepo) SwitchSnapshotContent(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	draftSnapshotID uuid.UUID,
+	targetSnapshotID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing block delete query within transaction", zap.String("query", deleteBlocksBySnapshotIdSQL))
+
+	// Delete current draft blocks
+	_, err := tx.ExecContext(
+		ctx,
+		deleteBlocksBySnapshotIdSQL,
+		draftSnapshotID,
+	)
+	if err != nil {
+		return fmt.Errorf("tx delete current draft blocks: %w", err)
+	}
+
+	zap.L().
+		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
+
+	// Copy blocks from target
+	_, err = tx.ExecContext(
+		ctx,
+		copyBlocksToSnapshotSQL,
+		draftSnapshotID,
+		targetSnapshotID,
+	)
+	if err != nil {
+		return fmt.Errorf("tx copy blocks from target to draft: %w", err)
+	}
+
+	return nil
 }
 
 // DeleteAllSnapshotsByCourseID marks all snapshots of a course as 'stale'. It is used for a cascading soft deletion of a course.
