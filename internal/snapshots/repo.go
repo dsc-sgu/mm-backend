@@ -62,4 +62,9 @@ type Repo interface {
 		tx *sqlx.Tx,
 		courseID uuid.UUID,
 	) error
+	DiscardDraft(
+		ctx context.Context,
+		tx *sqlx.Tx,
+		draftSnapshotID uuid.UUID,
+	) error
 }
