@@ -51,7 +51,7 @@ type Repo interface {
 		userID uuid.UUID,
 		actualSnapshotID uuid.UUID,
 	) (*Snapshot, error)
-	SoftDeleteAllByCourseID(
+	DeleteAllByCourseID(
 		ctx context.Context,
 		tx *sqlx.Tx,
 		courseID uuid.UUID,
