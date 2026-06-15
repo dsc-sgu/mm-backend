@@ -38,14 +38,6 @@ type UpdateCourse struct {
 	Name    string    `json:"name"    db:"name"`
 }
 
-// CourseLock is the database representation of a course lock.
-type CourseLock struct {
-	CourseID  uuid.UUID `json:"courseID"  db:"course_id"  binding:"required"`
-	UserID    uuid.UUID `json:"userID"    db:"user_id"    binding:"required"`
-	SessionID uuid.UUID `json:"sessionID" db:"session_id" binding:"required"`
-	ExpiresAt time.Time `json:"expiresAt" db:"expires_at" binding:"required"`
-}
-
 // CourseMember is the database representation of a course member.
 type CourseMember struct {
 	UserID    uuid.UUID        `json:"userID"    db:"user_id"`
