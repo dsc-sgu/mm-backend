@@ -2,6 +2,7 @@ package courses
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
@@ -19,7 +19,6 @@ type Service struct {
 	repo         Repo
 	snapshotRepo snapshots.Repo
 	lockRepo     locks.Repo
-	blockRepo    blocks.Repo
 	txManager    TxManager
 }
 
@@ -27,14 +26,12 @@ func NewService(
 	repo Repo,
 	snapshotRepo snapshots.Repo,
 	lockRepo locks.Repo,
-	blockRepo blocks.Repo,
 	txManager TxManager,
 ) *Service {
 	return &Service{
 		repo:         repo,
 		snapshotRepo: snapshotRepo,
 		lockRepo:     lockRepo,
-		blockRepo:    blockRepo,
 		txManager:    txManager,
 	}
 }
@@ -358,31 +355,23 @@ func (s *Service) PublishDraft(
 		return locks.ErrLockNotFound
 	}
 
-	expectedVersion := draft.Version - 1
+	publishSnapshot := &PublishSnapshot{
+		CourseID:        session.CourseID,
+		NewSnapshotID:   draftSnapshotID,
+		ExpectedVersion: draft.Version - 1,
+	}
 
 	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		query := `
-			UPDATE courses
-			SET active_snapshot_id = $1, version = version + 1
-			WHERE id = $2 AND version = $3 AND deleted_at IS NULL
-		`
-		res, txErr := tx.ExecContext(
+		txErr := s.repo.PublishSnapshotToCourse(
 			ctx,
-			query,
-			draftSnapshotID,
-			session.CourseID,
-			expectedVersion,
+			tx,
+			publishSnapshot,
 		)
 		if txErr != nil {
+			if errors.Is(txErr, sql.ErrNoRows) {
+				return ErrSnapshotConflict
+			}
 			return txErr
-		}
-
-		affected, txErr := res.RowsAffected()
-		if txErr != nil {
-			return txErr
-		}
-		if affected == 0 {
-			return ErrSnapshotConflict
 		}
 
 		return s.snapshotRepo.UpdateSnapshotStatus(
@@ -422,18 +411,10 @@ func (s *Service) CancelEdit(
 	}
 
 	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		if err := s.snapshotRepo.UpdateSnapshotStatus(
-			ctx,
-			tx,
-			draft.ID,
-			snapshots.StaleStatus,
-		); err != nil {
-			return err
-		}
-		return s.blockRepo.DeleteAllBlocksBySnapshotID(ctx, tx, draft.ID)
+		return s.snapshotRepo.DiscardDraft(ctx, tx, draft.ID)
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("cancel edit: discard draft tx: %w", err)
 	}
 
 	return s.lockRepo.Unlock(ctx, session)
