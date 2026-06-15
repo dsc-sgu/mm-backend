@@ -44,19 +44,6 @@ const (
 		SET status = 'stale'
 		WHERE course_id = $1 AND status != 'stale'
 	`
-
-	copyBlocksToSnapshotSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
-		SELECT $1, block_type, data, position, NOW()
-		FROM blocks
-		WHERE snapshot_id = $2 AND deleted_at IS NULL
-	`
-
-	deleteBlocksBySnapshotIdSQL = `
-		UPDATE blocks
-		SET deleted_at = NOW()
-		WHERE snapshot_id = $1 AND deleted_at IS NULL
-	`
 )
 
 func (r *PGRepo) CreateSnapshot(
@@ -67,19 +54,20 @@ func (r *PGRepo) CreateSnapshot(
 	zap.L().
 		Debug("Executing query within transaction", zap.String("query", createSnapshotSQL))
 
-	var newSnapshot snapshots.Snapshot
 	stmt, err := tx.PrepareNamedContext(ctx, createSnapshotSQL)
 	if err != nil {
 		return nil, fmt.Errorf("tx prepare named statement: %w", err)
 	}
 	defer stmt.Close()
 
-	err = stmt.GetContext(ctx, &newSnapshot, snapshot)
+	var newID uuid.UUID
+	err = stmt.GetContext(ctx, &newID, snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("tx create snapshot: %w", err)
 	}
 
-	return &newSnapshot, nil
+	snapshot.ID = newID
+	return snapshot, nil
 }
 
 func (r *PGRepo) GetSnapshotByID(
@@ -166,14 +154,7 @@ func (r *PGRepo) CreateDraftFromActual(
 		return nil, err
 	}
 
-	zap.L().
-		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
-	_, err = tx.ExecContext(
-		ctx,
-		copyBlocksToSnapshotSQL,
-		createdDraft.ID,
-		actualSnapshotID,
-	)
+	err = r.CopyBlocksToSnapshot(ctx, tx, actualSnapshotID, createdDraft.ID)
 	if err != nil {
 		return nil, fmt.Errorf("tx copy blocks to new snapshot: %w", err)
 	}
@@ -189,28 +170,22 @@ func (r *PGRepo) SwitchSnapshotContent(
 	targetSnapshotID uuid.UUID,
 ) error {
 	zap.L().
-		Debug("Executing block delete query within transaction", zap.String("query", deleteBlocksBySnapshotIdSQL))
+		Debug("Executing block delete query within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
 
 	// Delete current draft blocks
-	_, err := tx.ExecContext(
-		ctx,
-		deleteBlocksBySnapshotIdSQL,
-		draftSnapshotID,
-	)
+	err := r.DeleteAllBlocksBySnapshotID(ctx, tx, draftSnapshotID)
 	if err != nil {
-		return fmt.Errorf("tx delete current draft blocks: %w", err)
+		return fmt.Errorf(
+			"tx delete current draft blocks: %w",
+			err,
+		)
 	}
 
 	zap.L().
 		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
 
 	// Copy blocks from target
-	_, err = tx.ExecContext(
-		ctx,
-		copyBlocksToSnapshotSQL,
-		draftSnapshotID,
-		targetSnapshotID,
-	)
+	err = r.CopyBlocksToSnapshot(ctx, tx, targetSnapshotID, draftSnapshotID)
 	if err != nil {
 		return fmt.Errorf("tx copy blocks from target to draft: %w", err)
 	}

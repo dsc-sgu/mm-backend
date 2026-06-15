@@ -51,12 +51,10 @@ const (
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	deleteBlocksByCourseIdSQL = `
+	deleteAllBlocksBySnapshotIdSQL = `
 		UPDATE blocks
 		SET deleted_at = NOW()
-		WHERE snapshot_id IN (
-			SELECT id FROM course_snapshots WHERE course_id = $1
-		) AND deleted_at IS NULL
+		WHERE snapshot_id = $1 AND deleted_at IS NULL
 	`
 
 	getBlockPositionSQL = `
@@ -81,6 +79,13 @@ const (
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
 		ORDER BY position ASC
 		LIMIT 1
+	`
+
+	copyBlocksToSnapshotSQL = `
+		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
+		SELECT $1, block_type, data, position, NOW()
+		FROM blocks
+		WHERE snapshot_id = $2 AND deleted_at IS NULL
 	`
 )
 
@@ -277,21 +282,43 @@ func (r *PGRepo) DeleteBlockByID(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *PGRepo) DeleteAllBlocksByCourseID(
+func (r *PGRepo) DeleteAllBlocksBySnapshotID(
 	ctx context.Context,
 	tx *sqlx.Tx,
-	courseID uuid.UUID,
+	snapshotID uuid.UUID,
 ) error {
 	zap.L().
-		Debug("Executing blocks cascade delete within transaction", zap.String("query", deleteBlocksByCourseIdSQL))
+		Debug("Executing blocks delete within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
 
-	if courseID == uuid.Nil {
-		return fmt.Errorf("blocks cascade delete: course id is nil")
+	if snapshotID == uuid.Nil {
+		return fmt.Errorf("blocks delete: snapshot id is nil")
 	}
 
-	_, err := tx.ExecContext(ctx, deleteBlocksByCourseIdSQL, courseID)
+	_, err := tx.ExecContext(ctx, deleteAllBlocksBySnapshotIdSQL, snapshotID)
 	if err != nil {
-		return fmt.Errorf("tx soft delete blocks: %w", err)
+		return fmt.Errorf("tx soft delete blocks by snapshot: %w", err)
+	}
+	return nil
+}
+
+// CopyBlocksToSnapshot copies blocks from one snapshot to another
+func (r *PGRepo) CopyBlocksToSnapshot(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	sourceSnapshotID uuid.UUID,
+	targetSnapshotID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
+
+	_, err := tx.ExecContext(
+		ctx,
+		copyBlocksToSnapshotSQL,
+		targetSnapshotID,
+		sourceSnapshotID,
+	)
+	if err != nil {
+		return fmt.Errorf("tx copy blocks: %w", err)
 	}
 	return nil
 }

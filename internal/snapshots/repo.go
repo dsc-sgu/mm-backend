@@ -57,7 +57,7 @@ type Repo interface {
 		draftSnapshotID uuid.UUID,
 		targetSnapshotID uuid.UUID,
 	) error
-	DeleteAllByCourseID(
+	DeleteAllSnapshotsByCourseID(
 		ctx context.Context,
 		tx *sqlx.Tx,
 		courseID uuid.UUID,
