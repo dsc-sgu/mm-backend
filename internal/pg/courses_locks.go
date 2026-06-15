@@ -21,7 +21,7 @@ const (
 
 	setCourseLockSQL = `
 		INSERT INTO course_locks (course_id, user_id, session_id, expires_at)
-		VALUES ($1, $2, $3, NOW() + $4 * INTERVAL '1 second')
+		VALUES ($1, $2, $3, NOW() + MAKE_INTERVAL(secs => $4))
 		ON CONFLICT (course_id) DO UPDATE
 		SET user_id = EXCLUDED.user_id, 
 		    session_id = EXCLUDED.session_id, 
@@ -38,7 +38,7 @@ const (
 
 	refreshCourseLockSQL = `
 		UPDATE course_locks 
-		SET expires_at = NOW() + $1 * INTERVAL '1 second' 
+		SET expires_at = NOW() + MAKE_INTERVAL(secs => $1) 
 		WHERE course_id = $2
 	`
 
