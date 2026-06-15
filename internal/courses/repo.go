@@ -16,14 +16,14 @@ const (
 
 // Course is the database representation of a course.
 type Course struct {
-	ID               uuid.UUID     `json:"id"               db:"id"                 binding:"required"`
-	DisciplineID     uuid.UUID     `json:"disciplineID"     db:"discipline_id"`
+	ID               uuid.UUID `json:"id"               db:"id"                 binding:"required"`
+	DisciplineID     uuid.UUID `json:"disciplineID"     db:"discipline_id"`
 	ActiveSnapshotID uuid.UUID `json:"activeSnapshotID" db:"active_snapshot_id"`
-	OwnerID          uuid.UUID     `json:"ownerID"          db:"owner_id"           binding:"required"`
-	Name             string        `json:"name"             db:"name"               binding:"required"`
-	Version          int           `json:"version"          db:"version"            binding:"required"`
-	CreatedAt        time.Time     `json:"createdAt"        db:"created_at"         binding:"required"`
-	DeletedAt        time.Time     `json:"deletedAt"        db:"deleted_at"`
+	OwnerID          uuid.UUID `json:"ownerID"          db:"owner_id"           binding:"required"`
+	Name             string    `json:"name"             db:"name"               binding:"required"`
+	Version          int       `json:"version"          db:"version"            binding:"required"`
+	CreatedAt        time.Time `json:"createdAt"        db:"created_at"         binding:"required"`
+	DeletedAt        time.Time `json:"deletedAt"        db:"deleted_at"`
 }
 
 // CreateCourse is the input for creating a course, used by both the service and repository layers.
