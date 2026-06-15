@@ -7,14 +7,49 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
+
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 type Service struct {
-	Repo
+	repo         Repo
+	snapshotRepo snapshots.Repo
+	lockRepo     locks.Repo
+	blockRepo    blocks.Repo
+	txManager    TxManager
 }
 
-func NewService(repo Repo) *Service {
-	return &Service{repo}
+func NewService(
+	repo Repo,
+	snapshotRepo snapshots.Repo,
+	lockRepo locks.Repo,
+	blockRepo blocks.Repo,
+	txManager TxManager,
+) *Service {
+	return &Service{
+		repo:         repo,
+		snapshotRepo: snapshotRepo,
+		lockRepo:     lockRepo,
+		blockRepo:    blockRepo,
+		txManager:    txManager,
+	}
+}
+
+type InitType string
+
+const (
+	InitTypeNew           InitType = "new"
+	InitTypeRestored      InitType = "restored"
+	InitTypeStaleConflict InitType = "stale_conflict"
+)
+
+type InitLockResult struct {
+	InitType        InitType  `json:"initType"`
+	DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
 }
 
 var (
@@ -27,14 +62,25 @@ var (
 	ErrAlreadyMember        = errors.New(
 		"user is already a member of this course",
 	)
+	ErrSnapshotConflict = errors.New(
+		"course version mismatch or modified by another user",
+	)
+	ErrInvalidTarget = errors.New(
+		"target snapshot is invalid or does not belong to this course",
+	)
 )
+
+// TxManager is an interface for executing transactions on the service level
+type TxManager interface {
+	ExecInTx(ctx context.Context, fn func(tx *sqlx.Tx) error) error
+}
 
 func (s *Service) CreateInvite(
 	ctx context.Context,
 	model *CreateInvite,
 	createdBy uuid.UUID,
 ) (*Invite, error) {
-	courseMember, err := s.GetCourseMember(ctx, createdBy, model.CourseID)
+	courseMember, err := s.repo.GetCourseMember(ctx, createdBy, model.CourseID)
 	if err != nil {
 		return nil, fmt.Errorf("create invite: checking permissions: %w", err)
 	}
@@ -45,14 +91,14 @@ func (s *Service) CreateInvite(
 		return nil, ErrPermissionDenied
 	}
 
-	return s.Repo.CreateInvite(ctx, model, createdBy)
+	return s.repo.CreateInvite(ctx, model, createdBy)
 }
 
 func (s *Service) GetInviteDetails(
 	ctx context.Context,
 	inviteID uuid.UUID,
 ) (*InviteDetails, error) {
-	invite, err := s.GetInviteByID(ctx, inviteID)
+	invite, err := s.repo.GetInviteByID(ctx, inviteID)
 	if err != nil {
 		return nil, fmt.Errorf("get invite details: get invite: %w", err)
 	}
@@ -60,7 +106,7 @@ func (s *Service) GetInviteDetails(
 		return nil, ErrInviteNotFound
 	}
 
-	course, err := s.GetCourseByID(ctx, invite.CourseID)
+	course, err := s.repo.GetCourseByID(ctx, invite.CourseID)
 	if err != nil {
 		return nil, fmt.Errorf("get invite details: get course: %w", err)
 	}
@@ -86,7 +132,7 @@ func (s *Service) JoinCourseByInvite(
 	ctx context.Context,
 	inviteID, userID uuid.UUID,
 ) (uuid.UUID, error) {
-	invite, err := s.GetInviteByID(ctx, inviteID)
+	invite, err := s.repo.GetInviteByID(ctx, inviteID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("join by invite: get invite: %w", err)
 	}
@@ -100,17 +146,244 @@ func (s *Service) JoinCourseByInvite(
 		return uuid.Nil, ErrInviteExpired
 	}
 
-	courseMember, err := s.GetCourseMember(ctx, userID, invite.CourseID)
+	courseMember, err := s.repo.GetCourseMember(ctx, userID, invite.CourseID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("join by invite: check existing role: %w", err)
+		return uuid.Nil, fmt.Errorf(
+			"join by invite: check existing role: %w",
+			err,
+		)
 	}
 	if courseMember != nil && courseMember.IsActive {
 		return uuid.Nil, ErrAlreadyMember
 	}
 
-	if err := s.EnrollUserByInvite(ctx, userID, invite); err != nil {
+	if err := s.repo.EnrollUserByInvite(ctx, userID, invite); err != nil {
 		return uuid.Nil, fmt.Errorf("join by invite: enroll user: %w", err)
 	}
 
 	return invite.CourseID, nil
+}
+
+// LockAndInitDraft initializes draft and sets pessimistic lock for the course
+func (s *Service) LockAndInitDraft(
+	ctx context.Context,
+	session *locks.LockSession,
+) (*InitLockResult, error) {
+	// Check user permissions
+	member, err := s.repo.GetCourseMember(ctx, session.UserID, session.CourseID)
+	if err != nil {
+		return nil, fmt.Errorf("lock and init: check member: %w", err)
+	}
+	if member == nil || !member.IsActive || member.Role != TeacherRole {
+		return nil, ErrPermissionDenied
+	}
+
+	// Try to set pessimistic lock for the course
+	_, err = s.lockRepo.SetLock(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+
+	draft, err := s.snapshotRepo.FindUserDraft(
+		ctx,
+		session.CourseID,
+		session.UserID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("lock and init: find draft: %w", err)
+	}
+
+	course, err := s.repo.GetCourseByID(ctx, session.CourseID)
+	if err != nil {
+		return nil, fmt.Errorf("lock and init: get course: %w", err)
+	}
+	if course == nil {
+		return nil, ErrCourseNotFound
+	}
+
+	// If user's draft already exists, check that it is still actual
+	if draft != nil {
+		if draft.Version == course.Version+1 {
+			// Case 1: Draft exists and is actual
+			return &InitLockResult{
+				InitType:        InitTypeRestored,
+				DraftSnapshotID: draft.ID,
+			}, nil
+		}
+		// Case 2: Draft exists but it version is stale
+		return &InitLockResult{
+			InitType:        InitTypeStaleConflict,
+			DraftSnapshotID: draft.ID,
+		}, nil
+	}
+
+	// Case 3: Draft does not exist, create a new one
+	var newDraft *snapshots.Snapshot
+	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		var txErr error
+		targetVersion := course.Version + 1
+		newDraft, txErr = s.snapshotRepo.CreateDraftFromActual(
+			ctx,
+			tx,
+			session.CourseID,
+			targetVersion,
+			session.UserID,
+			course.ActiveSnapshotID,
+		)
+		return txErr
+	})
+	if err != nil {
+		return nil, fmt.Errorf("lock and init: create draft tx: %w", err)
+	}
+
+	return &InitLockResult{
+		InitType:        InitTypeNew,
+		DraftSnapshotID: newDraft.ID,
+	}, nil
+}
+
+// SwitchSnapshot replaces the draft content with the selected snapshot
+func (s *Service) SwitchSnapshot(
+	ctx context.Context,
+	session *locks.LockSession,
+	targetSnapshotID uuid.UUID,
+) error {
+	// Check active lock
+	currentLock, err := s.lockRepo.GetLock(ctx, session.CourseID)
+	if err != nil || currentLock == nil ||
+		currentLock.UserID != session.UserID ||
+		currentLock.SessionID != session.SessionID ||
+		time.Now().After(currentLock.ExpiresAt) {
+		return locks.ErrLockNotFound
+	}
+
+	// Check that the target snapshot exists and is published
+	targetSnapshot, err := s.snapshotRepo.GetSnapshotByID(ctx, targetSnapshotID)
+	if err != nil {
+		return fmt.Errorf("switch snapshot: get target: %w", err)
+	}
+	if targetSnapshot == nil || targetSnapshot.CourseID != session.CourseID ||
+		targetSnapshot.Status != snapshots.PublishedStatus {
+		return ErrInvalidTarget
+	}
+
+	// Find current user's draft
+	draft, err := s.snapshotRepo.FindUserDraft(
+		ctx,
+		session.CourseID,
+		session.UserID,
+	)
+	if err != nil {
+		return fmt.Errorf("switch snapshot: find current draft: %w", err)
+	}
+	if draft == nil {
+		return locks.ErrLockNotFound
+	}
+
+	// Replace draft blocks with target
+	return s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		return s.snapshotRepo.SwitchSnapshotContent(
+			ctx,
+			tx,
+			draft.ID,
+			targetSnapshotID,
+		)
+	})
+}
+
+// PublishDraft checks optimistic lock, fixes editings,
+// sets the draft as active snapshot in the course and unlock the course
+func (s *Service) PublishDraft(
+	ctx context.Context,
+	session *locks.LockSession,
+	draftSnapshotID uuid.UUID,
+) error {
+	draft, err := s.snapshotRepo.GetSnapshotByID(ctx, draftSnapshotID)
+	if err != nil {
+		return fmt.Errorf("publish draft: get draft: %w", err)
+	}
+	if draft == nil || draft.Status != snapshots.DraftStatus ||
+		draft.CourseID != session.CourseID {
+		return locks.ErrLockNotFound
+	}
+
+	expectedVersion := draft.Version - 1
+
+	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		query := `
+			UPDATE courses
+			SET active_snapshot_id = $1, version = version + 1
+			WHERE id = $2 AND version = $3 AND deleted_at IS NULL
+		`
+		res, txErr := tx.ExecContext(
+			ctx,
+			query,
+			draftSnapshotID,
+			session.CourseID,
+			expectedVersion,
+		)
+		if txErr != nil {
+			return txErr
+		}
+
+		affected, txErr := res.RowsAffected()
+		if txErr != nil {
+			return txErr
+		}
+		if affected == 0 {
+			return ErrSnapshotConflict
+		}
+
+		return s.snapshotRepo.UpdateSnapshotStatus(
+			ctx,
+			tx,
+			draftSnapshotID,
+			snapshots.PublishedStatus,
+		)
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := s.lockRepo.Unlock(ctx, session); err != nil {
+		zap.L().Error("failed to remove course lock", zap.Error(err))
+	}
+
+	return nil
+}
+
+// CancelEdit resets the draft and deletes pessimistic lock
+func (s *Service) CancelEdit(
+	ctx context.Context,
+	session *locks.LockSession,
+) error {
+	draft, err := s.snapshotRepo.FindUserDraft(
+		ctx,
+		session.CourseID,
+		session.UserID,
+	)
+	if err != nil {
+		return fmt.Errorf("cancel edit: find draft: %w", err)
+	}
+
+	if draft == nil {
+		return s.lockRepo.Unlock(ctx, session)
+	}
+
+	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := s.snapshotRepo.UpdateSnapshotStatus(
+			ctx,
+			tx,
+			draft.ID,
+			snapshots.StaleStatus,
+		); err != nil {
+			return err
+		}
+		return s.blockRepo.DeleteAllBlocksBySnapshotID(ctx, tx, draft.ID)
+	})
+	if err != nil {
+		return err
+	}
+
+	return s.lockRepo.Unlock(ctx, session)
 }
