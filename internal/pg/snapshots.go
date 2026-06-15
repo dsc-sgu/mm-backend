@@ -212,3 +212,29 @@ func (r *PGRepo) DeleteAllSnapshotsByCourseID(
 	}
 	return nil
 }
+
+// DiscardDraft marks draft snapshot as 'stale' and deletes all it's blocks
+func (r *PGRepo) DiscardDraft(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	draftSnapshotID uuid.UUID,
+) error {
+	if err := r.UpdateSnapshotStatus(
+		ctx,
+		tx,
+		draftSnapshotID,
+		snapshots.StaleStatus,
+	); err != nil {
+		return fmt.Errorf("discard draft update status: %w", err)
+	}
+
+	if err := r.DeleteAllBlocksBySnapshotID(
+		ctx,
+		tx,
+		draftSnapshotID,
+	); err != nil {
+		return fmt.Errorf("discard draft deleting blocks: %w", err)
+	}
+
+	return nil
+}
