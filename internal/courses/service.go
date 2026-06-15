@@ -75,6 +75,57 @@ type TxManager interface {
 	ExecInTx(ctx context.Context, fn func(tx *sqlx.Tx) error) error
 }
 
+func (s *Service) CreateCourse(
+	ctx context.Context,
+	model *CreateCourse,
+	ownerID uuid.UUID,
+) (*Course, error) {
+	var createdCourse *Course
+
+	err := s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		var txErr error
+
+		createdCourse, txErr = s.repo.CreateCourse(ctx, tx, model, ownerID)
+		if txErr != nil {
+			return fmt.Errorf("service create course: %w", txErr)
+		}
+
+		firstSnapshot := &snapshots.Snapshot{
+			CourseID:  createdCourse.ID,
+			Version:   1,
+			Status:    snapshots.PublishedStatus,
+			CreatedBy: ownerID,
+			CreatedAt: time.Now(),
+		}
+
+		_, txErr = s.snapshotRepo.CreateSnapshot(ctx, tx, firstSnapshot)
+		if txErr != nil {
+			return fmt.Errorf("service create initial snapshot: %w", txErr)
+		}
+
+		publishModel := &PublishSnapshot{
+			CourseID:        createdCourse.ID,
+			NewSnapshotID:   firstSnapshot.ID,
+			ExpectedVersion: 0,
+		}
+
+		txErr = s.repo.PublishSnapshotToCourse(ctx, tx, publishModel)
+		if txErr != nil {
+			return fmt.Errorf("service link initial snapshot: %w", txErr)
+		}
+
+		createdCourse.ActiveSnapshotID = firstSnapshot.ID
+		createdCourse.Version = 1
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return createdCourse, nil
+}
+
 func (s *Service) CreateInvite(
 	ctx context.Context,
 	model *CreateInvite,
