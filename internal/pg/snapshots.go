@@ -46,8 +46,8 @@ const (
 	`
 
 	copyBlocksToNewSnapshotSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, lexo_rank, created_at)
-		SELECT $1, block_type, data, lexo_rank, NOW()
+		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
+		SELECT $1, block_type, data, position, NOW()
 		FROM blocks
 		WHERE snapshot_id = $2 AND deleted_at IS NULL
 	`
