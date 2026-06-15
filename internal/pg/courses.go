@@ -42,18 +42,18 @@ const (
 	`
 
 	getCourseByIdSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	getCourseByNameSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
 	getAllCoursesByCourseIdSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
 		FROM courses
 		WHERE id > $2 AND deleted_at IS NULL
 		ORDER BY id
@@ -76,7 +76,13 @@ const (
 		UPDATE courses
 		SET owner_id = $1, display_name = $2
 		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
+		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
+	`
+
+	publishSnapshotToCourseSQL = `
+		UPDATE courses
+		SET active_snapshot_id = $1, version = version + 1
+ 		WHERE id = $2 AND version = $3 AND deleted_at IS NULL
 	`
 
 	deleteCourseByIdSQL = `
@@ -110,20 +116,10 @@ func (r *PGRepo) ExecInTx(
 
 func (r *PGRepo) CreateCourse(
 	ctx context.Context,
+	tx *sqlx.Tx,
 	model *courses.CreateCourse,
 	ownerID uuid.UUID,
 ) (*courses.Course, error) {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create course: begin transaction: %w", err)
-	}
-	rolledBack := false
-	defer func() {
-		if !rolledBack {
-			_ = tx.Rollback()
-		}
-	}()
-
 	newCourse := courses.Course{
 		DisciplineID: model.DisciplineID,
 		OwnerID:      ownerID,
@@ -132,22 +128,17 @@ func (r *PGRepo) CreateCourse(
 		CreatedAt:    time.Now(),
 	}
 
-	rows, err := tx.NamedQuery(createCourseSQL, newCourse)
+	stmt, err := tx.PrepareNamedContext(ctx, createCourseSQL)
 	if err != nil {
-		return nil, fmt.Errorf("create course: insert course in db: %w", err)
+		return nil, fmt.Errorf("tx prepare named statement for course: %w", err)
 	}
+	defer stmt.Close()
 
-	if rows.Next() {
-		if err := rows.Scan(&newCourse.ID); err != nil {
-			if closeErr := rows.Close(); closeErr != nil {
-				zap.L().Error(closeErr.Error())
-			}
-			return nil, fmt.Errorf("create course: scan course id: %w", err)
-		}
+	var newID uuid.UUID
+	if err := stmt.GetContext(ctx, &newID, newCourse); err != nil {
+		return nil, fmt.Errorf("tx get course id: %w", err)
 	}
-	if err := rows.Close(); err != nil {
-		zap.L().Error(err.Error())
-	}
+	newCourse.ID = newID
 
 	courseMember := courses.CourseMember{
 		UserID:   ownerID,
@@ -161,7 +152,7 @@ func (r *PGRepo) CreateCourse(
 		createCourseMemberSQL,
 		courseMember,
 	); err != nil {
-		return nil, fmt.Errorf("create course: insert course member: %w", err)
+		return nil, fmt.Errorf("insert course member: %w", err)
 	}
 
 	teacher := courses.Teacher{
@@ -177,11 +168,7 @@ func (r *PGRepo) CreateCourse(
 		createTeacherSQL,
 		teacher,
 	); err != nil {
-		return nil, fmt.Errorf("create course: insert teacher: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("create course: commit transaction: %w", err)
+		return nil, fmt.Errorf("insert teacher: %w", err)
 	}
 	rolledBack = true
 
@@ -299,6 +286,36 @@ func (r *PGRepo) UpdateCourseByID(
 	}
 
 	return &course, nil
+}
+
+func (r *PGRepo) PublishSnapshotToCourse(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	model *courses.PublishSnapshot,
+) error {
+	zap.L().
+		Debug("Executing query within transaction", zap.String("query", publishSnapshotToCourseSQL))
+
+	res, err := tx.ExecContext(
+		ctx,
+		publishSnapshotToCourseSQL,
+		model.NewSnapshotID,
+		model.CourseID,
+		model.ExpectedVersion,
+	)
+	if err != nil {
+		return fmt.Errorf("tx publish course version: %w", err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
