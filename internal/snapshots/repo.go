@@ -51,6 +51,12 @@ type Repo interface {
 		userID uuid.UUID,
 		actualSnapshotID uuid.UUID,
 	) (*Snapshot, error)
+	SwitchSnapshotContent(
+		ctx context.Context,
+		tx *sqlx.Tx,
+		draftSnapshotID uuid.UUID,
+		targetSnapshotID uuid.UUID,
+	) error
 	DeleteAllByCourseID(
 		ctx context.Context,
 		tx *sqlx.Tx,
