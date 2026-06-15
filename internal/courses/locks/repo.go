@@ -37,7 +37,7 @@ type LockSession struct {
 
 type Repo interface {
 	GetLock(ctx context.Context, courseID uuid.UUID) (*Lock, error)
-	UpsertLock(ctx context.Context, model *LockSession) (*Lock, error)
+	SetLock(ctx context.Context, model *LockSession) (*Lock, error)
 	RefreshLock(ctx context.Context, model *LockSession) error
-	Unlock(ctx context.Context, courseID uuid.UUID) error
+	Unlock(ctx context.Context, model *LockSession) error
 }
