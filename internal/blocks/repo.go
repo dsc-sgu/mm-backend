@@ -79,9 +79,15 @@ type Repo interface {
 		newPosition string,
 	) error
 	DeleteBlockByID(ctx context.Context, id uuid.UUID) error
-	DeleteAllBlocksByCourseID(
+	DeleteAllBlocksBySnapshotID(
 		ctx context.Context,
 		tx *sqlx.Tx,
-		courseID uuid.UUID,
+		snapshotID uuid.UUID,
+	) error
+	CopyBlocksToSnapshot(
+		ctx context.Context,
+		tx *sqlx.Tx,
+		sourceSnapshotID uuid.UUID,
+		targetSnapshotID uuid.UUID,
 	) error
 }
