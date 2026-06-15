@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
@@ -20,18 +21,18 @@ const (
 	`
 
 	createCourseMemberSQL = `
-    	INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
-    	VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
-  `
+		INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
+		VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
+	`
 
 	createStudentSQL = `
-    	INSERT INTO students (user_id, course_id, admission_date, is_active)
-    	VALUES (:user_id, :course_id, :admission_date, :is_active)
+		INSERT INTO students (user_id, course_id, admission_date, is_active)
+		VALUES (:user_id, :course_id, :admission_date, :is_active)
 	`
 
 	createTeacherSQL = `
-    	INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
-    	VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
+		INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
+		VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
 	`
 
 	createInviteSQL = `
@@ -41,18 +42,27 @@ const (
 	`
 
 	getCourseByIdSQL = `
-		SELECT id, discipline_id, owner_id, name, display_name, created_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
 		FROM courses
-		WHERE id = $1
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 	getCourseByNameSQL = `
-    	SELECT id, discipline_id, owner_id, name, display_name, created_at
-    	FROM courses
-    	WHERE name = $1
-  	`
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
+		FROM courses
+		WHERE name = $1 AND deleted_at IS NULL
+	`
+
+	getAllCoursesByCourseIdSQL = `
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at
+		FROM courses
+		WHERE id > $2 AND deleted_at IS NULL
+		ORDER BY id
+		LIMIT $1
+	`
+
 	getCourseMemberSQL = `
-    	SELECT user_id, course_id, role, invited_by, is_active
-    	FROM course_members
+		SELECT user_id, course_id, role, invited_by, is_active
+		FROM course_members
 		WHERE user_id = $1 AND course_id = $2
 	`
 
@@ -65,15 +75,38 @@ const (
 	updateCourseByIdSQL = `
 		UPDATE courses
 		SET owner_id = $1, display_name = $2
-		WHERE id = $3
-		RETURNING id, discipline_id, owner_id, name, display_name, created_at
+		WHERE id = $3 AND deleted_at IS NULL
+		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at
 	`
 
 	deleteCourseByIdSQL = `
-		DELETE FROM courses
-		WHERE id = $1
+		UPDATE courses
+		SET deleted_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 )
+
+func (r *PGRepo) ExecInTx(
+	ctx context.Context,
+	fn func(tx *sqlx.Tx) error,
+) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("tx begin failed: %w", err)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
 
 func (r *PGRepo) CreateCourse(
 	ctx context.Context,
@@ -123,7 +156,11 @@ func (r *PGRepo) CreateCourse(
 		IsActive: true,
 	}
 
-	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
+	if _, err := tx.NamedExecContext(
+		ctx,
+		createCourseMemberSQL,
+		courseMember,
+	); err != nil {
 		return nil, fmt.Errorf("create course: insert course member: %w", err)
 	}
 
@@ -135,7 +172,11 @@ func (r *PGRepo) CreateCourse(
 		IsActive:   true,
 	}
 
-	if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
+	if _, err := tx.NamedExecContext(
+		ctx,
+		createTeacherSQL,
+		teacher,
+	); err != nil {
 		return nil, fmt.Errorf("create course: insert teacher: %w", err)
 	}
 
@@ -229,11 +270,7 @@ func (r *PGRepo) GetPaginatedCourses(
 		}
 		return nil, err
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			zap.L().Error(err.Error())
-		}
-	}()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		if err := rows.StructScan(&course); err != nil {
@@ -254,19 +291,11 @@ func (r *PGRepo) UpdateCourseByID(
 ) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSQL))
 
-	row := r.db.QueryRowxContext(
-		ctx,
-		updateCourseByIdSQL,
-		update.OwnerID,
-		update.DisplayName,
-		id,
-	)
-
 	var course courses.Course
-
-	err := row.StructScan(&course)
+	err := r.db.QueryRowxContext(ctx, updateCourseByIdSQL, update.OwnerID, update.DisplayName, id).
+		StructScan(&course)
 	if err != nil {
-		return &course, err
+		return nil, err
 	}
 
 	return &course, nil
