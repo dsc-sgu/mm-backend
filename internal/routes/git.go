@@ -1,9 +1,10 @@
 package routes
 
 import (
+	"github.com/go-fuego/fuego"
+
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/git"
-	"github.com/go-fuego/fuego"
 )
 
 type GitController struct {
@@ -16,26 +17,26 @@ func NewGitController(svc *git.Service) *GitController {
 	}
 }
 
-func (svc *GitController) AddSshKey(
-	ctx fuego.ContextWithBody[git.AddSshKey],
+func (svc *GitController) AddSSHKey(
+	ctx fuego.ContextWithBody[git.AddSSHKey],
 ) (any, error) {
 	body, err := ctx.Body()
-	sessionId := session.UserIDFromContext(ctx.Context())
+	sessionID := session.UserIDFromContext(ctx.Context())
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return nil, svc.service.AddSshKey(sessionId, &body)
+	return nil, svc.service.AddSSHKey(sessionID, &body)
 }
 
-func (svc *GitController) DeleteSshKey(
-	ctx fuego.ContextWithBody[git.DeleteSshKey],
+func (svc *GitController) DeleteSSHKey(
+	ctx fuego.ContextWithBody[git.DeleteSSHKey],
 ) (any, error) {
 	body, err := ctx.Body()
-	sessionId := session.UserIDFromContext(ctx.Context())
+	sessionID := session.UserIDFromContext(ctx.Context())
 	if err != nil {
 		return nil, fuego.BadRequestError{Title: "INVALID_JSON"}
 	}
 
-	return nil, svc.service.DeleteSshKey(sessionId, &body)
+	return nil, svc.service.DeleteSSHKey(sessionID, &body)
 }

@@ -9,20 +9,20 @@ import (
 	"github.com/google/uuid"
 )
 
-type SshKey struct {
-	OwnerId     uuid.UUID `json:"ownerId"     db:"owner_id"    binding:"required"`
+type SSHKey struct {
+	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"    binding:"required"`
 	Name        string    `json:"name"        db:"name"        binding:"required"`
 	Key         string    `json:"key"         db:"key"         binding:"required"`
 	Fingerprint string    `json:"fingerprint" db:"fingerprint" binding:"required"`
 	CreatedAt   time.Time `json:"createdAt"   db:"created_at"  binding:"required"`
 }
 
-type AddSshKey struct {
+type AddSSHKey struct {
 	Name string `json:"name" db:"name" binding:"required"`
 	Key  string `json:"key"  db:"key"  binding:"required"`
 }
 
-type DeleteSshKey struct {
+type DeleteSSHKey struct {
 	Fingerprint string `json:"fingerprint" db:"fingerprint" binding:"required"`
 }
 
@@ -50,4 +50,10 @@ type FileInfo struct {
 	MD5Hash     string    `json:"md5Hash"     binding:"required"`
 	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
 	Content     []byte    `json:"content"     binding:"required"`
+}
+
+type AttemptCommitInfo struct {
+	UserID     uuid.UUID
+	TaskID     uuid.UUID
+	CommitHash string
 }

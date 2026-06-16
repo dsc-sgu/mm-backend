@@ -243,8 +243,8 @@ func SetupRoutes(
 	fuego.Post(
 		gitGroup,
 		"/add_key",
-		func(ctx fuego.ContextWithBody[git.AddSshKey]) (any, error) {
-			return gitController.AddSshKey(ctx)
+		func(ctx fuego.ContextWithBody[git.AddSSHKey]) (any, error) {
+			return gitController.AddSSHKey(ctx)
 		},
 		option.Summary("Add new SSH key"),
 		option.DefaultStatusCode(http.StatusAccepted),
@@ -253,8 +253,8 @@ func SetupRoutes(
 	fuego.Delete(
 		gitGroup,
 		"/delete_key",
-		func(ctx fuego.ContextWithBody[git.DeleteSshKey]) (any, error) {
-			return gitController.DeleteSshKey(ctx)
+		func(ctx fuego.ContextWithBody[git.DeleteSSHKey]) (any, error) {
+			return gitController.DeleteSSHKey(ctx)
 		},
 		option.Summary("Delete SSH key"),
 		option.DefaultStatusCode(http.StatusNoContent),
