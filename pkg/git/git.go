@@ -254,11 +254,11 @@ fi
 }
 
 func runGit(s ssh.Session, dir string, args ...string) error {
-	usi := exec.CommandContext(s.Context(), "git", args...)
-	usi.Dir = dir
-	usi.Stdout = s
-	usi.Stdin = s
-	if err := usi.Run(); err != nil {
+	cmd := exec.CommandContext(s.Context(), "git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = s
+	cmd.Stdin = s
+	if err := cmd.Run(); err != nil {
 		return err
 	}
 	return nil
