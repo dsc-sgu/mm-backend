@@ -2,11 +2,13 @@ package routes
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 )
 
 type AttemptController struct {
@@ -24,8 +26,8 @@ func NewAttemptController(
 func (c *AttemptController) GetDiff(
 	ctx fuego.ContextNoBody,
 ) ([]string, error) {
-	AttemptID1 := ctx.QueryParam("attemptID1")
-	AttemptID2 := ctx.QueryParam("attemptID2")
+	AttemptID1 := ctx.QueryParam("id1")
+	AttemptID2 := ctx.QueryParam("id2")
 
 	id1, err := uuid.Parse(AttemptID1)
 
@@ -52,6 +54,38 @@ func (c *AttemptController) GetDiff(
 	}
 
 	return diff, nil
+}
+
+func (c *AttemptController) PushAttempt(ctx fuego.ContextNoBody) (string, error) {
+	courseID, err := uuid.Parse(ctx.QueryParam("courseID"))
+	if err != nil {
+		return "", fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing courseID: %w", err).Error(),
+		}
+	}
+
+	taskID, err := uuid.Parse(ctx.QueryParam("taskID"))
+	if err != nil {
+		return "", fuego.BadRequestError{
+			Detail: fmt.Errorf("parsing taskID: %w", err).Error(),
+		}
+	}
+
+	participantID := session.UserIDFromContext(ctx.Context())
+
+	zipData, err := io.ReadAll(ctx.Request().Body)
+	if err != nil {
+		return "", fuego.BadRequestError{
+			Detail: fmt.Errorf("reading body: %w", err).Error(),
+		}
+	}
+
+	commitHash, err := c.attemptService.PushAttempt(courseID, taskID, participantID, zipData)
+	if err != nil {
+		return "", fuego.InternalServerError{Detail: err.Error()}
+	}
+
+	return commitHash, nil
 }
 
 func (c *AttemptController) GetAttempts(

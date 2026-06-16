@@ -36,6 +36,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"

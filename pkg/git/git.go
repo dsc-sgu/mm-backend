@@ -92,7 +92,7 @@ type Hooks interface {
 // their commands.
 func Middleware(
 	repoDir string,
-	repoRename func(string, gossh.PublicKey) (string, error),
+	RepoRename func(string, gossh.PublicKey) (string, error),
 	gh Hooks,
 ) wish.Middleware {
 	return func(sh ssh.Handler) ssh.Handler {
@@ -101,16 +101,17 @@ func Middleware(
 			if len(cmd) == 2 {
 				gc := cmd[0]
 				pk := s.PublicKey()
-				repo, err := repoRename(cmd[1], pk)
+				repo, err := RepoRename(cmd[1], pk)
 				if err != nil {
 					Fatal(s, err)
+					return
 				}
 				access := gh.AuthRepo(repo, pk)
 				switch gc {
 				case "git-receive-pack":
 					switch access {
 					case ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
+						err := GitPack(s, gc, repoDir, repo)
 						if err != nil {
 							Fatal(s, ErrSystemMalfunction)
 						} else {
@@ -123,7 +124,7 @@ func Middleware(
 				case "git-upload-archive", "git-upload-pack":
 					switch access {
 					case ReadOnlyAccess, ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
+						err := GitPack(s, gc, repoDir, repo)
 						switch err {
 						case ErrInvalidRepo:
 							Fatal(s, ErrInvalidRepo)
@@ -144,40 +145,40 @@ func Middleware(
 	}
 }
 
-func gitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
+func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
 	switch gitCmd {
 	case "git-upload-archive", "git-upload-pack":
-		exists, err := fileExists(rp)
+		exists, err := FileExists(rp)
 		if !exists {
 			return ErrInvalidRepo
 		}
 		if err != nil {
 			return err
 		}
-		return runGit(s, "", cmd, rp)
+		return RunGit(s, "", cmd, rp)
 	case "git-receive-pack":
 		err := EnsureRepo(repoDir, repo)
 		if err != nil {
 			return err
 		}
-		err = runGit(s, "", "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
+		err = RunGit(s, "", "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
 		if err != nil {
 			return err
 		}
-		err = ensureDefaultBranch(s, rp)
+		err = EnsureDefaultBranch(s, rp)
 		if err != nil {
 			return err
 		}
 		// Needed for git dumb http server
-		return runGit(s, rp, "update-server-info")
+		return RunGit(s, rp, "update-server-info")
 	default:
 		return fmt.Errorf("unknown git command: %s", gitCmd)
 	}
 }
 
-func fileExists(path string) (bool, error) {
+func FileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -203,7 +204,7 @@ func Fatal(s ssh.Session, v ...interface{}) {
 // If path does not exist, it'll be created.
 // If the path is not a git repo, it will be git init-ed as a bare repository.
 func EnsureRepo(dir, repo string) error {
-	exists, err := fileExists(dir)
+	exists, err := FileExists(dir)
 	if err != nil {
 		return err
 	}
@@ -214,7 +215,7 @@ func EnsureRepo(dir, repo string) error {
 		}
 	}
 	rp := filepath.Join(dir, repo)
-	exists, err = fileExists(rp)
+	exists, err = FileExists(rp)
 	if err != nil {
 		return err
 	}
@@ -224,15 +225,15 @@ func EnsureRepo(dir, repo string) error {
 			return err
 		}
 	}
-	if err := writePostReceiveHook(rp); err != nil {
+	if err := WritePostReceiveHook(rp); err != nil {
 		return fmt.Errorf("write post-receive hook: %w", err)
 	}
 	return nil
 }
 
-// writePostReceiveHook writes a post-receive hook that saves push options
+// WritePostReceiveHook writes a post-receive hook that saves push options
 // to a file for the Push hook to read.
-func writePostReceiveHook(repoPath string) error {
+func WritePostReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("create hooks dir: %w", err)
@@ -253,7 +254,7 @@ fi
 	)
 }
 
-func runGit(s ssh.Session, dir string, args ...string) error {
+func RunGit(s ssh.Session, dir string, args ...string) error {
 	cmd := exec.CommandContext(s.Context(), "git", args...)
 	cmd.Dir = dir
 	cmd.Stdout = s
@@ -264,7 +265,7 @@ func runGit(s ssh.Session, dir string, args ...string) error {
 	return nil
 }
 
-func ensureDefaultBranch(s ssh.Session, repoPath string) error {
+func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
 	r, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return err
@@ -281,7 +282,7 @@ func ensureDefaultBranch(s ssh.Session, repoPath string) error {
 	// Rename the default branch to the first branch available
 	_, err = r.Head()
 	if err == plumbing.ErrReferenceNotFound {
-		err = runGit(s, repoPath, "branch", "-M", fb.Name().Short())
+		err = RunGit(s, repoPath, "branch", "-M", fb.Name().Short())
 		if err != nil {
 			return err
 		}
