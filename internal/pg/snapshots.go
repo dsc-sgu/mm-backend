@@ -23,7 +23,7 @@ const (
 	getSnapshotByIdSQL = `
 		SELECT id, course_id, version, status, created_by, created_at
 		FROM course_snapshots
-		WHERE id = $1
+		WHERE id = $1 AND status != 'stale'
 	`
 
 	getDraftSnapshotSQL = `
@@ -31,6 +31,13 @@ const (
 		FROM course_snapshots
 		WHERE course_id = $1 AND created_by = $2 AND status = 'draft'
 		LIMIT 1
+	`
+
+	getPublishedSnapshotsByCourseIdSQL = `
+		SELECT id, course_id, version, status, created_by, created_at
+		FROM course_snapshots
+		WHERE course_id = $1 AND status = 'published'
+		ORDER BY version DESC, created_at DESC
 	`
 
 	updateSnapshotStatusSQL = `
@@ -85,6 +92,33 @@ func (r *PGRepo) GetSnapshotByID(
 		return nil, fmt.Errorf("get snapshot by id: %w", err)
 	}
 	return &snapshot, nil
+}
+
+// GetPublishedSnapshotsByCourseID returns a list of all published snapshots for a course editing timeline
+func (r *PGRepo) GetPublishedSnapshotsByCourseID(
+	ctx context.Context,
+	courseID uuid.UUID,
+) ([]*snapshots.Snapshot, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getPublishedSnapshotsByCourseIdSQL))
+
+	if courseID == uuid.Nil {
+		return nil, fmt.Errorf("get published snapshots: course id is nil")
+	}
+
+	snapshotsList := make([]*snapshots.Snapshot, 0)
+
+	err := r.db.SelectContext(
+		ctx,
+		&snapshotsList,
+		getPublishedSnapshotsByCourseIdSQL,
+		courseID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get published snapshots by course id: %w", err)
+	}
+
+	return snapshotsList, nil
 }
 
 // FindUserDraft returns unfinished draft snapshot for user
