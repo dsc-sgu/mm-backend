@@ -2,22 +2,88 @@ package blocks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
-// TODO: Move to config
-// Maximum length of position string to trigger lazy position rebalancing
-const maxPositionLengthThreshold = 20
+var (
+	ErrUnauthorized     = errors.New("unauthorized")
+	ErrSnapshotNotFound = errors.New("snapshot not found")
+	ErrSnapshotNotDraft = errors.New(
+		"cannot modify blocks in a non-draft snapshot",
+	)
+	ErrInvalidSession = errors.New(
+		"user editing session is invalid or expired",
+	)
+)
 
 type Service struct {
-	Repo
+	repo              Repo
+	snapshotsService  *snapshots.Service
+	locksService      *locks.Service
+	lexoRankThreshold int
 }
 
-func NewService(repo Repo) *Service {
-	return &Service{repo}
+func NewService(
+	repo Repo,
+	snapshotsService *snapshots.Service,
+	locksService *locks.Service,
+	lexoRankThreshold int,
+) *Service {
+	return &Service{
+		repo:              repo,
+		snapshotsService:  snapshotsService,
+		locksService:      locksService,
+		lexoRankThreshold: lexoRankThreshold,
+	}
+}
+
+// validateLock checks if the user has a valid lock on the course
+func (s *Service) validateLock(
+	ctx context.Context,
+	snapshotID uuid.UUID,
+) error {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return ErrUnauthorized
+	}
+
+	// Get the target snapshot for CourseID
+	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
+	if err != nil {
+		return err
+	}
+	if snapshot == nil {
+		return ErrSnapshotNotFound
+	}
+
+	if snapshot.Status != snapshots.DraftStatus {
+		return ErrSnapshotNotDraft
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  snapshot.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	isValid, err := s.locksService.ValidateLock(ctx, lockSession)
+	if err != nil {
+		return fmt.Errorf("failed to verify lock status: %w", err)
+	}
+	if !isValid {
+		return ErrInvalidSession
+	}
+
+	return nil
 }
 
 // CreateBlock calculates position based on AfterBlockID and initiates block creation
@@ -25,7 +91,11 @@ func (s *Service) CreateBlock(
 	ctx context.Context,
 	model *CreateBlock,
 ) (*Block, error) {
-	leftPos, rightPos, err := s.GetPositionsForMove(
+	if err := s.validateLock(ctx, model.SnapshotID); err != nil {
+		return nil, err
+	}
+
+	leftPos, rightPos, err := s.repo.GetPositionsForMove(
 		ctx,
 		model.SnapshotID,
 		model.AfterBlockID,
@@ -39,13 +109,13 @@ func (s *Service) CreateBlock(
 
 	calculatedPos := CalculateMiddlePosition(leftPos, rightPos)
 
-	block, err := s.Repo.CreateBlock(ctx, model, calculatedPos)
+	block, err := s.repo.CreateBlock(ctx, model, calculatedPos)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if rebalance is needed
-	if len(calculatedPos) > maxPositionLengthThreshold {
+	if len(calculatedPos) > s.lexoRankThreshold {
 		go s.rebalanceSnapshotPositions(context.Background(), model.SnapshotID)
 	}
 
@@ -59,7 +129,11 @@ func (s *Service) MoveBlock(
 	snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) error {
-	leftPos, rightPos, err := s.GetPositionsForMove(
+	if err := s.validateLock(ctx, snapshotID); err != nil {
+		return err
+	}
+
+	leftPos, rightPos, err := s.repo.GetPositionsForMove(
 		ctx,
 		snapshotID,
 		afterBlockID,
@@ -70,17 +144,52 @@ func (s *Service) MoveBlock(
 
 	newPosition := CalculateMiddlePosition(leftPos, rightPos)
 
-	err = s.UpdateBlockPosition(ctx, blockID, newPosition)
+	err = s.repo.UpdateBlockPosition(ctx, blockID, newPosition)
 	if err != nil {
 		return fmt.Errorf("service move block: save position: %w", err)
 	}
 
 	// Check if rebalance is needed
-	if len(newPosition) > maxPositionLengthThreshold {
+	if len(newPosition) > s.lexoRankThreshold {
 		go s.rebalanceSnapshotPositions(context.Background(), snapshotID)
 	}
 
 	return nil
+}
+
+func (s *Service) UpdateBlockContent(
+	ctx context.Context,
+	blockID, snapshotID uuid.UUID,
+	model *UpdateBlock,
+) (*Block, error) {
+	if err := s.validateLock(ctx, snapshotID); err != nil {
+		return nil, err
+	}
+	return s.repo.UpdateBlockContent(ctx, blockID, model)
+}
+
+func (s *Service) DeleteBlockByID(
+	ctx context.Context,
+	blockID, snapshotID uuid.UUID,
+) error {
+	if err := s.validateLock(ctx, snapshotID); err != nil {
+		return err
+	}
+	return s.repo.DeleteBlockByID(ctx, blockID)
+}
+
+func (s *Service) GetBlockByID(
+	ctx context.Context,
+	blockID uuid.UUID,
+) (*Block, error) {
+	return s.repo.GetBlockByID(ctx, blockID)
+}
+
+func (s *Service) GetAllBlocksBySnapshotID(
+	ctx context.Context,
+	snapshotID uuid.UUID,
+) ([]*Block, error) {
+	return s.repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
 }
 
 // rebalanceSnapshotPositions shrinks overgrown position lines,
@@ -92,7 +201,7 @@ func (s *Service) rebalanceSnapshotPositions(
 	zap.L().
 		Info("Starting lazy position rebalancing for snapshot", zap.String("snapshot_id", snapshotID.String()))
 
-	blocksList, err := s.Repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
+	blocksList, err := s.repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
 	if err != nil {
 		zap.L().
 			Error("rebalance positions: failed to fetch blocks", zap.Error(err))
@@ -107,7 +216,7 @@ func (s *Service) rebalanceSnapshotPositions(
 		newPos := CalculateMiddlePosition(currentPrev, "")
 
 		if block.Position != newPos {
-			err = s.Repo.UpdateBlockPosition(ctx, block.ID, newPos)
+			err = s.repo.UpdateBlockPosition(ctx, block.ID, newPos)
 			if err != nil {
 				zap.L().Error(
 					"rebalance positions: failed to update block position",
