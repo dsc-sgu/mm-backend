@@ -2,15 +2,39 @@ package courses
 
 import (
 	"context"
-	"net/http"
 	"strconv"
+	"errors"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
+
+type Handler struct {
+	courseService   *Service
+	blockService    *blocks.Service
+	lockService     *locks.Service
+	snapshotService *snapshots.Service
+}
+
+func NewHandler(
+	courseService *Service,
+	blockService *blocks.Service,
+	lockService *locks.Service,
+	snapshotService *snapshots.Service,
+) *Handler {
+	return &Handler{
+		courseService:   courseService,
+		blockService:    blockService,
+		lockService:     lockService,
+		snapshotService: snapshotService,
+	}
+}
 
 // CourseIDResponse is the handler-level response containing only a course ID.
 type CourseIDResponse struct {
@@ -22,13 +46,41 @@ type UserRoleResponse struct {
 	Role CourseMemberRole `json:"role"`
 }
 
-type Handler struct {
-	courseService *Service
-	blockService  *blocks.Service
+// CourseContentResponse is the handler-level response for course with ordered blocks
+type CourseContentResponse struct {
+	ID               uuid.UUID       `json:"id"`
+	DisciplineID     uuid.UUID       `json:"disciplineId"`
+	ActiveSnapshotID uuid.UUID       `json:"activeSnapshotId"`
+	Name             string          `json:"name"`
+	Version          int             `json:"version"`
+	Blocks           []*blocks.Block `json:"blocks"`
 }
 
-func NewHandler(courseService *Service, blockService *blocks.Service) *Handler {
-	return &Handler{courseService: courseService, blockService: blockService}
+// SnapshotMetadataResponse is a part of response for course timeline
+type SnapshotMetadataResponse struct {
+	ID        uuid.UUID        `json:"id"`
+	Version   int              `json:"version"`
+	Status    snapshots.Status `json:"status"`
+	CreatedBy uuid.UUID        `json:"createdBy"`
+	CreatedAt time.Time        `json:"createdAt"`
+}
+
+func (h *Handler) checkCourseMember(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (*CourseMember, error) {
+	member, err := h.courseService.repo.GetCourseMember(ctx, userID, courseID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(
+			"failed to check course membership",
+		)
+	}
+	if member == nil || !member.IsActive {
+		return nil, huma.Error403Forbidden(
+			"user is not a member of this course",
+		)
+	}
+	return member, nil
 }
 
 type CreateCourseInput struct {
@@ -39,7 +91,10 @@ type CreateCourseOutput struct {
 	Body *CourseIDResponse
 }
 
-func (h *Handler) CreateCourse(ctx context.Context, input *CreateCourseInput) (*CreateCourseOutput, error) {
+func (h *Handler) CreateCourse(
+	ctx context.Context,
+	input *CreateCourseInput,
+) (*CreateCourseOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -78,43 +133,10 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
-	studentBool := false
-	if input.IsStudent != "" {
-		studentBool, err = strconv.ParseBool(input.IsStudent)
-		if err != nil {
-			return nil, huma.Error400BadRequest("invalid is_student")
-		}
-	}
-
-	userID := uuid.Nil
-	if teacherBool || studentBool {
-		userID = session.UserIDFromContext(ctx)
-	}
-
-	var lastID uuid.UUID
-	if input.LastID != "" {
-		lastID, err = uuid.Parse(input.LastID)
-		if err != nil {
-			return nil, huma.Error400BadRequest("invalid last_id")
-		}
-	}
-
-	var disciplineID uuid.UUID
-	if input.DisciplineID != "" {
-		disciplineID, err = uuid.Parse(input.DisciplineID)
-		if err != nil {
-			return nil, huma.Error400BadRequest("invalid discipline_id")
-		}
-	}
-
-	courseList, err := h.courseService.GetPaginatedCourses(
+	courseList, err := h.courseService.repo.GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
-		disciplineID,
-		userID,
-		teacherBool,
-		studentBool,
 	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
@@ -131,15 +153,193 @@ type GetCourseOutput struct {
 	Body *Course
 }
 
-func (h *Handler) GetCourse(ctx context.Context, input *GetCourseInput) (*GetCourseOutput, error) {
-	course, err := h.courseService.GetCourseByID(ctx, input.CourseID)
+func (h *Handler) GetCourse(
+	ctx context.Context,
+	input *GetCourseInput,
+) (*GetCourseOutput, error) {
+	course, err := h.courseService.repo.GetCourseByID(ctx, input.CourseID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
 	if course == nil {
 		return nil, huma.Error404NotFound("")
 	}
+
 	return &GetCourseOutput{Body: course}, nil
+}
+
+type GetCourseContentInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+type GetCourseContentOutput struct {
+	Body *CourseContentResponse
+}
+
+func (h *Handler) GetCourseContent(
+	ctx context.Context,
+	input *GetCourseContentInput,
+) (*GetCourseContentOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	_, err := h.checkCourseMember(ctx, userID, input.CourseID)
+	if err != nil {
+		return nil, err
+	}
+
+	course, err := h.courseService.repo.GetCourseByID(ctx, input.CourseID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to fetch course")
+	}
+	if course == nil {
+		return nil, huma.Error404NotFound("course not found")
+	}
+
+	var linkedBlocks []*blocks.Block
+	if course.ActiveSnapshotID != uuid.Nil {
+		linkedBlocks, err = h.blockService.GetAllBlocksBySnapshotID(
+			ctx,
+			course.ActiveSnapshotID,
+		)
+		if err != nil {
+			return nil, huma.Error500InternalServerError(
+				"failed to fetch course blocks",
+			)
+		}
+	}
+
+	return &GetCourseContentOutput{
+		Body: &CourseContentResponse{
+			ID:               course.ID,
+			DisciplineID:     course.DisciplineID,
+			ActiveSnapshotID: course.ActiveSnapshotID,
+			Name:             course.Name,
+			Version:          course.Version,
+			Blocks:           linkedBlocks,
+		},
+	}, nil
+}
+
+type GetSnapshotBlocksInput struct {
+	SnapshotID uuid.UUID `path:"snapshot_id"`
+}
+
+type GetSnapshotBlocksOutput struct {
+	Body []*blocks.Block
+}
+
+// GetSnapshotBlocks returns all blocks in a specific snapshot
+func (h *Handler) GetSnapshotBlocks(
+	ctx context.Context,
+	input *GetSnapshotBlocksInput,
+) (*GetSnapshotBlocksOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	snapshot, err := h.snapshotService.GetSnapshotByID(ctx, input.SnapshotID)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("failed to fetch snapshot")
+	}
+	if snapshot == nil {
+		return nil, huma.Error404NotFound("snapshot not found")
+	}
+
+	courseMember, err := h.checkCourseMember(ctx, userID, snapshot.CourseID)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, huma.Error403Forbidden(
+			"user is not a teacher of this course",
+		)
+	}
+
+	// Draft snapshot can be seen only by it's creator
+	if snapshot.Status == snapshots.DraftStatus {
+		lockSession := &locks.LockSession{
+			CourseID:  snapshot.CourseID,
+			UserID:    userID,
+			SessionID: sessionID,
+		}
+		if isValid, err := h.lockService.ValidateLock(
+			ctx,
+			lockSession,
+		); err != nil ||
+			!isValid {
+			return nil, huma.Error423Locked(
+				"snapshot is a draft and your editing session is not valid",
+			)
+		}
+	}
+
+	linkedBlocks, err := h.blockService.GetAllBlocksBySnapshotID(
+		ctx,
+		snapshot.ID,
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(
+			"failed to fetch snapshot blocks",
+		)
+	}
+
+	return &GetSnapshotBlocksOutput{Body: linkedBlocks}, nil
+}
+
+type GetCourseSnapshotsInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+type GetCourseSnapshotsOutput struct {
+	Body []SnapshotMetadataResponse
+}
+
+func (h *Handler) GetCourseSnapshots(
+	ctx context.Context,
+	input *GetCourseSnapshotsInput,
+) (*GetCourseSnapshotsOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	courseMember, err := h.checkCourseMember(ctx, userID, input.CourseID)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, huma.Error403Forbidden(
+			"user is not a teacher of this course",
+		)
+	}
+
+	list, err := h.snapshotService.GetPublishedSnapshotsByCourseID(
+		ctx,
+		input.CourseID,
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(
+			"failed to fetch snapshots timeline",
+		)
+	}
+
+	result := make([]SnapshotMetadataResponse, len(list))
+	for i, s := range list {
+		result[i] = SnapshotMetadataResponse{
+			ID:        s.ID,
+			Version:   s.Version,
+			Status:    s.Status,
+			CreatedBy: s.CreatedBy,
+			CreatedAt: s.CreatedAt,
+		}
+	}
+
+	return &GetCourseSnapshotsOutput{Body: result}, nil
 }
 
 type PatchCourseInput struct {
@@ -151,8 +351,30 @@ type PatchCourseOutput struct {
 	Body *Course
 }
 
-func (h *Handler) PatchCourse(ctx context.Context, input *PatchCourseInput) (*PatchCourseOutput, error) {
-	course, err := h.courseService.UpdateCourseByID(ctx, input.CourseID, &input.Body)
+func (h *Handler) PatchCourse(
+	ctx context.Context,
+	input *PatchCourseInput,
+) (*PatchCourseOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	courseMember, err := h.checkCourseMember(ctx, userID, input.CourseID)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, huma.Error403Forbidden(
+			"user is not a teacher of this course",
+		)
+	}
+
+	course, err := h.courseService.repo.UpdateCourseByID(
+		ctx,
+		input.CourseID,
+		&input.Body,
+	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
@@ -163,27 +385,225 @@ type DeleteCourseInput struct {
 	CourseID uuid.UUID `path:"course_id"`
 }
 
-func (h *Handler) DeleteCourse(ctx context.Context, input *DeleteCourseInput) (*struct{}, error) {
-	linkedBlocks, err := h.blockService.GetAllBlocksByCourseID(ctx, input.CourseID)
+func (h *Handler) DeleteCourse(
+	ctx context.Context,
+	input *DeleteCourseInput,
+) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	member, err := h.checkCourseMember(ctx, userID, input.CourseID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, err
+	}
+	if member.Role != TeacherRole {
+		return nil, huma.Error403Forbidden(
+			"only teachers can delete the course",
+		)
 	}
 
-	for _, block := range linkedBlocks {
-		pos := block.Position
-		updatedBlock := blocks.UpdateBlock{
-			CourseID: uuid.Nil,
-			Data:     block.Data,
-			Position: &pos,
+	err = h.courseService.repo.DeleteCourseByID(ctx, input.CourseID)
+	if err != nil {
+		if errors.Is(err, ErrCourseNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
 		}
-		_, err := h.blockService.UpdateBlockByID(ctx, block.ID, &updatedBlock)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("")
-		}
+		return nil, huma.Error500InternalServerError("failed to delete course")
 	}
 
-	if err := h.courseService.DeleteCourseByID(ctx, input.CourseID); err != nil {
-		return nil, huma.Error500InternalServerError("")
+	return nil, nil
+}
+
+type LockCourseInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+type LockCourseOutput struct {
+	Body *InitLockResult
+}
+
+func (h *Handler) LockCourse(
+	ctx context.Context,
+	input *LockCourseInput,
+) (*LockCourseOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  input.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	result, err := h.courseService.LockAndInitDraft(ctx, lockSession)
+	if err != nil {
+		if errors.Is(err, locks.ErrLockHeldByAnother) {
+			return nil, huma.Error423Locked(
+				"course is currently locked by another user",
+			)
+		}
+		if errors.Is(err, ErrPermissionDenied) {
+			return nil, huma.Error403Forbidden(err.Error())
+		}
+		if errors.Is(err, ErrCourseNotFound) {
+			return nil, huma.Error404NotFound(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return &LockCourseOutput{Body: result}, nil
+}
+
+type HeartbeatInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+func (h *Handler) Heartbeat(
+	ctx context.Context,
+	input *HeartbeatInput,
+) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  input.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	err := h.lockService.RefreshLock(ctx, lockSession)
+	if err != nil {
+		if errors.Is(err, locks.ErrLockNotFound) {
+			return nil, huma.Error423Locked(
+				"lock was lost or expired, re-lock required",
+			)
+		}
+		return nil, huma.Error500InternalServerError("failed to refresh lock")
+	}
+
+	return nil, nil
+}
+
+type SwitchSnapshotInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+	Body     struct {
+		TargetSnapshotID uuid.UUID `json:"targetSnapshotID"`
+	}
+}
+
+func (h *Handler) SwitchSnapshot(
+	ctx context.Context,
+	input *SwitchSnapshotInput,
+) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  input.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	err := h.courseService.SwitchSnapshot(
+		ctx,
+		lockSession,
+		input.Body.TargetSnapshotID,
+	)
+	if err != nil {
+		if errors.Is(err, locks.ErrLockNotFound) {
+			return nil, huma.Error423Locked(
+				"active editing session not found",
+			)
+		}
+		if errors.Is(err, ErrInvalidTarget) {
+			return nil, huma.Error400BadRequest(err.Error())
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return nil, nil
+}
+
+type PublishDraftInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+	Body     struct {
+		DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
+	}
+}
+
+func (h *Handler) PublishDraft(
+	ctx context.Context,
+	input *PublishDraftInput,
+) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  input.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	err := h.courseService.PublishDraft(
+		ctx,
+		lockSession,
+		input.Body.DraftSnapshotID,
+	)
+	if err != nil {
+		if errors.Is(err, ErrSnapshotConflict) {
+			return nil, huma.Error409Conflict(
+				"version conflict: the course was modified by another action",
+			)
+		}
+		if errors.Is(err, locks.ErrLockNotFound) {
+			return nil, huma.Error423Locked(
+				"editing session missing or snapshot mismatch",
+			)
+		}
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+
+	return nil, nil
+}
+
+type CancelEditInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+func (h *Handler) CancelEdit(
+	ctx context.Context,
+	input *CancelEditInput,
+) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	lockSession := &locks.LockSession{
+		CourseID:  input.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}
+
+	err := h.courseService.CancelEdit(ctx, lockSession)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(
+			"failed to cancel edit session",
+		)
 	}
 
 	return nil, nil
@@ -197,7 +617,10 @@ type CreateInviteOutput struct {
 	Body *Invite
 }
 
-func (h *Handler) CreateInvite(ctx context.Context, input *CreateInviteInput) (*CreateInviteOutput, error) {
+func (h *Handler) CreateInvite(
+	ctx context.Context,
+	input *CreateInviteInput,
+) (*CreateInviteOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -219,7 +642,10 @@ type GetInviteDetailsOutput struct {
 	Body *InviteDetails
 }
 
-func (h *Handler) GetInviteDetails(ctx context.Context, input *GetInviteDetailsInput) (*GetInviteDetailsOutput, error) {
+func (h *Handler) GetInviteDetails(
+	ctx context.Context,
+	input *GetInviteDetailsInput,
+) (*GetInviteDetailsOutput, error) {
 	details, err := h.courseService.GetInviteDetails(ctx, input.InviteID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
@@ -244,13 +670,17 @@ func (h *Handler) JoinCourseByInvite(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseID, err := h.courseService.JoinCourseByInvite(ctx, input.InviteID, userID)
+	courseID, err := h.courseService.JoinCourseByInvite(
+		ctx,
+		input.InviteID,
+		userID,
+	)
 	if err != nil {
 		switch err {
 		case ErrInviteNotFound:
 			return nil, huma.Error404NotFound(err.Error())
 		case ErrInviteRevoked, ErrInviteExpired:
-			return nil, huma.NewError(http.StatusGone, "")
+			return nil, huma.Error410Gone("")
 		case ErrAlreadyMember:
 			return nil, huma.Error409Conflict("")
 		default:
@@ -278,7 +708,11 @@ func (h *Handler) GetUserRoleInCourse(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseMember, err := h.courseService.GetCourseMember(ctx, userID, input.CourseID)
+	courseMember, err := h.checkCourseMember(
+		ctx,
+		userID,
+		input.CourseID,
+	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
@@ -286,5 +720,7 @@ func (h *Handler) GetUserRoleInCourse(
 		return nil, huma.Error404NotFound("")
 	}
 
-	return &GetUserRoleInCourseOutput{Body: &UserRoleResponse{Role: courseMember.Role}}, nil
+	return &GetUserRoleInCourseOutput{
+		Body: &UserRoleResponse{Role: courseMember.Role},
+	}, nil
 }
