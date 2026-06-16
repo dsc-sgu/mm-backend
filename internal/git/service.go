@@ -15,6 +15,9 @@ import (
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/config"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
@@ -29,15 +32,15 @@ const (
 )
 
 type Service struct {
-	repo_db DBRepo
+	db DBRepo
 }
 
-func NewService(repo_db DBRepo) *Service {
-	return &Service{repo_db: repo_db}
+func NewService(db DBRepo) *Service {
+	return &Service{db: db}
 }
 
-func (s *Service) RepoRename(original string, publicKey gossh.PublicKey) (string, error) {
-	fingerprint := gossh.FingerprintSHA256(publicKey)
+func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error) {
+	fingerprint := gossh.FingerprintSHA256(pk)
 	repoID, err := s.GetRepoID(original, fingerprint)
 	if err != nil {
 		return "", err
@@ -50,7 +53,7 @@ func (s *Service) RepoRename(original string, publicKey gossh.PublicKey) (string
 	return repoPath, nil
 }
 
-func (s *Service) AddSshKey(sessionId uuid.UUID, model *AddSshKey) error {
+func (s *Service) AddSSHKey(sessionID uuid.UUID, model *AddSSHKey) error {
 	zap.L().Debug("Parsing key", zap.String("key", model.Key))
 	authkey, _, _, _, err := gossh.ParseAuthorizedKey([]byte(model.Key))
 	if err != nil {
@@ -61,22 +64,70 @@ func (s *Service) AddSshKey(sessionId uuid.UUID, model *AddSshKey) error {
 		return errors.New("malformed SSH public key")
 	}
 	fingerprint := gossh.FingerprintSHA256(pubkey)
-	key := SshKey{
-		OwnerId:     sessionId,
+	key := SSHKey{
+		OwnerID:     sessionID,
 		Name:        model.Name,
 		Key:         string(gossh.MarshalAuthorizedKey(pubkey)),
 		Fingerprint: fingerprint,
 		CreatedAt:   time.Now(),
 	}
-	return s.repo_db.AddSshKey(&key)
+	return s.db.AddSSHKey(&key)
 }
 
-func (s *Service) DeleteSshKey(sessionId uuid.UUID, model *DeleteSshKey) error {
-	return s.repo_db.DeleteSshKey(sessionId, model.Fingerprint)
+func (s *Service) DeleteSSHKey(sessionID uuid.UUID, model *DeleteSSHKey) error {
+	return s.db.DeleteSSHKey(sessionID, model.Fingerprint)
 }
 
 func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
-	return []string{"diff placeholder"}, nil
+	info1, err := s.db.GetAttemptCommitInfo(attemptID1)
+	if err != nil {
+		return nil, fmt.Errorf("get diff: %w", err)
+	}
+	info2, err := s.db.GetAttemptCommitInfo(attemptID2)
+	if err != nil {
+		return nil, fmt.Errorf("get diff: %w", err)
+	}
+
+	if info1.UserID != info2.UserID || info1.TaskID != info2.TaskID {
+		return nil, errors.New("attempts belong to different repos")
+	}
+
+	courseID, err := s.db.GetCourseIDByTask(info1.TaskID)
+	if err != nil {
+		return nil, fmt.Errorf("get diff: %w", err)
+	}
+
+	repoID := RepoID{
+		CourseID:      courseID,
+		TaskID:        info1.TaskID,
+		ParticipantID: info1.UserID,
+	}
+
+	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoID.IntoPath())
+
+	repo, err := gogit.PlainOpen(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("open repo %s: %w", repoPath, err)
+	}
+
+	hash1 := plumbing.NewHash(info1.CommitHash)
+	hash2 := plumbing.NewHash(info2.CommitHash)
+
+	commit1, err := repo.CommitObject(hash1)
+	if err != nil {
+		return nil, fmt.Errorf("get commit %s: %w", info1.CommitHash, err)
+	}
+	commit2, err := repo.CommitObject(hash2)
+	if err != nil {
+		return nil, fmt.Errorf("get commit %s: %w", info2.CommitHash, err)
+	}
+
+	patch, err := commit1.Patch(commit2)
+	if err != nil {
+		return nil, fmt.Errorf("compute diff: %w", err)
+	}
+
+	return strings.Split(patch.String(), "\n"), nil
 }
 
 func (s *Service) InitRepo(repoID RepoID) error {
@@ -101,16 +152,16 @@ func (s *Service) RemoveRepo(repoID RepoID) error {
 	return nil
 }
 
-func (s *Service) CheckPubkeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
-	return s.repo_db.CheckPubkeyAuth(ctx, pk)
+func (s *Service) CheckPublicKeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
+	return s.db.CheckPublicKeyAuth(ctx, pk)
 }
 
 func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
-	return s.repo_db.CheckPasswordAuth(ctx, password)
+	return s.db.CheckPasswordAuth(ctx, password)
 }
 
 func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
-	if s.repo_db.CheckPubkeyAuth(nil, pk) {
+	if s.db.CheckPublicKeyAuth(nil, pk) {
 		return git.ReadWriteAccess
 	}
 	return git.NoAccess
@@ -152,7 +203,7 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		return
 	}
 
-	if err := s.repo_db.SaveAttempt(repoID, head.Hash().String()); err != nil {
+	if err := s.db.SaveAttempt(repoID, head.Hash().String()); err != nil {
 		zap.L().Error("Push: save attempt", zap.Error(err))
 	}
 }
@@ -190,17 +241,17 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 		return RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
 	} else if len(pathList) == 2 {
 		var err error
-		courseID, err = s.repo_db.GetCourse(pathList[0])
+		courseID, err = s.db.GetCourse(pathList[0])
 		if err != nil {
 			return RepoID{}, err
 		}
-		taskID, err = s.repo_db.GetTask(pathList[1])
+		taskID, err = s.db.GetTask(pathList[1])
 		if err != nil {
 			return RepoID{}, err
 		}
 	}
 
-	participantID, err := s.repo_db.GetParticipant(fingerprint)
+	participantID, err := s.db.GetParticipant(fingerprint)
 	if err != nil {
 		return RepoID{}, err
 	}
@@ -247,4 +298,96 @@ func (s *Service) GitListMiddleware(next ssh.Handler) ssh.Handler {
 		wish.Printf(sess, "> git push wish_test\n\n\n")
 		next(sess)
 	}
+}
+
+func (s *Service) PushAttempt(repoID RepoID, files []FileInfo) (string, error) {
+	repoName := repoID.IntoPath()
+	bareRepoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+
+	if _, err := os.Stat(bareRepoPath); os.IsNotExist(err) {
+		if err := s.InitRepo(repoID); err != nil {
+			return "", fmt.Errorf("init repo: %w", err)
+		}
+	}
+
+	tmpDir, err := os.MkdirTemp("", "attempt-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			zap.L().Error("removing tmp dir", zap.Error(err))
+		}
+	}()
+
+	repo, err := gogit.PlainClone(tmpDir, &gogit.CloneOptions{
+		URL: bareRepoPath,
+	})
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+		if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+			return "", fmt.Errorf("recreate tmp dir: %w", err)
+		}
+
+		repo, err = gogit.PlainInit(tmpDir, false)
+		if err != nil {
+			return "", fmt.Errorf("init work repo: %w", err)
+		}
+
+		if _, err := repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{bareRepoPath},
+		}); err != nil {
+			return "", fmt.Errorf("create remote: %w", err)
+		}
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", fmt.Errorf("get worktree: %w", err)
+	}
+
+	for _, f := range files {
+		path := filepath.Join(tmpDir, f.FileName)
+
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return "", fmt.Errorf("create dirs for %s: %w", f.FileName, err)
+		}
+
+		if err := os.WriteFile(path, f.Content, 0o644); err != nil {
+			return "", fmt.Errorf("write %s: %w", f.FileName, err)
+		}
+
+		if _, err := wt.Add(f.FileName); err != nil {
+			return "", fmt.Errorf("git add %s: %w", f.FileName, err)
+		}
+	}
+
+	commitHash, err := wt.Commit("web attempt", &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  "mm-backend",
+			Email: "mm-backend@mergeminds",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("commit: %w", err)
+	}
+
+	if err := repo.Push(&gogit.PushOptions{
+		RemoteName: "origin",
+	}); err != nil {
+		return "", fmt.Errorf("push: %w", err)
+	}
+
+	if err := s.db.SaveAttempt(repoID, commitHash.String()); err != nil {
+		return "", fmt.Errorf("save attempt: %w", err)
+	}
+
+	zap.L().Info("attempt pushed",
+		zap.String("repo", repoName),
+		zap.String("commit", commitHash.String()),
+	)
+
+	return commitHash.String(), nil
 }
