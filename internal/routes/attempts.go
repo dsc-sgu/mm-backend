@@ -6,7 +6,7 @@ import (
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 
-	"github.com/dsc-sgu/mm-backend/internal/attempt"
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 )
 
 type AttemptController struct {

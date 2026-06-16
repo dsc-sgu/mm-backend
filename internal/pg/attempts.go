@@ -6,7 +6,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/dsc-sgu/mm-backend/internal/attempt"
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 )
 
 const GetAttemptsSql = `
