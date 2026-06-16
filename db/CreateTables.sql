@@ -59,7 +59,7 @@ CREATE TABLE courses (
     name varchar(128) NOT NULL,
     display_name varchar(128) NOT NULL,
     -- Service info
-    version integer NOT NULL DEFAULT 1,
+    version integer NOT NULL DEFAULT 0,
     created_at timestamp NOT NULL,
     deleted_at timestamp,
 
