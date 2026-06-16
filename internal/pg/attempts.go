@@ -1,8 +1,6 @@
 package pg
 
 import (
-	"database/sql"
-
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
@@ -23,14 +21,11 @@ const GetAttemptsSql = `
 	ORDER BY att.transition_at ASC;
 `
 
-func (r *PGRepo) GetAttempts(userId, taskId uuid.UUID) ([]attempt.Attempt, error) {
-	var attemptList []attempt.Attempt
+func (r *PGRepo) GetAttempts(taskId, participantId uuid.UUID) ([]attempt.Attempt, error) {
+	attemptList := make([]attempt.Attempt, 0)
 
-	rows, err := r.db.Queryx(GetAttemptsSql, userId, taskId)
+	rows, err := r.db.Queryx(GetAttemptsSql, participantId, taskId)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, err
 	}
 
@@ -41,11 +36,11 @@ func (r *PGRepo) GetAttempts(userId, taskId uuid.UUID) ([]attempt.Attempt, error
 	}()
 
 	for rows.Next() {
-		var attempt attempt.Attempt
-		if err := rows.StructScan(&attempt); err != nil {
+		var at attempt.Attempt
+		if err := rows.StructScan(&at); err != nil {
 			return nil, err
 		}
-		attemptList = append(attemptList, attempt)
+		attemptList = append(attemptList, at)
 	}
 
 	if err = rows.Err(); err != nil {
