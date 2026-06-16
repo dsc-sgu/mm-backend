@@ -1,9 +1,9 @@
+-- Drop tables with foreign key constraints
 DROP TABLE IF EXISTS attempt_transitions;
 DROP TABLE IF EXISTS attempts;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_groups;
 DROP TABLE IF EXISTS course_users_groups;
-DROP TABLE IF EXISTS groups;
 DROP TABLE IF EXISTS milestone_transitions;
 DROP TABLE IF EXISTS discipline_milestones;
 DROP TABLE IF EXISTS admins;
@@ -11,17 +11,20 @@ DROP TABLE IF EXISTS teachers;
 DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS course_members;
 DROP TABLE IF EXISTS invites;
-DROP TABLE IF EXISTS courses;
-DROP TABLE IF EXISTS course_snapshots;
 DROP TABLE IF EXISTS course_locks;
-DROP TABLE IF EXISTS course_members;
-DROP TABLE IF EXISTS invites;
-DROP TABLE IF EXISTS disciplines;
 DROP TABLE IF EXISTS blocks;
-DROP TABLE IF EXISTS units;
-DROP TABLE IF EXISTS users;
-DROP TABLE IF EXISTS unit_types;
+DROP TABLE IF EXISTS course_snapshots;
+DROP TABLE IF EXISTS courses;
+
+-- Drop tables that are parents to the above tables
+DROP TABLE IF EXISTS disciplines;
+DROP TABLE IF EXISTS groups;
 DROP TABLE IF EXISTS ssh_keys;
+DROP TABLE IF EXISTS units;
+DROP TABLE IF EXISTS unit_types;
+DROP TABLE IF EXISTS users;
+
+-- Drop types
 DROP TYPE IF EXISTS user_role;
 DROP TYPE IF EXISTS attempt_state;
 DROP TYPE IF EXISTS block_type;
