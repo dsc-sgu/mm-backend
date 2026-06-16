@@ -21,6 +21,7 @@ func SetupRoutes(
 	blockController *routes.BlockController,
 	courseController *routes.CourseController,
 	disciplineController *routes.DisciplineController,
+	taskController *routes.TaskController,
 	userController *routes.UserController,
 	gitController *routes.GitController,
 	sessionRepo session.Repo,
@@ -63,6 +64,17 @@ func SetupRoutes(
 		attemptController.GetAttempts,
 		option.Summary("Get all user attempts on task"),
 		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Post(
+		attemptGroup,
+		"",
+		attemptController.PushAttempt,
+		option.Summary("Push attempt via zip upload"),
+		option.Query("courseID", "Course ID"),
+		option.Query("taskID", "Task ID"),
+		option.RequestContentType("application/octet-stream"),
+		option.DefaultStatusCode(http.StatusCreated),
 	)
 
 	blockGroup := fuego.Group(
@@ -108,6 +120,44 @@ func SetupRoutes(
 		"/{block_id}",
 		blockController.DeleteBlock,
 		option.Summary("Delete block from course"),
+		option.DefaultStatusCode(http.StatusNoContent),
+	)
+
+	taskGroup := fuego.Group(
+		privateGroup,
+		"/tasks",
+		option.Summary("Task API"),
+	)
+
+	fuego.Get(
+		taskGroup,
+		"/{block_id}",
+		taskController.GetTask,
+		option.Summary("Get task by block id"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Post(
+		taskGroup,
+		"/{course_id}/tasks",
+		taskController.CreateTask,
+		option.Summary("Create new task on course"),
+		option.DefaultStatusCode(http.StatusCreated),
+	)
+
+	fuego.Patch(
+		taskGroup,
+		"/{block_id}",
+		taskController.PatchTask,
+		option.Summary("Update existing task"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Delete(
+		taskGroup,
+		"/{block_id}",
+		taskController.DeleteTask,
+		option.Summary("Delete task"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 

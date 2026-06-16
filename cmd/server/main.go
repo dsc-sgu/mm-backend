@@ -33,6 +33,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/routes"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
@@ -170,6 +171,7 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
+	taskService := tasks.NewService(pgRepo)
 	attemptService := attempt.NewService(gitService, pgRepo)
 
 	// Controller initialization
@@ -178,6 +180,7 @@ func main() {
 	blockController := routes.NewBlockController(blockService)
 	courseController := routes.NewCourseController(courseService, blockService)
 	disciplineController := routes.NewDisciplineController(disciplineService)
+	taskController := routes.NewTaskController(taskService)
 	gitController := routes.NewGitController(gitService)
 
 	v1 := fuego.Group(httpServer, "/api/v1")
@@ -188,6 +191,7 @@ func main() {
 		blockController,
 		courseController,
 		disciplineController,
+		taskController,
 		userController,
 		gitController,
 		sessionRepo,
