@@ -233,13 +233,18 @@ func (r *PGRepo) GetPositionsForMove(
 func (r *PGRepo) UpdateBlockContent(
 	ctx context.Context,
 	id uuid.UUID,
-	blockType string,
-	data []byte,
+	model *blocks.UpdateBlock,
 ) (*blocks.Block, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateBlockContentSQL))
 
 	var block blocks.Block
-	err := r.db.QueryRowxContext(ctx, updateBlockContentSQL, blockType, string(data), id).
+	err := r.db.QueryRowxContext(
+		ctx,
+		updateBlockContentSQL,
+		model.BlockType,
+		string(model.Data),
+		id,
+	).
 		StructScan(&block)
 	if err != nil {
 		return nil, fmt.Errorf("update block content: %w", err)
