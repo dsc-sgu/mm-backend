@@ -2,25 +2,41 @@ package locks
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Service struct {
-	Repo
+	repo           Repo
+	lockTTLSeconds int
 }
 
-func NewService(repo Repo) *Service {
-	return &Service{repo}
+func NewService(repo Repo, ttlSeconds int) *Service {
+	return &Service{
+		repo:           repo,
+		lockTTLSeconds: ttlSeconds,
+	}
 }
+
+var (
+	ErrLockHeldByAnother = errors.New(
+		"course lock is held by another user or session",
+	)
+	ErrLockExpired  = errors.New("course lock has expired")
+	ErrLockNotFound = errors.New("course lock not found")
+)
 
 // ValidateLock checks that the lock is still held by the user.
 func (s *Service) ValidateLock(
 	ctx context.Context,
 	session *LockSession,
 ) (bool, error) {
-	currentLock, err := s.GetLock(ctx, session.CourseID)
+	currentLock, err := s.repo.GetLock(ctx, session.CourseID)
 	if err != nil {
-		return false, fmt.Errorf("service: check lock valid: %w", err)
+		return false, fmt.Errorf("validate lock: %w", err)
 	}
 
 	if currentLock == nil {
@@ -28,9 +44,32 @@ func (s *Service) ValidateLock(
 	}
 
 	if currentLock.UserID != session.UserID ||
-		currentLock.SessionID != session.SessionID {
+		currentLock.SessionID != session.SessionID ||
+		time.Now().After(currentLock.ExpiresAt) {
 		return false, nil
 	}
 
 	return true, nil
+}
+
+func (s *Service) GetLock(
+	ctx context.Context,
+	courseID uuid.UUID,
+) (*Lock, error) {
+	return s.repo.GetLock(ctx, courseID)
+}
+
+func (s *Service) SetLock(
+	ctx context.Context,
+	model *LockSession,
+) (*Lock, error) {
+	return s.repo.SetLock(ctx, model, s.lockTTLSeconds)
+}
+
+func (s *Service) RefreshLock(ctx context.Context, model *LockSession) error {
+	return s.repo.RefreshLock(ctx, model, s.lockTTLSeconds)
+}
+
+func (s *Service) Unlock(ctx context.Context, model *LockSession) error {
+	return s.repo.Unlock(ctx, model)
 }

@@ -61,6 +61,9 @@ type Config struct {
 	HTTPPort int    `env:"HTTP_PORT,             default=8034"`
 	SSHPort  int    `env:"PORT,                  default=2222"`
 
+	CourseLockTTLSeconds int `env:"COURSE_LOCK_TTL_SECONDS, default=60"`
+	LexoRankThreshold    int `env:"LEXO_RANK_THRESHOLD,     default=20"`
+
 	LogLevel zap.AtomicLevel `env:"LOG_LEVEL,             default=debug"`
 }
 

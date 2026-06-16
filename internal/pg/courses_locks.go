@@ -70,6 +70,7 @@ func (r *PGRepo) GetLock(
 func (r *PGRepo) SetLock(
 	ctx context.Context,
 	model *locks.LockSession,
+	ttlSeconds int,
 ) (*locks.Lock, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -100,15 +101,18 @@ func (r *PGRepo) SetLock(
 		getCourseLockForUpdateSQL,
 		model.CourseID,
 	)
-
-	seconds := int64(locks.LockDuration.Seconds())
-	now := time.Now()
-
 	// If the lock does not exist, create a new one
 	if err != nil {
 		if err == sql.ErrNoRows {
 			var newLock locks.Lock
-			err = tx.QueryRowxContext(ctx, setCourseLockSQL, model.CourseID, model.UserID, model.SessionID, seconds).
+			err = tx.QueryRowxContext(
+				ctx,
+				setCourseLockSQL,
+				model.CourseID,
+				model.UserID,
+				model.SessionID,
+				ttlSeconds,
+			).
 				StructScan(&newLock)
 			if err != nil {
 				return nil, fmt.Errorf("insert new lock: %w", err)
@@ -122,14 +126,21 @@ func (r *PGRepo) SetLock(
 	// If the lock is held by another user and has not expired
 	if existing.UserID != model.UserID ||
 		existing.SessionID != model.SessionID {
-		if now.Before(existing.ExpiresAt) {
+		if time.Now().Before(existing.ExpiresAt) {
 			return nil, locks.ErrLockHeldByAnother
 		}
 	}
 
 	// If the lock already belongs to the user or has expired - update it
 	var newLock locks.Lock
-	err = tx.QueryRowxContext(ctx, setCourseLockSQL, model.CourseID, model.UserID, model.SessionID, seconds).
+	err = tx.QueryRowxContext(
+		ctx,
+		setCourseLockSQL,
+		model.CourseID,
+		model.UserID,
+		model.SessionID,
+		ttlSeconds,
+	).
 		StructScan(&newLock)
 	if err != nil {
 		return nil, fmt.Errorf("upsert lock: %w", err)
@@ -142,6 +153,7 @@ func (r *PGRepo) SetLock(
 func (r *PGRepo) RefreshLock(
 	ctx context.Context,
 	model *locks.LockSession,
+	ttlSeconds int,
 ) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -177,8 +189,12 @@ func (r *PGRepo) RefreshLock(
 	}
 
 	// If the lock is still valid, refresh it's lifetime
-	seconds := int64(locks.LockDuration.Seconds())
-	_, err = tx.ExecContext(ctx, refreshCourseLockSQL, seconds, model.CourseID)
+	_, err = tx.ExecContext(
+		ctx,
+		refreshCourseLockSQL,
+		ttlSeconds,
+		model.CourseID,
+	)
 	if err != nil {
 		return fmt.Errorf("refresh lock update: %w", err)
 	}
