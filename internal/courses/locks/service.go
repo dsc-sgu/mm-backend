@@ -6,19 +6,19 @@ import (
 )
 
 type Service struct {
-	repo Repo
+	Repo
 }
 
 func NewService(repo Repo) *Service {
-	return &Service{repo: repo}
+	return &Service{repo}
 }
 
-// CheckLockValid checks that the lock is still held by the user.
-func (s *Service) CheckLockValid(
+// ValidateLock checks that the lock is still held by the user.
+func (s *Service) ValidateLock(
 	ctx context.Context,
 	session *LockSession,
 ) (bool, error) {
-	currentLock, err := s.repo.GetLock(ctx, session.CourseID)
+	currentLock, err := s.GetLock(ctx, session.CourseID)
 	if err != nil {
 		return false, fmt.Errorf("service: check lock valid: %w", err)
 	}
