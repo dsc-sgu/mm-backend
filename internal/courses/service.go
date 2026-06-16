@@ -16,23 +16,23 @@ import (
 )
 
 type Service struct {
-	repo         Repo
-	snapshotRepo snapshots.Repo
-	lockRepo     locks.Repo
-	txManager    TxManager
+	repo             Repo
+	snapshotsService *snapshots.Service
+	locksService     *locks.Service
+	txManager        TxManager
 }
 
 func NewService(
 	repo Repo,
-	snapshotRepo snapshots.Repo,
-	lockRepo locks.Repo,
+	snapshotsService *snapshots.Service,
+	locksService *locks.Service,
 	txManager TxManager,
 ) *Service {
 	return &Service{
-		repo:         repo,
-		snapshotRepo: snapshotRepo,
-		lockRepo:     lockRepo,
-		txManager:    txManager,
+		repo:             repo,
+		snapshotsService: snapshotsService,
+		locksService:     locksService,
+		txManager:        txManager,
 	}
 }
 
@@ -95,7 +95,7 @@ func (s *Service) CreateCourse(
 			CreatedAt: time.Now(),
 		}
 
-		_, txErr = s.snapshotRepo.CreateSnapshot(ctx, tx, firstSnapshot)
+		_, txErr = s.snapshotsService.CreateSnapshot(ctx, tx, firstSnapshot)
 		if txErr != nil {
 			return fmt.Errorf("service create initial snapshot: %w", txErr)
 		}
@@ -227,12 +227,12 @@ func (s *Service) LockAndInitDraft(
 	}
 
 	// Try to set pessimistic lock for the course
-	_, err = s.lockRepo.SetLock(ctx, session)
+	_, err = s.locksService.SetLock(ctx, session)
 	if err != nil {
 		return nil, err
 	}
 
-	draft, err := s.snapshotRepo.FindUserDraft(
+	draft, err := s.snapshotsService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -270,7 +270,7 @@ func (s *Service) LockAndInitDraft(
 	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		var txErr error
 		targetVersion := course.Version + 1
-		newDraft, txErr = s.snapshotRepo.CreateDraftFromActual(
+		newDraft, txErr = s.snapshotsService.CreateDraftFromActual(
 			ctx,
 			tx,
 			session.CourseID,
@@ -297,16 +297,19 @@ func (s *Service) SwitchSnapshot(
 	targetSnapshotID uuid.UUID,
 ) error {
 	// Check active lock
-	currentLock, err := s.lockRepo.GetLock(ctx, session.CourseID)
-	if err != nil || currentLock == nil ||
-		currentLock.UserID != session.UserID ||
-		currentLock.SessionID != session.SessionID ||
-		time.Now().After(currentLock.ExpiresAt) {
+	isValid, err := s.locksService.ValidateLock(ctx, session)
+	if err != nil {
+		return fmt.Errorf("switch snapshot: validate lock: %w", err)
+	}
+	if !isValid {
 		return locks.ErrLockNotFound
 	}
 
 	// Check that the target snapshot exists and is published
-	targetSnapshot, err := s.snapshotRepo.GetSnapshotByID(ctx, targetSnapshotID)
+	targetSnapshot, err := s.snapshotsService.GetSnapshotByID(
+		ctx,
+		targetSnapshotID,
+	)
 	if err != nil {
 		return fmt.Errorf("switch snapshot: get target: %w", err)
 	}
@@ -316,7 +319,7 @@ func (s *Service) SwitchSnapshot(
 	}
 
 	// Find current user's draft
-	draft, err := s.snapshotRepo.FindUserDraft(
+	draft, err := s.snapshotsService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -330,7 +333,7 @@ func (s *Service) SwitchSnapshot(
 
 	// Replace draft blocks with target
 	return s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		return s.snapshotRepo.SwitchSnapshotContent(
+		return s.snapshotsService.SwitchSnapshotContent(
 			ctx,
 			tx,
 			draft.ID,
@@ -346,7 +349,16 @@ func (s *Service) PublishDraft(
 	session *locks.LockSession,
 	draftSnapshotID uuid.UUID,
 ) error {
-	draft, err := s.snapshotRepo.GetSnapshotByID(ctx, draftSnapshotID)
+	// Check active lock
+	isValid, err := s.locksService.ValidateLock(ctx, session)
+	if err != nil {
+		return fmt.Errorf("publish draft: validate lock: %w", err)
+	}
+	if !isValid {
+		return locks.ErrLockNotFound
+	}
+
+	draft, err := s.snapshotsService.GetSnapshotByID(ctx, draftSnapshotID)
 	if err != nil {
 		return fmt.Errorf("publish draft: get draft: %w", err)
 	}
@@ -374,7 +386,7 @@ func (s *Service) PublishDraft(
 			return txErr
 		}
 
-		return s.snapshotRepo.UpdateSnapshotStatus(
+		return s.snapshotsService.UpdateSnapshotStatus(
 			ctx,
 			tx,
 			draftSnapshotID,
@@ -385,7 +397,7 @@ func (s *Service) PublishDraft(
 		return err
 	}
 
-	if err := s.lockRepo.Unlock(ctx, session); err != nil {
+	if err := s.locksService.Unlock(ctx, session); err != nil {
 		zap.L().Error("failed to remove course lock", zap.Error(err))
 	}
 
@@ -397,7 +409,7 @@ func (s *Service) CancelEdit(
 	ctx context.Context,
 	session *locks.LockSession,
 ) error {
-	draft, err := s.snapshotRepo.FindUserDraft(
+	draft, err := s.snapshotsService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -407,15 +419,49 @@ func (s *Service) CancelEdit(
 	}
 
 	if draft == nil {
-		return s.lockRepo.Unlock(ctx, session)
+		return s.locksService.Unlock(ctx, session)
 	}
 
 	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		return s.snapshotRepo.DiscardDraft(ctx, tx, draft.ID)
+		return s.snapshotsService.DiscardDraft(ctx, tx, draft.ID)
 	})
 	if err != nil {
 		return fmt.Errorf("cancel edit: discard draft tx: %w", err)
 	}
 
-	return s.lockRepo.Unlock(ctx, session)
+	return s.locksService.Unlock(ctx, session)
+}
+
+func (s *Service) GetCourseMember(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (*CourseMember, error) {
+	return s.repo.GetCourseMember(ctx, userID, courseID)
+}
+
+func (s *Service) GetPaginatedCourses(
+	ctx context.Context,
+	limit int,
+	lastID uuid.UUID,
+) ([]Course, error) {
+	return s.repo.GetPaginatedCourses(ctx, limit, lastID)
+}
+
+func (s *Service) GetCourseByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*Course, error) {
+	return s.repo.GetCourseByID(ctx, id)
+}
+
+func (s *Service) UpdateCourseByID(
+	ctx context.Context,
+	id uuid.UUID,
+	update *UpdateCourse,
+) (*Course, error) {
+	return s.repo.UpdateCourseByID(ctx, id, update)
+}
+
+func (s *Service) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
+	return s.repo.DeleteCourseByID(ctx, id)
 }

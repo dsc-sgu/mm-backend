@@ -167,20 +167,22 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
-	blockService := blocks.NewService(pgRepo)
+	// Initialize services (the order is important)
+	lockService := locks.NewService(pgRepo, config.CourseLockTTLSeconds)
 	snapshotService := snapshots.NewService(pgRepo)
-	lockService := locks.NewService(pgRepo)
-	courseService := courses.NewService(pgRepo, snapshotService, lockService, pgRepo)
-	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
+	disciplineService := disciplines.NewService(pgRepo)
 	gitService := git.NewService(pgRepo)
 	taskService := tasks.NewService(pgRepo, gitService)
 	attemptService := attempt.NewService(gitService, pgRepo)
 
 	attemptHandler := attempt.NewHandler(attemptService, taskService)
 	taskHandler := tasks.NewHandler(taskService, blockService)
+	blockService := blocks.NewService(pgRepo, snapshotService, lockService, config.LexoRankThreshold)
+	courseService := courses.NewService(pgRepo, snapshotService, lockService, pgRepo)
+
 	userHandler := users.NewHandler(userService)
-	blockHandler := blocks.NewHandler(blockService, pgRepo, lockService)
+	blockHandler := blocks.NewHandler(blockService)
 	courseHandler := courses.NewHandler(courseService, blockService, lockService, snapshotService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
 	gitHandler := git.NewHandler(gitService)

@@ -65,11 +65,34 @@ type SnapshotMetadataResponse struct {
 	CreatedAt time.Time        `json:"createdAt"`
 }
 
+func handleServiceError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrPermissionDenied):
+		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, ErrCourseNotFound), errors.Is(err, ErrInviteNotFound):
+		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, locks.ErrLockHeldByAnother),
+		errors.Is(err, locks.ErrLockNotFound),
+		errors.Is(err, locks.ErrLockExpired):
+		return huma.Error423Locked(err.Error())
+	case errors.Is(err, ErrSnapshotConflict), errors.Is(err, ErrAlreadyMember):
+		return huma.Error409Conflict(err.Error())
+	case errors.Is(err, ErrInvalidTarget):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, ErrInviteRevoked), errors.Is(err, ErrInviteExpired):
+		return huma.Error410Gone(err.Error())
+	}
+	return huma.Error500InternalServerError(err.Error())
+}
+
 func (h *Handler) checkCourseMember(
 	ctx context.Context,
 	userID, courseID uuid.UUID,
 ) (*CourseMember, error) {
-	member, err := h.courseService.repo.GetCourseMember(ctx, userID, courseID)
+	member, err := h.courseService.GetCourseMember(ctx, userID, courseID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError(
 			"failed to check course membership",
@@ -102,7 +125,7 @@ func (h *Handler) CreateCourse(
 
 	course, err := h.courseService.CreateCourse(ctx, &input.Body, userID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 
 	return &CreateCourseOutput{Body: &CourseIDResponse{ID: course.ID}}, nil
@@ -133,13 +156,13 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
-	courseList, err := h.courseService.repo.GetPaginatedCourses(
+	courseList, err := h.courseService.GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
 	)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 
 	return &GetPaginatedCoursesOutput{Body: courseList}, nil
@@ -157,9 +180,9 @@ func (h *Handler) GetCourse(
 	ctx context.Context,
 	input *GetCourseInput,
 ) (*GetCourseOutput, error) {
-	course, err := h.courseService.repo.GetCourseByID(ctx, input.CourseID)
+	course, err := h.courseService.GetCourseByID(ctx, input.CourseID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 	if course == nil {
 		return nil, huma.Error404NotFound("")
@@ -190,9 +213,9 @@ func (h *Handler) GetCourseContent(
 		return nil, err
 	}
 
-	course, err := h.courseService.repo.GetCourseByID(ctx, input.CourseID)
+	course, err := h.courseService.GetCourseByID(ctx, input.CourseID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to fetch course")
+		return nil, handleServiceError(err)
 	}
 	if course == nil {
 		return nil, huma.Error404NotFound("course not found")
@@ -244,7 +267,7 @@ func (h *Handler) GetSnapshotBlocks(
 
 	snapshot, err := h.snapshotService.GetSnapshotByID(ctx, input.SnapshotID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("failed to fetch snapshot")
+		return nil, handleServiceError(err)
 	}
 	if snapshot == nil {
 		return nil, huma.Error404NotFound("snapshot not found")
@@ -270,10 +293,9 @@ func (h *Handler) GetSnapshotBlocks(
 		if isValid, err := h.lockService.ValidateLock(
 			ctx,
 			lockSession,
-		); err != nil ||
-			!isValid {
+		); err != nil || !isValid {
 			return nil, huma.Error423Locked(
-				"snapshot is a draft and your editing session is not valid",
+				"snapshot is a draft and user editing session is not valid",
 			)
 		}
 	}
@@ -323,9 +345,7 @@ func (h *Handler) GetCourseSnapshots(
 		input.CourseID,
 	)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(
-			"failed to fetch snapshots timeline",
-		)
+		return nil, handleServiceError(err)
 	}
 
 	result := make([]SnapshotMetadataResponse, len(list))
@@ -370,13 +390,13 @@ func (h *Handler) PatchCourse(
 		)
 	}
 
-	course, err := h.courseService.repo.UpdateCourseByID(
+	course, err := h.courseService.UpdateCourseByID(
 		ctx,
 		input.CourseID,
 		&input.Body,
 	)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 	return &PatchCourseOutput{Body: course}, nil
 }
@@ -404,12 +424,9 @@ func (h *Handler) DeleteCourse(
 		)
 	}
 
-	err = h.courseService.repo.DeleteCourseByID(ctx, input.CourseID)
+	err = h.courseService.DeleteCourseByID(ctx, input.CourseID)
 	if err != nil {
-		if errors.Is(err, ErrCourseNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError("failed to delete course")
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -441,18 +458,7 @@ func (h *Handler) LockCourse(
 
 	result, err := h.courseService.LockAndInitDraft(ctx, lockSession)
 	if err != nil {
-		if errors.Is(err, locks.ErrLockHeldByAnother) {
-			return nil, huma.Error423Locked(
-				"course is currently locked by another user",
-			)
-		}
-		if errors.Is(err, ErrPermissionDenied) {
-			return nil, huma.Error403Forbidden(err.Error())
-		}
-		if errors.Is(err, ErrCourseNotFound) {
-			return nil, huma.Error404NotFound(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &LockCourseOutput{Body: result}, nil
@@ -480,12 +486,7 @@ func (h *Handler) Heartbeat(
 
 	err := h.lockService.RefreshLock(ctx, lockSession)
 	if err != nil {
-		if errors.Is(err, locks.ErrLockNotFound) {
-			return nil, huma.Error423Locked(
-				"lock was lost or expired, re-lock required",
-			)
-		}
-		return nil, huma.Error500InternalServerError("failed to refresh lock")
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -520,15 +521,7 @@ func (h *Handler) SwitchSnapshot(
 		input.Body.TargetSnapshotID,
 	)
 	if err != nil {
-		if errors.Is(err, locks.ErrLockNotFound) {
-			return nil, huma.Error423Locked(
-				"active editing session not found",
-			)
-		}
-		if errors.Is(err, ErrInvalidTarget) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -563,17 +556,7 @@ func (h *Handler) PublishDraft(
 		input.Body.DraftSnapshotID,
 	)
 	if err != nil {
-		if errors.Is(err, ErrSnapshotConflict) {
-			return nil, huma.Error409Conflict(
-				"version conflict: the course was modified by another action",
-			)
-		}
-		if errors.Is(err, locks.ErrLockNotFound) {
-			return nil, huma.Error423Locked(
-				"editing session missing or snapshot mismatch",
-			)
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -601,9 +584,7 @@ func (h *Handler) CancelEdit(
 
 	err := h.courseService.CancelEdit(ctx, lockSession)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(
-			"failed to cancel edit session",
-		)
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -628,7 +609,7 @@ func (h *Handler) CreateInvite(
 
 	invite, err := h.courseService.CreateInvite(ctx, &input.Body, userID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 
 	return &CreateInviteOutput{Body: invite}, nil
@@ -648,7 +629,7 @@ func (h *Handler) GetInviteDetails(
 ) (*GetInviteDetailsOutput, error) {
 	details, err := h.courseService.GetInviteDetails(ctx, input.InviteID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
 	return &GetInviteDetailsOutput{Body: details}, nil
 }
@@ -676,16 +657,7 @@ func (h *Handler) JoinCourseByInvite(
 		userID,
 	)
 	if err != nil {
-		switch err {
-		case ErrInviteNotFound:
-			return nil, huma.Error404NotFound(err.Error())
-		case ErrInviteRevoked, ErrInviteExpired:
-			return nil, huma.Error410Gone("")
-		case ErrAlreadyMember:
-			return nil, huma.Error409Conflict("")
-		default:
-			return nil, huma.Error500InternalServerError("")
-		}
+		return nil, handleServiceError(err)
 	}
 
 	return &JoinCourseByInviteOutput{Body: &CourseIDResponse{ID: courseID}}, nil
@@ -714,9 +686,9 @@ func (h *Handler) GetUserRoleInCourse(
 		input.CourseID,
 	)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, handleServiceError(err)
 	}
-	if courseMember == nil || !courseMember.IsActive {
+	if courseMember == nil {
 		return nil, huma.Error404NotFound("")
 	}
 
