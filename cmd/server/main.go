@@ -30,12 +30,14 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
@@ -166,7 +168,9 @@ func main() {
 	pgRepo := pg.NewPGRepo(dbConn)
 
 	blockService := blocks.NewService(pgRepo)
-	courseService := courses.NewService(pgRepo)
+	snapshotService := snapshots.NewService(pgRepo)
+	lockService := locks.NewService(pgRepo)
+	courseService := courses.NewService(pgRepo, snapshotService, lockService, pgRepo)
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
@@ -176,8 +180,8 @@ func main() {
 	attemptHandler := attempt.NewHandler(attemptService, taskService)
 	taskHandler := tasks.NewHandler(taskService, blockService)
 	userHandler := users.NewHandler(userService)
-	blockHandler := blocks.NewHandler(blockService)
-	courseHandler := courses.NewHandler(courseService, blockService)
+	blockHandler := blocks.NewHandler(blockService, pgRepo, lockService)
+	courseHandler := courses.NewHandler(courseService, blockService, lockService, snapshotService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
 	gitHandler := git.NewHandler(gitService)
 
