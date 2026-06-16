@@ -7,9 +7,11 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 type PGRepo struct {
@@ -29,4 +31,6 @@ var (
 	_ git.DBRepo       = (*PGRepo)(nil)
 	_ tasks.Repo       = (*PGRepo)(nil)
 	_ attempt.Repo     = (*PGRepo)(nil)
+	_ snapshots.Repo   = (*PGRepo)(nil)
+	_ locks.Repo       = (*PGRepo)(nil)
 )
