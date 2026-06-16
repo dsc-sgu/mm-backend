@@ -33,6 +33,10 @@ type Repo interface {
 		snapshot *Snapshot,
 	) (*Snapshot, error)
 	GetSnapshotByID(ctx context.Context, id uuid.UUID) (*Snapshot, error)
+	GetPublishedSnapshotsByCourseID(
+		ctx context.Context,
+		courseID uuid.UUID,
+	) ([]*Snapshot, error)
 	FindUserDraft(
 		ctx context.Context,
 		courseID, userID uuid.UUID,
