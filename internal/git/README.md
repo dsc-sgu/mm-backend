@@ -15,31 +15,31 @@ sequenceDiagram
     participant Git as system git
     participant DB as PostgreSQL
 
-    C->>SSH: git push -o "submit" ssh://host:2222/course/task
+    C->>SSH: `git push -o "submit" ssh://host:2222/course_name/task_name`
     SSH->>MW: authenticated session
-    MW->>MW: repoRename(course/task → hash.git)
-    MW->>DB: lookup course/task → IDs
-    DB-->>MW: course_id, task_id
-    MW->>MW: AuthRepo(repo, publicKey)
-    MW->>DB: fingerprint → owner_id, access
+    MW->>DB: looks for course and task IDs
+    DB-->>MW: return course and task IDs
+    MW->>MW: RepoRename makes repo name from course ID, task ID and fingerprint
+    MW->>MW: AuthRepo checks acces via fingerprint
+    MW->>DB: gives fingerprint     
     DB-->>MW: access level
-    alt ReadWrite or Admin
-        MW->>Git: git receive-pack (advertisePushOptions=true)
-        Git->>Git: post-receive hook → push-options file
-        Git-->>MW: packfile exchange done
-        MW->>Svc: Push callback
-        Svc->>Svc: read push-options file
-        alt "submit" in options
-            Svc->>Svc: open bare repo via go-git
-            Svc->>Svc: read HEAD commit hash
-            Svc->>DB: INSERT attempt + attempt_transitions
+    alt ReadWrite or Admin access
+        MW->>Git: user uses `git push` that transforms to `git-receive-pack`    
+        Git->>Git: post-receive git hook writes push-options to file
+        Git-->>MW: git packfile exchange done
+        MW->>Svc: Push hook triggers
+        Svc->>Svc: Push hook read push-options file
+        alt "submit" appears in push-options
+            Svc->>Svc: opens bare repo via go-git
+            Svc->>Svc: reads HEAD commit hash
+            Svc->>DB: registers attempt
             DB-->>Svc: saved
             Svc-->>MW: attempt created
         else no "submit"
             Svc-->>MW: no attempt
         end
     else NoAccess
-        MW-->>C: Fatal: ErrNotAuthed
+        MW-->>C: Fatal error
     end
 ```
 
@@ -56,17 +56,16 @@ sequenceDiagram
 
     C->>SSH: git clone/fetch ssh://host:2222/course/task
     SSH->>MW: authenticated session
-    MW->>MW: repoRename(course/task → hash.git)
-    MW->>DB: lookup course/task → IDs
-    DB-->>MW: course_id, task_id
-    MW->>MW: AuthRepo(repo, publicKey)
-    MW->>DB: fingerprint → owner_id, access
+    MW->>DB: looks for course and task IDs
+    DB-->>MW: return course and task IDs
+    MW->>MW: RepoRename makes repo name from course ID, task ID and fingerprint
+    MW->>MW: AuthRepo checks acces via fingerprint
+    MW->>DB: gives fingerprint     
     DB-->>MW: access level
     alt ReadOnly or ReadWrite or Admin
-        MW->>Git: git upload-pack / git-upload-archive
-        Git-->>MW: packfile exchange done
-        MW->>Svc: Fetch callback
-        Svc-->>DB: log fetch event
+        MW->>Git: user uses `git clone` that transforms to `git-upload-pack`        
+        Git-->>MW: git packfile exchange done
+        MW->>Svc: Fetch hook triggers (just logging)
     else NoAccess
         MW-->>C: Fatal: ErrNotAuthed
     end
