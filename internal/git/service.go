@@ -46,8 +46,6 @@ func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error
 		return "", err
 	}
 
-	println(repoID.IntoPath())
-
 	repoPath := fmt.Sprintf("%s.git", repoID.IntoPath())
 
 	return repoPath, nil
@@ -232,8 +230,6 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	if strings.HasSuffix(last, suffix) {
 		pathList[l-1] = last[:len(last)-len(suffix)]
 	}
-
-	fmt.Println(pathList, len(pathList))
 
 	var courseID uuid.UUID
 	var taskID uuid.UUID
