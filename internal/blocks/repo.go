@@ -70,8 +70,7 @@ type Repo interface {
 	UpdateBlockContent(
 		ctx context.Context,
 		id uuid.UUID,
-		blockType string,
-		data []byte,
+		model *UpdateBlock,
 	) (*Block, error)
 	UpdateBlockPosition(
 		ctx context.Context,
