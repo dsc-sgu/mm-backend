@@ -8,19 +8,14 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 var (
-	ErrUnauthorized     = errors.New("unauthorized")
 	ErrSnapshotNotFound = errors.New("snapshot not found")
 	ErrSnapshotNotDraft = errors.New(
 		"cannot modify blocks in a non-draft snapshot",
-	)
-	ErrInvalidSession = errors.New(
-		"user editing session is invalid or expired",
 	)
 )
 
@@ -48,15 +43,8 @@ func NewService(
 // validateLock checks if the user has a valid lock on the course
 func (s *Service) validateLock(
 	ctx context.Context,
-	snapshotID uuid.UUID,
+	snapshotID, userID, sessionID uuid.UUID,
 ) error {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return ErrUnauthorized
-	}
-
-	// Get the target snapshot for CourseID
 	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
 	if err != nil {
 		return err
@@ -64,7 +52,6 @@ func (s *Service) validateLock(
 	if snapshot == nil {
 		return ErrSnapshotNotFound
 	}
-
 	if snapshot.Status != snapshots.DraftStatus {
 		return ErrSnapshotNotDraft
 	}
@@ -75,12 +62,8 @@ func (s *Service) validateLock(
 		SessionID: sessionID,
 	}
 
-	isValid, err := s.locksService.ValidateLock(ctx, lockSession)
-	if err != nil {
-		return fmt.Errorf("failed to verify lock status: %w", err)
-	}
-	if !isValid {
-		return ErrInvalidSession
+	if err := s.locksService.ValidateLock(ctx, lockSession); err != nil {
+		return err
 	}
 
 	return nil
@@ -90,8 +73,14 @@ func (s *Service) validateLock(
 func (s *Service) CreateBlock(
 	ctx context.Context,
 	model *CreateBlock,
+	userID, sessionID uuid.UUID,
 ) (*Block, error) {
-	if err := s.validateLock(ctx, model.SnapshotID); err != nil {
+	if err := s.validateLock(
+		ctx,
+		model.SnapshotID,
+		userID,
+		sessionID,
+	); err != nil {
 		return nil, err
 	}
 
@@ -125,11 +114,10 @@ func (s *Service) CreateBlock(
 // MoveBlock calculates new block position and updates it in DB
 func (s *Service) MoveBlock(
 	ctx context.Context,
-	blockID uuid.UUID,
-	snapshotID uuid.UUID,
+	blockID, snapshotID, userID, sessionID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) error {
-	if err := s.validateLock(ctx, snapshotID); err != nil {
+	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return err
 	}
 
@@ -159,10 +147,10 @@ func (s *Service) MoveBlock(
 
 func (s *Service) UpdateBlockContent(
 	ctx context.Context,
-	blockID, snapshotID uuid.UUID,
+	blockID, snapshotID, userID, sessionID uuid.UUID,
 	model *UpdateBlock,
 ) (*Block, error) {
-	if err := s.validateLock(ctx, snapshotID); err != nil {
+	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return nil, err
 	}
 	return s.repo.UpdateBlockContent(ctx, blockID, model)
@@ -170,9 +158,9 @@ func (s *Service) UpdateBlockContent(
 
 func (s *Service) DeleteBlockByID(
 	ctx context.Context,
-	blockID, snapshotID uuid.UUID,
+	blockID, snapshotID, userID, sessionID uuid.UUID,
 ) error {
-	if err := s.validateLock(ctx, snapshotID); err != nil {
+	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return err
 	}
 	return s.repo.DeleteBlockByID(ctx, blockID)

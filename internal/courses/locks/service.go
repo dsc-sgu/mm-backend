@@ -33,23 +33,26 @@ var (
 func (s *Service) ValidateLock(
 	ctx context.Context,
 	session *LockSession,
-) (bool, error) {
+) error {
 	currentLock, err := s.repo.GetLock(ctx, session.CourseID)
 	if err != nil {
-		return false, fmt.Errorf("validate lock: %w", err)
+		return fmt.Errorf("validate lock: %w", err)
 	}
 
 	if currentLock == nil {
-		return false, nil
+		return ErrLockNotFound
 	}
 
 	if currentLock.UserID != session.UserID ||
-		currentLock.SessionID != session.SessionID ||
-		time.Now().After(currentLock.ExpiresAt) {
-		return false, nil
+		currentLock.SessionID != session.SessionID {
+		return ErrLockHeldByAnother
 	}
 
-	return true, nil
+	if time.Now().After(currentLock.ExpiresAt) {
+		return ErrLockExpired
+	}
+
+	return nil
 }
 
 func (s *Service) GetLock(
