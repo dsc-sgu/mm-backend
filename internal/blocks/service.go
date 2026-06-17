@@ -17,6 +17,9 @@ var (
 	ErrSnapshotNotDraft = errors.New(
 		"cannot modify blocks in a non-draft snapshot",
 	)
+	ErrInvalidBlockForMoveAfter = errors.New(
+		"block cannot be moved after itself",
+	)
 )
 
 type Service struct {
@@ -119,6 +122,10 @@ func (s *Service) MoveBlock(
 ) error {
 	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return err
+	}
+
+	if afterBlockID != nil && *afterBlockID == blockID {
+		return ErrInvalidBlockForMoveAfter
 	}
 
 	leftPos, rightPos, err := s.repo.GetPositionsForMove(
