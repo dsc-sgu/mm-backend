@@ -17,9 +17,9 @@ sequenceDiagram
 
     C->>SSH: `git push -o "submit" ssh://host:2222/course_name/task_name`
     SSH->>MW: authenticated session
-    MW->>DB: looks for course and task IDs
-    DB-->>MW: return course and task IDs
-    MW->>MW: RepoRename makes repo name from course ID, task ID and fingerprint
+    MW->>DB: looks for course and task group IDs
+    DB-->>MW: return course and task group IDs
+    MW->>MW: RepoRename makes repo name from course ID, task group ID and fingerprint
     MW->>MW: AuthRepo checks acces via fingerprint
     MW->>DB: gives fingerprint     
     DB-->>MW: access level
@@ -56,9 +56,9 @@ sequenceDiagram
 
     C->>SSH: git clone/fetch ssh://host:2222/course/task
     SSH->>MW: authenticated session
-    MW->>DB: looks for course and task IDs
-    DB-->>MW: return course and task IDs
-    MW->>MW: RepoRename makes repo name from course ID, task ID and fingerprint
+    MW->>DB: looks for course and task group IDs
+    DB-->>MW: return course and task group IDs
+    MW->>MW: RepoRename makes repo name from course ID, task group ID and fingerprint
     MW->>MW: AuthRepo checks acces via fingerprint
     MW->>DB: gives fingerprint     
     DB-->>MW: access level
