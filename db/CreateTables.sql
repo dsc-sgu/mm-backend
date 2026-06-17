@@ -42,7 +42,7 @@ CREATE TABLE disciplines (
 -- NOTE(mchernigin): for example "Programming languages (2024)"
 CREATE TABLE courses (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    discipline_id uuid REFERENCES disciplines(id),
+    discipline_id uuid,
     active_snapshot_id uuid, -- REFERENCES course_snapshots(id)
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
