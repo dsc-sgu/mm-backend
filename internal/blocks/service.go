@@ -20,6 +20,7 @@ var (
 	ErrInvalidBlockForMoveAfter = errors.New(
 		"block cannot be moved after itself",
 	)
+	ErrBlockNotFound = errors.New("block not found")
 )
 
 type Service struct {
@@ -94,7 +95,7 @@ func (s *Service) CreateBlock(
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"service create block: resolve positions: %w",
+			"create block: resolve positions: %w",
 			err,
 		)
 	}
@@ -128,20 +129,28 @@ func (s *Service) MoveBlock(
 		return ErrInvalidBlockForMoveAfter
 	}
 
+	block, err := s.repo.GetBlockByID(ctx, blockID)
+	if err != nil {
+		return fmt.Errorf("move block: get block: %w", err)
+	}
+	if block == nil || block.SnapshotID != snapshotID {
+		return ErrBlockNotFound
+	}
+
 	leftPos, rightPos, err := s.repo.GetPositionsForMove(
 		ctx,
 		snapshotID,
 		afterBlockID,
 	)
 	if err != nil {
-		return fmt.Errorf("service move block: get positions: %w", err)
+		return fmt.Errorf("move block: get positions: %w", err)
 	}
 
 	newPosition := CalculateMiddlePosition(leftPos, rightPos)
 
 	err = s.repo.UpdateBlockPosition(ctx, blockID, newPosition)
 	if err != nil {
-		return fmt.Errorf("service move block: save position: %w", err)
+		return fmt.Errorf("move block: save position: %w", err)
 	}
 
 	// Check if rebalance is needed
@@ -160,6 +169,15 @@ func (s *Service) UpdateBlockContent(
 	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return nil, err
 	}
+
+	block, err := s.repo.GetBlockByID(ctx, blockID)
+	if err != nil {
+		return nil, fmt.Errorf("move block: get block: %w", err)
+	}
+	if block == nil || block.SnapshotID != snapshotID {
+		return nil, ErrBlockNotFound
+	}
+
 	return s.repo.UpdateBlockContent(ctx, blockID, model)
 }
 
@@ -170,6 +188,15 @@ func (s *Service) DeleteBlockByID(
 	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
 		return err
 	}
+
+	block, err := s.repo.GetBlockByID(ctx, blockID)
+	if err != nil {
+		return fmt.Errorf("move block: get block: %w", err)
+	}
+	if block == nil || block.SnapshotID != snapshotID {
+		return ErrBlockNotFound
+	}
+
 	return s.repo.DeleteBlockByID(ctx, blockID)
 }
 

@@ -81,15 +81,15 @@ type Invite struct {
 	ProvidedRole CourseMemberRole `json:"providedRole" db:"provided_role"`
 	CreatedBy    uuid.UUID        `json:"createdBy"    db:"created_by"`
 	CreatedAt    time.Time        `json:"createdAt"    db:"created_at"`
-	ExpiresAt    time.Time        `json:"expiresAt"    db:"expires_at"`
+	ExpiresAt    *time.Time       `json:"expiresAt"    db:"expires_at"`
 	IsRevoked    bool             `json:"isRevoked"    db:"is_revoked"`
 }
 
 // CreateInvite is the input for creating an invite, used by both the service and repository layers.
 type CreateInvite struct {
-	CourseID     uuid.UUID        `json:"courseID"     binding:"required"`
-	ProvidedRole CourseMemberRole `json:"providedRole" binding:"required"`
-	ExpiresAt    time.Time        `json:"expiresAt"    binding:"required"`
+	CourseID     uuid.UUID        `json:"courseID"            binding:"required"`
+	ProvidedRole CourseMemberRole `json:"providedRole"        binding:"required"`
+	ExpiresAt    *time.Time       `json:"expiresAt,omitempty" binding:"required"`
 }
 
 // InviteDetails is built by the service layer and returned to the handler.
@@ -100,7 +100,7 @@ type InviteDetails struct {
 	ProvidedRole CourseMemberRole `json:"providedRole"`
 	CreatedBy    uuid.UUID        `json:"createdBy"`
 	CreatedAt    time.Time        `json:"createdAt"`
-	ExpiresAt    time.Time        `json:"expiresAt"`
+	ExpiresAt    *time.Time       `json:"expiresAt"`
 	IsRevoked    bool             `json:"isRevoked"`
 }
 

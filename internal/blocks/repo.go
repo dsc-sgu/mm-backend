@@ -42,8 +42,8 @@ type CreateBlock struct {
 
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
 type UpdateBlock struct {
-	BlockType string          `json:"blockType" db:"block_type"`
-	Data      json.RawMessage `json:"data"      db:"data"       swaggertype:"object"`
+	BlockType string          `json:"blockType,omitempty" db:"block_type"`
+	Data      json.RawMessage `json:"data,omitempty"      db:"data"       swaggertype:"object"`
 }
 
 // MoveBlock is the input for moving a block.

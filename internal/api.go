@@ -109,12 +109,6 @@ func setupBlockRoutes(api huma.API, bh *blocks.Handler) {
 
 func setupCourseRoutes(api huma.API, ch *courses.Handler) {
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/snapshots/{snapshot_id}/blocks",
-		Summary: "Get all blocks in a specific snapshot", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course"},
-	}, ch.GetSnapshotBlocks)
-
-	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses",
 		Summary: "Create new course", DefaultStatus: http.StatusCreated,
 		Tags: []string{"Course"},
@@ -133,39 +127,45 @@ func setupCourseRoutes(api huma.API, ch *courses.Handler) {
 	}, ch.GetCourseContent)
 
 	huma.Register(api, huma.Operation{
+		Method: http.MethodGet, Path: "/snapshots/{snapshot_id}/blocks",
+		Summary: "Get all blocks in a specific snapshot", DefaultStatus: http.StatusOK,
+		Tags: []string{"Course editing"},
+	}, ch.GetSnapshotBlocks)
+
+	huma.Register(api, huma.Operation{
 		Method: http.MethodGet, Path: "/courses/{course_id}/snapshots",
 		Summary: "Get course snapshots timeline", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.GetCourseSnapshots)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/lock",
 		Summary: "Acquire course editing lock and init draft", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.LockCourse)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/heartbeat",
 		Summary: "Refresh course editing lock", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.Heartbeat)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/switch_snapshot",
 		Summary: "Switch current draft content to target snapshot content", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.SwitchSnapshot)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/publish",
 		Summary: "Publish draft snapshot to course", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.PublishDraft)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/cancel_edit",
 		Summary: "Cancel course editing session", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course"},
+		Tags: []string{"Course editing"},
 	}, ch.CancelEdit)
 
 	huma.Register(api, huma.Operation{

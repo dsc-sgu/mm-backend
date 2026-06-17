@@ -203,7 +203,7 @@ func (s *Service) JoinCourseByInvite(
 	if invite.IsRevoked {
 		return uuid.Nil, ErrInviteRevoked
 	}
-	if time.Now().After(invite.ExpiresAt) {
+	if invite.ExpiresAt != nil && time.Now().After(*invite.ExpiresAt) {
 		return uuid.Nil, ErrInviteExpired
 	}
 
