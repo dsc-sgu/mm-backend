@@ -74,7 +74,7 @@ const (
 
 	updateCourseByIdSQL = `
 		UPDATE courses
-		SET owner_id = $1, display_name = $2
+		SET owner_id = COALESCE($1, owner_id), display_name = COALESCE($2, display_name)
 		WHERE id = $3 AND deleted_at IS NULL
 		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 	`

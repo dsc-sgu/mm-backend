@@ -14,8 +14,8 @@ import (
 
 const (
 	createBlockSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
-		VALUES (:snapshot_id, :block_type, :data, :position, NOW())
+		INSERT INTO blocks (snapshot_id, block_type, data, position)
+		VALUES (:snapshot_id, :block_type, :data, :position)
 		RETURNING id
 	`
 
@@ -34,7 +34,7 @@ const (
 
 	updateBlockContentSQL = `
 		UPDATE blocks
-		SET block_type = $1, data = $2
+		SET block_type = COALESCE($1, block_type), data = COALESCE($2, data)
 		WHERE id = $3 AND deleted_at IS NULL
 		RETURNING id, snapshot_id, block_type, data, position
 	`
@@ -82,8 +82,8 @@ const (
 	`
 
 	copyBlocksToSnapshotSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position, created_at)
-		SELECT $1, block_type, data, position, NOW()
+		INSERT INTO blocks (snapshot_id, block_type, data, position)
+		SELECT $1, block_type, data, position
 		FROM blocks
 		WHERE snapshot_id = $2 AND deleted_at IS NULL
 	`
@@ -177,7 +177,7 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 	return blockList, nil
 }
 
-// Returns prev and next block positions to calculate new position between them
+// GetPositionsForMove returns prev and next block positions to calculate new position between them
 func (r *PGRepo) GetPositionsForMove(
 	ctx context.Context,
 	snapshotID uuid.UUID,

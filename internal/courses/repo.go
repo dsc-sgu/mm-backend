@@ -17,34 +17,29 @@ const (
 
 // Course is the database representation of a course.
 type Course struct {
-	ID               uuid.UUID `json:"id"               db:"id"                 binding:"required"`
-	DisciplineID     uuid.UUID `json:"disciplineID"     db:"discipline_id"`
-	ActiveSnapshotID uuid.UUID `json:"activeSnapshotID" db:"active_snapshot_id"`
-	OwnerID          uuid.UUID `json:"ownerID"          db:"owner_id"           binding:"required"`
-	Name             string    `json:"name"             db:"name"               binding:"required"`
-	DisplayName      string    `json:"displayName"      db:"display_name"       binding:"required"`
-	Version          int       `json:"version"          db:"version"            binding:"required"`
-	CreatedAt        time.Time `json:"createdAt"        db:"created_at"         binding:"required"`
-	DeletedAt        time.Time `json:"deletedAt"        db:"deleted_at"`
+	ID               uuid.UUID  `json:"id"                         db:"id"                 binding:"required"`
+	DisciplineID     uuid.UUID  `json:"disciplineID,omitempty"     db:"discipline_id"`
+	ActiveSnapshotID *uuid.UUID `json:"activeSnapshotID,omitempty" db:"active_snapshot_id"`
+	OwnerID          uuid.UUID  `json:"ownerID"                    db:"owner_id"           binding:"required"`
+	Name             string     `json:"name"                       db:"name"               binding:"required"`
+	DisplayName      string     `json:"displayName"                db:"display_name"       binding:"required"`
+	Version          int        `json:"version"                    db:"version"            binding:"required"`
+	CreatedAt        time.Time  `json:"createdAt"                  db:"created_at"         binding:"required"`
+	DeletedAt        *time.Time `json:"deletedAt,omitempty"        db:"deleted_at"`
 }
 
 // CreateCourse is the input for creating a course, used by both the service and repository layers.
 type CreateCourse struct {
-	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
-	Name         string    `json:"name"         db:"name"          binding:"required"`
-	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
+	DisciplineID uuid.UUID `json:"disciplineID,omitempty" db:"discipline_id"`
+	Name         string    `json:"name"                   db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"            db:"display_name"  binding:"required"`
 }
 
 // UpdateCourse is the input for updating a course, used by both the service and repository layers.
 type UpdateCourse struct {
-	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"`
-	Name        string    `json:"name"        db:"name"`
-	DisplayName string    `json:"displayName" db:"display_name" binding:"required"`
-}
-
-type CoursePagination struct {
-	Limit  int       `query:"limit"`
-	LastID uuid.UUID `query:"last_id"`
+	OwnerID     uuid.UUID `json:"ownerID,omitempty" db:"owner_id"`
+	Name        string    `json:"name,omitempty"    db:"name"`
+	DisplayName string    `json:"displayName"       db:"display_name" binding:"required"`
 }
 
 type PublishSnapshot struct {
