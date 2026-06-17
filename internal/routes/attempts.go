@@ -86,6 +86,19 @@ func (c *AttemptController) PushAttempt(ctx fuego.ContextNoBody) (string, error)
 
 	participantID := session.UserIDFromContext(ctx.Context())
 
+	// Sequential check: task N requires a submitted attempt on task N-1
+	if taskPosition > 1 {
+		ok, err := c.taskService.HasSubmittedAttempt(ctx.Context(), participantID, taskGroupID, taskPosition-1)
+		if err != nil {
+			return "", fuego.InternalServerError{Detail: err.Error()}
+		}
+		if !ok {
+			return "", fuego.BadRequestError{
+				Detail: fmt.Sprintf("task %d not completed yet. complete task %d first.", taskPosition-1, taskPosition-1),
+			}
+		}
+	}
+
 	// Resolve task ID from taskGroupID + taskPosition
 	task, err := c.taskService.GetTaskByPosition(ctx.Context(), taskGroupID, taskPosition)
 	if err != nil {
