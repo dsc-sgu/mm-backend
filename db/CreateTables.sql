@@ -97,7 +97,7 @@ CREATE TABLE invites (
     provided_role course_member_role NOT NULL,
     created_by uuid NOT NULL REFERENCES users(id),
     created_at timestamp NOT NULL,
-    expires_at timestamp NOT NULL,
+    expires_at timestamp,
     is_revoked boolean NOT NULL
 );
 
