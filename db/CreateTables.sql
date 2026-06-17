@@ -77,7 +77,8 @@ CREATE TABLE blocks (
     snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
-    position varchar(64) NOT NULL,
+    -- NOTE(Ezhkin-Kot): fractional indexing
+    position varchar(64) NOT NULL COLLATE "C",
     deleted_at timestamp
 
     -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
