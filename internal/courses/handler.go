@@ -222,6 +222,7 @@ func (h *Handler) GetCourseContent(
 			ID:               course.ID,
 			DisciplineID:     course.DisciplineID,
 			ActiveSnapshotID: course.ActiveSnapshotID,
+			OwnerID:          course.OwnerID,
 			Name:             course.Name,
 			CreatedAt:        course.CreatedAt,
 			Blocks:           linkedBlocks,
