@@ -3,11 +3,13 @@ package pg
 import (
 	"github.com/jmoiron/sqlx"
 
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type PGRepo struct {
@@ -25,4 +27,6 @@ var (
 	_ courses.Repo     = (*PGRepo)(nil)
 	_ disciplines.Repo = (*PGRepo)(nil)
 	_ git.DBRepo       = (*PGRepo)(nil)
+	_ tasks.Repo       = (*PGRepo)(nil)
+	_ attempt.Repo     = (*PGRepo)(nil)
 )

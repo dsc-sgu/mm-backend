@@ -3,8 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
--- NOTE(nrydanov): Need to think of other types together
-CREATE TYPE block_type AS ENUM ('task', 'text');
+CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task_group');
 
 CREATE TABLE unit_types (
     id uuid PRIMARY KEY,
@@ -154,19 +153,29 @@ CREATE TABLE course_users_groups (
     PRIMARY KEY (user_id, course_id, group_id)
 );
 
-CREATE TABLE tasks (
+CREATE TABLE task_groups (
     block_id uuid PRIMARY KEY REFERENCES blocks(id),
-    available_at timestamp,
-    deadline_at timestamp,
+    name varchar(128) NOT NULL
+);
+
+CREATE TABLE tasks (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    task_group_id uuid NOT NULL REFERENCES task_groups(block_id),
+    position integer NOT NULL,
+    data jsonb NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
     max_attempts integer NOT NULL,
-    lead_time time
+    available_at timestamp,
+    deadline_at timestamp,
+    lead_time time,
+
+    UNIQUE (task_group_id, position)
 );
 
 CREATE TABLE attempts (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
-    task_id uuid NOT NULL REFERENCES tasks(block_id)
+    task_id uuid NOT NULL REFERENCES tasks(id)
 );
 
 CREATE TABLE attempt_transitions (

@@ -12,7 +12,7 @@ type Repo interface {
 
 type RepoManager interface {
 	GetDiff(id1 uuid.UUID, id2 uuid.UUID) ([]string, error)
-	PushAttempt(repoID git.RepoID, files []git.FileInfo) (string, error)
+	PushAttempt(repoID git.RepoID, taskID uuid.UUID, files []git.FileInfo) (string, error)
 }
 
 type FileDescriptor = string

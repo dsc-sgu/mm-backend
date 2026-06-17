@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,16 +29,21 @@ type DeleteSSHKey struct {
 
 type RepoID struct {
 	CourseID      uuid.UUID `json:"courseID"      binding:"required"`
-	TaskID        uuid.UUID `json:"taskID"        binding:"required"`
+	TaskGroupID   uuid.UUID `json:"taskGroupID"   binding:"required"`
 	ParticipantID uuid.UUID `json:"participantID" binding:"required"`
 }
 
 func (repoID *RepoID) IntoPath() string {
 	hasher := sha1.New()
-	// NOTE: error shouldn't happen
 	data, _ := json.Marshal(repoID)
-
 	hasher.Write(data)
+	hashSum := hasher.Sum(nil)
+	return hex.EncodeToString(hashSum)
+}
+
+func TemplatePath(taskGroupID uuid.UUID) string {
+	hasher := sha1.New()
+	_, _ = fmt.Fprint(hasher, "template:", taskGroupID.String())
 	hashSum := hasher.Sum(nil)
 	return hex.EncodeToString(hashSum)
 }
@@ -53,7 +59,9 @@ type FileInfo struct {
 }
 
 type AttemptCommitInfo struct {
-	UserID     uuid.UUID
-	TaskID     uuid.UUID
-	CommitHash string
+	UserID      uuid.UUID
+	TaskID      uuid.UUID
+	CommitHash  string
+	CourseID    uuid.UUID
+	TaskGroupID uuid.UUID
 }

@@ -21,7 +21,7 @@ func SetupRoutes(
 	blockController *routes.BlockController,
 	courseController *routes.CourseController,
 	disciplineController *routes.DisciplineController,
-	taskController *routes.TaskController,
+	taskGroupController *routes.TaskGroupController,
 	userController *routes.UserController,
 	gitController *routes.GitController,
 	sessionRepo session.Repo,
@@ -72,7 +72,8 @@ func SetupRoutes(
 		attemptController.PushAttempt,
 		option.Summary("Push attempt via zip upload"),
 		option.Query("courseID", "Course ID"),
-		option.Query("taskID", "Task ID"),
+		option.Query("taskGroupID", "Task Group ID"),
+		option.QueryInt("taskPosition", "Position of the task within the group"),
 		option.RequestContentType("application/octet-stream"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
@@ -126,38 +127,79 @@ func SetupRoutes(
 	taskGroup := fuego.Group(
 		privateGroup,
 		"/tasks",
-		option.Summary("Task API"),
+		option.Summary("Task Group API"),
 	)
 
 	fuego.Get(
 		taskGroup,
 		"/{block_id}",
-		taskController.GetTask,
-		option.Summary("Get task by block id"),
+		taskGroupController.GetTaskGroup,
+		option.Summary("Get task group with its tasks"),
 		option.DefaultStatusCode(http.StatusOK),
 	)
 
 	fuego.Post(
 		taskGroup,
-		"/{course_id}/tasks",
-		taskController.CreateTask,
-		option.Summary("Create new task on course"),
+		"",
+		taskGroupController.CreateTaskGroup,
+		option.Summary("Create new task group on course"),
 		option.DefaultStatusCode(http.StatusCreated),
 	)
 
 	fuego.Patch(
 		taskGroup,
 		"/{block_id}",
-		taskController.PatchTask,
-		option.Summary("Update existing task"),
+		taskGroupController.PatchTaskGroup,
+		option.Summary("Update existing task group"),
 		option.DefaultStatusCode(http.StatusOK),
 	)
 
 	fuego.Delete(
 		taskGroup,
 		"/{block_id}",
-		taskController.DeleteTask,
-		option.Summary("Delete task"),
+		taskGroupController.DeleteTaskGroup,
+		option.Summary("Delete task group"),
+		option.DefaultStatusCode(http.StatusNoContent),
+	)
+
+	fuego.Post(
+		taskGroup,
+		"/{block_id}/template",
+		taskGroupController.UploadTemplate,
+		option.Summary("Upload template zip for task group"),
+		option.RequestContentType("application/octet-stream"),
+		option.DefaultStatusCode(http.StatusAccepted),
+	)
+
+	fuego.Get(
+		taskGroup,
+		"/{block_id}/tasks",
+		taskGroupController.GetTasks,
+		option.Summary("Get all tasks in a group"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Post(
+		taskGroup,
+		"/{block_id}/tasks",
+		taskGroupController.CreateTask,
+		option.Summary("Create a new task within a group"),
+		option.DefaultStatusCode(http.StatusCreated),
+	)
+
+	fuego.Patch(
+		taskGroup,
+		"/{block_id}/tasks/{task_id}",
+		taskGroupController.PatchTask,
+		option.Summary("Update a task within a group"),
+		option.DefaultStatusCode(http.StatusOK),
+	)
+
+	fuego.Delete(
+		taskGroup,
+		"/{block_id}/tasks/{task_id}",
+		taskGroupController.DeleteTask,
+		option.Summary("Delete a task from a group"),
 		option.DefaultStatusCode(http.StatusNoContent),
 	)
 
