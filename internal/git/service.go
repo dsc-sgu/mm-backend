@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,7 +48,18 @@ func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error
 		return "", err
 	}
 
-	repoPath := fmt.Sprintf("%s.git", repoID.IntoPath())
+	repoName := repoID.IntoPath()
+	repoPath := repoName + ".git"
+	fullPath := filepath.Join(repoDir, repoPath)
+
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		if err := s.initRepoWithTemplate(repoID); err != nil {
+			zap.L().Error("RepoRename: init from template", zap.Error(err))
+			if err := s.InitRepo(repoID); err != nil {
+				return "", err
+			}
+		}
+	}
 
 	return repoPath, nil
 }
@@ -86,22 +99,17 @@ func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
 		return nil, fmt.Errorf("get diff: %w", err)
 	}
 
-	if info1.UserID != info2.UserID || info1.TaskID != info2.TaskID {
-		return nil, errors.New("attempts belong to different repos")
-	}
-
-	courseID, err := s.db.GetCourseIDByTask(info1.TaskID)
-	if err != nil {
-		return nil, fmt.Errorf("get diff: %w", err)
+	if info1.UserID != info2.UserID {
+		return nil, errors.New("attempts belong to different users")
 	}
 
 	repoID := RepoID{
-		CourseID:      courseID,
-		TaskID:        info1.TaskID,
+		CourseID:      info1.CourseID,
+		TaskGroupID:   info1.TaskGroupID,
 		ParticipantID: info1.UserID,
 	}
 
-	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoID.IntoPath())
+	repoPath := filepath.Join(repoDir, repoID.IntoPath()+".git")
 
 	repo, err := gogit.PlainOpen(repoPath)
 	if err != nil {
@@ -130,7 +138,7 @@ func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
 
 func (s *Service) InitRepo(repoID RepoID) error {
 	repoName := repoID.IntoPath()
-	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+	repoPath := filepath.Join(repoDir, repoName+".git")
 	_, err := gogit.PlainInit(repoPath, true)
 	if err != nil {
 		return fmt.Errorf("init repo: %w", err)
@@ -141,7 +149,7 @@ func (s *Service) InitRepo(repoID RepoID) error {
 
 func (s *Service) RemoveRepo(repoID RepoID) error {
 	repoName := repoID.IntoPath()
-	repoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+	repoPath := filepath.Join(repoDir, repoName+".git")
 	err := os.RemoveAll(repoPath)
 	if err != nil {
 		return fmt.Errorf("remove repo: %w", err)
@@ -180,12 +188,42 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 
 	optionsData, err := os.ReadFile(optionsPath)
 	if err != nil {
+		zap.L().Debug("Push: no options file", zap.Error(err))
 		return
 	}
 	defer os.Remove(optionsPath)
 
 	options := strings.Split(strings.TrimSpace(string(optionsData)), "\n")
-	if !hasAttemptConfirm(options) {
+	if !hasSubmit(options) {
+		return
+	}
+
+	pos := parseTaskPosition(options)
+	if pos == 0 {
+		count, err := s.db.GetTaskCount(context.Background(), repoID.TaskGroupID)
+		if err != nil || count != 1 {
+			zap.L().Warn("Push: cannot determine task position", zap.Error(err))
+			return
+		}
+		pos = 1
+	}
+
+	if pos > 1 {
+		ok, err := s.db.HasSubmittedAttempt(context.Background(), repoID.ParticipantID, repoID.TaskGroupID, pos-1)
+		if err != nil {
+			zap.L().Error("Push: sequential check", zap.Error(err))
+			return
+		}
+		if !ok {
+			zap.L().Warn("Push rejected: previous task not completed",
+				zap.Int("position", pos))
+			return
+		}
+	}
+
+	taskID, err := s.db.GetTaskIDByPosition(context.Background(), repoID.TaskGroupID, pos)
+	if err != nil {
+		zap.L().Error("Push: get task by position", zap.Error(err))
 		return
 	}
 
@@ -201,13 +239,25 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		return
 	}
 
-	if err := s.db.SaveAttempt(repoID, head.Hash().String()); err != nil {
+	if err := s.db.SaveAttempt(repoID, taskID, head.Hash().String()); err != nil {
 		zap.L().Error("Push: save attempt", zap.Error(err))
 	}
 }
 
-func hasAttemptConfirm(options []string) bool {
+func hasSubmit(options []string) bool {
 	return slices.Contains(options, "submit")
+}
+
+func parseTaskPosition(options []string) int {
+	for _, opt := range options {
+		if strings.HasPrefix(opt, "task=") {
+			pos, err := strconv.Atoi(strings.TrimPrefix(opt, "task="))
+			if err == nil && pos > 0 {
+				return pos
+			}
+		}
+	}
+	return 0
 }
 
 func (s *Service) Fetch(repo string, pk ssh.PublicKey) {
@@ -231,20 +281,18 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 		pathList[l-1] = last[:len(last)-len(suffix)]
 	}
 
-	var courseID uuid.UUID
-	var taskID uuid.UUID
-	if len(pathList) == 1 {
-		return RepoID{}, fmt.Errorf("course-wide tasks are not implemented")
-	} else if len(pathList) == 2 {
-		var err error
-		courseID, err = s.db.GetCourse(pathList[0])
-		if err != nil {
-			return RepoID{}, err
-		}
-		taskID, err = s.db.GetTask(pathList[1])
-		if err != nil {
-			return RepoID{}, err
-		}
+	if len(pathList) < 2 {
+		return RepoID{}, fmt.Errorf("invalid path: need course/group_name")
+	}
+
+	courseID, err := s.db.GetCourse(pathList[0])
+	if err != nil {
+		return RepoID{}, err
+	}
+
+	taskGroupID, err := s.db.GetTaskGroupIDByName(context.Background(), pathList[1], courseID)
+	if err != nil {
+		return RepoID{}, err
 	}
 
 	participantID, err := s.db.GetParticipant(fingerprint)
@@ -253,9 +301,9 @@ func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
 	}
 
 	return RepoID{
-		ParticipantID: participantID,
 		CourseID:      courseID,
-		TaskID:        taskID,
+		TaskGroupID:   taskGroupID,
+		ParticipantID: participantID,
 	}, nil
 }
 
@@ -275,33 +323,26 @@ func (s *Service) GitListMiddleware(next ssh.Handler) ssh.Handler {
 		}
 		for _, dir := range dest {
 			wish.Println(sess, fmt.Sprintf("• %s - ", dir.Name()))
-			wish.Println(
-				sess,
-				fmt.Sprintf(
-					"git clone ssh://%s/%s",
-					net.JoinHostPort(host, port),
-					dir.Name(),
-				),
-			)
+			wish.Println(sess, fmt.Sprintf(
+				"git clone ssh://%s/%s",
+				net.JoinHostPort(host, port),
+				dir.Name(),
+			))
 		}
 		wish.Printf(sess, "\n\n### Add some repos! ###\n\n")
 		wish.Printf(sess, "> cd some_repo\n")
-		wish.Printf(
-			sess,
-			"> git remote add wish_test ssh://%s/some_repo\n",
-			net.JoinHostPort(host, port),
-		)
+		wish.Printf(sess, "> git remote add wish_test ssh://%s/some_repo\n", net.JoinHostPort(host, port))
 		wish.Printf(sess, "> git push wish_test\n\n\n")
 		next(sess)
 	}
 }
 
-func (s *Service) PushAttempt(repoID RepoID, files []FileInfo) (string, error) {
+func (s *Service) PushAttempt(repoID RepoID, taskID uuid.UUID, files []FileInfo) (string, error) {
 	repoName := repoID.IntoPath()
-	bareRepoPath := fmt.Sprintf("%s/%s.git", repoDir, repoName)
+	bareRepoPath := filepath.Join(repoDir, repoName+".git")
 
 	if _, err := os.Stat(bareRepoPath); os.IsNotExist(err) {
-		if err := s.InitRepo(repoID); err != nil {
+		if err := s.initRepoWithTemplate(repoID); err != nil {
 			return "", fmt.Errorf("init repo: %w", err)
 		}
 	}
@@ -376,7 +417,7 @@ func (s *Service) PushAttempt(repoID RepoID, files []FileInfo) (string, error) {
 		return "", fmt.Errorf("push: %w", err)
 	}
 
-	if err := s.db.SaveAttempt(repoID, commitHash.String()); err != nil {
+	if err := s.db.SaveAttempt(repoID, taskID, commitHash.String()); err != nil {
 		return "", fmt.Errorf("save attempt: %w", err)
 	}
 
@@ -386,4 +427,58 @@ func (s *Service) PushAttempt(repoID RepoID, files []FileInfo) (string, error) {
 	)
 
 	return commitHash.String(), nil
+}
+
+func (s *Service) initRepoWithTemplate(repoID RepoID) error {
+	templateName := TemplatePath(repoID.TaskGroupID)
+	templatePath := filepath.Join(repoDir, templateName+".git")
+
+	bareRepoPath := filepath.Join(repoDir, repoID.IntoPath()+".git")
+
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		_, err := gogit.PlainInit(bareRepoPath, true)
+		return err
+	}
+
+	tmpDir, err := os.MkdirTemp("", "template-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	repo, err := gogit.PlainClone(tmpDir, &gogit.CloneOptions{
+		URL: templatePath,
+	})
+	if err != nil {
+		return fmt.Errorf("clone template: %w", err)
+	}
+
+	_, err = gogit.PlainInit(bareRepoPath, true)
+	if err != nil {
+		return fmt.Errorf("init student bare: %w", err)
+	}
+
+	_, err = repo.CreateRemote(&config.RemoteConfig{
+		Name: "student",
+		URLs: []string{bareRepoPath},
+	})
+	if err != nil {
+		return fmt.Errorf("create remote: %w", err)
+	}
+
+	if err := repo.Push(&gogit.PushOptions{
+		RemoteName: "student",
+	}); err != nil {
+		return fmt.Errorf("push template: %w", err)
+	}
+
+	zap.L().Info("repository initialized from template",
+		zap.String("template", templateName),
+		zap.String("repo", repoID.IntoPath()),
+	)
+	return nil
+}
+
+func (s *Service) GetCourseIDByTaskGroup(taskGroupID uuid.UUID) (uuid.UUID, error) {
+	return s.db.GetCourseIDByTaskGroup(context.Background(), taskGroupID)
 }

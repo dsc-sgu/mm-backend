@@ -235,7 +235,7 @@ func EnsureRepo(dir, repo string) error {
 // to a file for the Push hook to read.
 func WritePostReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		return fmt.Errorf("create hooks dir: %w", err)
 	}
 	script := `#!/bin/sh
@@ -250,7 +250,7 @@ fi
 `
 	return os.WriteFile(
 		filepath.Join(hooksDir, "post-receive"),
-		[]byte(script), 0755,
+		[]byte(script), 0o755,
 	)
 }
 

@@ -36,9 +36,13 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
-	"github.com/dsc-sgu/mm-backend/internal/tasks"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
+<<<<<<< HEAD
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
+=======
+	"github.com/dsc-sgu/mm-backend/internal/routes"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
+>>>>>>> 950c1e3 (feat: add task groups)
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
