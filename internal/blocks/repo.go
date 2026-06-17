@@ -34,10 +34,10 @@ type Block struct {
 
 // CreateBlock is the input for creating a block, used by both the service and repository layers.
 type CreateBlock struct {
-	SnapshotID   uuid.UUID       `json:"snapshotID"   db:"snapshot_id" binding:"required"`
-	BlockType    string          `json:"blockType"    db:"block_type"  binding:"required"`
-	Data         json.RawMessage `json:"data"         db:"data"                           swaggertype:"object"`
-	AfterBlockID *uuid.UUID      `json:"afterBlockID"`
+	SnapshotID   uuid.UUID       `json:"-"                      db:"snapshot_id" binding:"required"`
+	BlockType    string          `json:"blockType"              db:"block_type"  binding:"required"`
+	Data         json.RawMessage `json:"data"                   db:"data"                           swaggertype:"object"`
+	AfterBlockID *uuid.UUID      `json:"afterBlockID,omitempty"`
 }
 
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
@@ -48,7 +48,7 @@ type UpdateBlock struct {
 
 // MoveBlock is the input for moving a block.
 type MoveBlock struct {
-	AfterBlockID *uuid.UUID `json:"afterBlockID" binding:"required"`
+	AfterBlockID *uuid.UUID `json:"afterBlockID,omitempty" binding:"required"`
 }
 
 type Repo interface {

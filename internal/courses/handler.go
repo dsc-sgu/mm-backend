@@ -49,15 +49,17 @@ type UserRoleResponse struct {
 type CourseContentResponse struct {
 	ID               uuid.UUID       `json:"id"`
 	DisciplineID     uuid.UUID       `json:"disciplineId"`
-	ActiveSnapshotID uuid.UUID       `json:"activeSnapshotId"`
+	ActiveSnapshotID *uuid.UUID      `json:"activeSnapshotId"`
+	OwnerID          uuid.UUID       `json:"ownerId"`
 	Name             string          `json:"name"`
-	Version          int             `json:"version"`
+	CreatedAt        time.Time       `json:"createdAt"`
 	Blocks           []*blocks.Block `json:"blocks"`
 }
 
 // SnapshotMetadataResponse is a part of response for course timeline
 type SnapshotMetadataResponse struct {
 	ID        uuid.UUID        `json:"id"`
+	CourseID  uuid.UUID        `json:"courseId"`
 	Version   int              `json:"version"`
 	Status    snapshots.Status `json:"status"`
 	CreatedBy uuid.UUID        `json:"createdBy"`
@@ -203,10 +205,10 @@ func (h *Handler) GetCourseContent(
 	}
 
 	var linkedBlocks []*blocks.Block
-	if course.ActiveSnapshotID != uuid.Nil {
+	if course.ActiveSnapshotID != nil {
 		linkedBlocks, err = h.blockService.GetAllBlocksBySnapshotID(
 			ctx,
-			course.ActiveSnapshotID,
+			*course.ActiveSnapshotID,
 		)
 		if err != nil {
 			return nil, huma.Error500InternalServerError(
@@ -221,7 +223,7 @@ func (h *Handler) GetCourseContent(
 			DisciplineID:     course.DisciplineID,
 			ActiveSnapshotID: course.ActiveSnapshotID,
 			Name:             course.Name,
-			Version:          course.Version,
+			CreatedAt:        course.CreatedAt,
 			Blocks:           linkedBlocks,
 		},
 	}, nil
@@ -315,6 +317,7 @@ func (h *Handler) GetCourseSnapshots(
 	for i, s := range list {
 		result[i] = SnapshotMetadataResponse{
 			ID:        s.ID,
+			CourseID:  s.CourseID,
 			Version:   s.Version,
 			Status:    s.Status,
 			CreatedBy: s.CreatedBy,

@@ -127,7 +127,7 @@ func (s *Service) CreateCourse(
 			return fmt.Errorf("link initial snapshot: %w", txErr)
 		}
 
-		createdCourse.ActiveSnapshotID = firstSnapshot.ID
+		createdCourse.ActiveSnapshotID = &firstSnapshot.ID
 		createdCourse.Version = 1
 
 		return nil
@@ -293,7 +293,7 @@ func (s *Service) LockAndInitDraft(
 			session.CourseID,
 			targetVersion,
 			session.UserID,
-			course.ActiveSnapshotID,
+			*course.ActiveSnapshotID,
 		)
 		return txErr
 	})
@@ -343,6 +343,9 @@ func (s *Service) SwitchSnapshot(
 	}
 	if draft == nil {
 		return ErrDraftNotFound
+	}
+	if draft.ID == targetSnapshotID {
+		return ErrInvalidTarget
 	}
 
 	// Replace draft blocks with target

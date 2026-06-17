@@ -19,8 +19,8 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// CreateBlockResponse is the handler-level response for block creation.
-type CreateBlockResponse struct {
+// BlockIDResponse is the handler-level response for block creation.
+type BlockIDResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
@@ -69,7 +69,7 @@ type CreateBlockInput struct {
 }
 
 type CreateBlockOutput struct {
-	Body *CreateBlockResponse
+	Body *BlockIDResponse
 }
 
 func (h *Handler) CreateBlock(
@@ -89,7 +89,7 @@ func (h *Handler) CreateBlock(
 		return nil, handleServiceError(err)
 	}
 
-	return &CreateBlockOutput{Body: &CreateBlockResponse{ID: block.ID}}, nil
+	return &CreateBlockOutput{Body: &BlockIDResponse{ID: block.ID}}, nil
 }
 
 type MoveBlockInput struct {
