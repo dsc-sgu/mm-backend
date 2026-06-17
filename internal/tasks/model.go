@@ -31,26 +31,26 @@ type CreateTaskGroup struct {
 }
 
 type UpdateTaskGroup struct {
-	Name *string `json:"name"`
+	Name *string `json:"name,omitempty"`
 }
 
 type CreateTask struct {
-	TaskGroupID uuid.UUID       `json:"taskGroupID" db:"task_group_id" binding:"required"`
+	TaskGroupID uuid.UUID       `json:"taskGroupID,omitempty" db:"task_group_id"`
 	Data        json.RawMessage `json:"data"                           binding:"required" swaggertype:"object"`
 	MaxGrade    float32         `json:"maxGrade"                       binding:"required"`
 	MaxAttempts int             `json:"maxAttempts"                    binding:"required"`
-	AvailableAt *time.Time      `json:"availableAt"`
-	DeadlineAt  *time.Time      `json:"deadlineAt"`
-	LeadTime    *time.Time      `json:"leadTime"`
+	AvailableAt *time.Time      `json:"availableAt,omitempty"`
+	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
+	LeadTime    *time.Time      `json:"leadTime,omitempty"`
 }
 
 type UpdateTask struct {
-	Data        json.RawMessage `json:"data"`
-	MaxGrade    *float32        `json:"maxGrade"`
-	MaxAttempts *int            `json:"maxAttempts"`
-	AvailableAt *time.Time      `json:"availableAt"`
-	DeadlineAt  *time.Time      `json:"deadlineAt"`
-	LeadTime    *time.Time      `json:"leadTime"`
+	Data        *json.RawMessage `json:"data,omitempty"`
+	MaxGrade    *float32         `json:"maxGrade,omitempty"`
+	MaxAttempts *int             `json:"maxAttempts,omitempty"`
+	AvailableAt *time.Time       `json:"availableAt,omitempty"`
+	DeadlineAt  *time.Time       `json:"deadlineAt,omitempty"`
+	LeadTime    *time.Time       `json:"leadTime,omitempty"`
 }
 
 type CreateTaskGroupResponse struct {

@@ -1,40 +1,11 @@
 package courses
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
 )
-
-type Course struct {
-	ID           uuid.UUID `json:"id"           db:"id"            binding:"required"`
-	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
-	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
-	Name         string    `json:"name"         db:"name"          binding:"required"`
-	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
-
-	CreatedAt time.Time `json:"createdAt" db:"created_at" binding:"required"`
-}
-
-type CreateCourse struct {
-	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
-	Name         string    `json:"name"         db:"name"          binding:"required"`
-	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
-}
-
-type UpdateCourse struct {
-	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"`
-	DisplayName string    `json:"displayName" db:"display_name" binding:"required"`
-}
-
-type CoursePagination struct {
-	Limit  int       `query:"limit"`
-	LastID uuid.UUID `query:"last_id"`
-}
-
-type CourseIDResponse struct {
-	ID uuid.UUID `json:"id"`
-}
 
 type CourseMemberRole string
 
@@ -43,6 +14,36 @@ const (
 	TeacherRole CourseMemberRole = "TEACHER"
 )
 
+// Course is the database representation of a course.
+type Course struct {
+	ID           uuid.UUID `json:"id"           db:"id"            binding:"required"`
+	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
+	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
+	Name         string    `json:"name"         db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
+	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
+}
+
+// CreateCourse is the input for creating a course, used by both the service and repository layers.
+type CreateCourse struct {
+	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
+	Name         string    `json:"name"         db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
+}
+
+// UpdateCourse is the input for updating a course, used by both the service and repository layers.
+type UpdateCourse struct {
+	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"`
+	Name        string    `json:"name"        db:"name"`
+	DisplayName string    `json:"displayName" db:"display_name" binding:"required"`
+}
+
+type CoursePagination struct {
+	Limit  int       `query:"limit"`
+	LastID uuid.UUID `query:"last_id"`
+}
+
+// CourseMember is the database representation of a course member.
 type CourseMember struct {
 	UserID    uuid.UUID        `json:"userID"    db:"user_id"`
 	CourseID  uuid.UUID        `json:"courseID"  db:"course_id"`
@@ -51,6 +52,7 @@ type CourseMember struct {
 	IsActive  bool             `json:"isActive"  db:"is_active"`
 }
 
+// Student is the database representation of a course student.
 type Student struct {
 	UserID        uuid.UUID `json:"userID"        db:"user_id"`
 	CourseID      uuid.UUID `json:"courseID"      db:"course_id"`
@@ -58,6 +60,7 @@ type Student struct {
 	IsActive      bool      `json:"isActive"      db:"is_active"`
 }
 
+// Teacher is the database representation of a course teacher.
 type Teacher struct {
 	UserID     uuid.UUID `json:"userID"     db:"user_id"`
 	CourseID   uuid.UUID `json:"courseID"   db:"course_id"`
@@ -66,6 +69,7 @@ type Teacher struct {
 	IsActive   bool      `json:"isActive"   db:"is_active"`
 }
 
+// Invite is the database representation of a course invite.
 type Invite struct {
 	ID           uuid.UUID        `json:"id"           db:"id"`
 	CourseID     uuid.UUID        `json:"courseID"     db:"course_id"`
@@ -76,12 +80,14 @@ type Invite struct {
 	IsRevoked    bool             `json:"isRevoked"    db:"is_revoked"`
 }
 
+// CreateInvite is the input for creating an invite, used by both the service and repository layers.
 type CreateInvite struct {
 	CourseID     uuid.UUID        `json:"courseID"     binding:"required"`
 	ProvidedRole CourseMemberRole `json:"providedRole" binding:"required"`
 	ExpiresAt    time.Time        `json:"expiresAt"    binding:"required"`
 }
 
+// InviteDetails is built by the service layer and returned to the handler.
 type InviteDetails struct {
 	ID           uuid.UUID        `json:"id"`
 	CourseID     uuid.UUID        `json:"courseID"`
@@ -93,6 +99,42 @@ type InviteDetails struct {
 	IsRevoked    bool             `json:"isRevoked"`
 }
 
-type UserRoleResponse struct {
-	Role CourseMemberRole `json:"role"`
+type Repo interface {
+	CreateCourse(
+		ctx context.Context,
+		model *CreateCourse,
+		ownerID uuid.UUID,
+	) (*Course, error)
+	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
+	GetCourseByName(ctx context.Context, name string) (*Course, error)
+	GetPaginatedCourses(
+		ctx context.Context,
+		limit int,
+		lastID uuid.UUID,
+		discipline uuid.UUID,
+		userID uuid.UUID,
+		isTeacher bool,
+		isStudent bool,
+	) ([]Course, error)
+	UpdateCourseByID(
+		ctx context.Context,
+		id uuid.UUID,
+		update *UpdateCourse,
+	) (*Course, error)
+	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
+	CreateInvite(
+		ctx context.Context,
+		model *CreateInvite,
+		createdBy uuid.UUID,
+	) (*Invite, error)
+	GetInviteByID(ctx context.Context, inviteID uuid.UUID) (*Invite, error)
+	EnrollUserByInvite(
+		ctx context.Context,
+		userID uuid.UUID,
+		invite *Invite,
+	) error
+	GetCourseMember(
+		ctx context.Context,
+		userID, courseID uuid.UUID,
+	) (*CourseMember, error)
 }

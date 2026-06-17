@@ -84,9 +84,10 @@ func (r *PGRepo) CreateCourse(
 	if err != nil {
 		return nil, fmt.Errorf("create course: begin transaction: %w", err)
 	}
+	rolledBack := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			zap.L().Error(err.Error())
+		if !rolledBack {
+			_ = tx.Rollback()
 		}
 	}()
 
@@ -141,6 +142,7 @@ func (r *PGRepo) CreateCourse(
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("create course: commit transaction: %w", err)
 	}
+	rolledBack = true
 
 	return &newCourse, nil
 }
@@ -205,7 +207,7 @@ func (r *PGRepo) GetPaginatedCourses(
 	}
 
 	getCoursesByFilter := fmt.Sprintf(`
-		SELECT id, discipline_id, owner_id, name, created_at
+		SELECT id, discipline_id, owner_id, name, display_name, created_at
 		FROM courses
 		%s
 		ORDER BY name

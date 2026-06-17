@@ -15,8 +15,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
@@ -134,7 +134,7 @@ func initRedis(
 
 	req := testcontainers.ContainerRequest{
 		Name:         "mm-redis",
-		Image:        "docker.dragonflydb.io/dragonflydb/dragonfly",
+		Image:        "valkey/valkey:8",
 		ExposedPorts: []string{string(redisPort)},
 		WaitingFor:   wait.ForListeningPort(redisPort),
 		Networks:     []string{net.Name},
@@ -201,7 +201,7 @@ func CreateTestUser(
 		port.Port(),
 	)
 
-	userBody, _ := json.Marshal(users.RegisterUser{
+	userBody, _ := json.Marshal(users.UserRegisterRequest{
 		FirstName: firstName,
 		LastName:  lastName,
 		Username:  username,

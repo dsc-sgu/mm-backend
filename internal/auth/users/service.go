@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,31 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 )
+
+// NewUser is the input for creating a user, used by both the service and repository layers.
+type NewUser struct {
+	FirstName  string   `json:"firstName"  binding:"required"`
+	LastName   string   `json:"lastName"   binding:"required"`
+	Patronymic string   `json:"patronymic" binding:"required"`
+	Username   string   `json:"username"   binding:"required"`
+	Email      string   `json:"email"      binding:"required"`
+	Role       UserRole `json:"role"       binding:"required"`
+	Password   string   `json:"password"   binding:"password"`
+}
+
+// LoginUser is the input for user login.
+type LoginUser struct {
+	Email    string `json:"email"    binding:"required"`
+	Password string `json:"password" binding:"required"`
+}
+
+// LoginResponse is the response returned after a successful login.
+type LoginResponse struct {
+	SessionID uuid.UUID `json:"sessionID"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	UserID    uuid.UUID `json:"userID"`
+}
 
 type Service struct {
 	Repo
@@ -75,6 +101,18 @@ func (c *Service) Login(
 	}
 
 	return response, cookie, nil
+}
+
+func (c *Service) ClearCookie() http.Cookie {
+	return http.Cookie{
+		Name:     session.CookieName,
+		Value:    "",
+		Path:     c.cookieConfig.Path,
+		MaxAge:   -1,
+		Domain:   c.cookieConfig.Domain,
+		Secure:   c.cookieConfig.Secure,
+		HttpOnly: c.cookieConfig.HTTPOnly,
+	}
 }
 
 func (c *Service) Logout(
