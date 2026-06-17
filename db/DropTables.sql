@@ -2,6 +2,7 @@
 DROP TABLE IF EXISTS attempt_transitions;
 DROP TABLE IF EXISTS attempts;
 DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS task_groups;
 DROP TABLE IF EXISTS course_users_groups;
 DROP TABLE IF EXISTS milestone_transitions;
 DROP TABLE IF EXISTS discipline_milestones;
