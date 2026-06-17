@@ -181,25 +181,25 @@ func setupCourseRoutes(api huma.API, ch *courses.Handler) {
 	}, ch.DeleteCourse)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/invites",
+		Method: http.MethodPost, Path: "/course-invites",
 		Summary: "Create invite link for course", DefaultStatus: http.StatusCreated,
-		Tags: []string{"Course"},
+		Tags: []string{"Course Invites"},
 	}, ch.CreateInvite)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/courses/invites/{invite_id}",
+		Method: http.MethodGet, Path: "/course-invites/{invite_id}",
 		Summary: "Get invite link details", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course"},
+		Tags: []string{"Course Invites"},
 	}, ch.GetInviteDetails)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/invites/{invite_id}",
+		Method: http.MethodPost, Path: "/course-invites/{invite_id}",
 		Summary: "Join course by invite link", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course"},
+		Tags: []string{"Course Invites"},
 	}, ch.JoinCourseByInvite)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/courses/roles/{course_id}",
+		Method: http.MethodGet, Path: "/course-roles/{course_id}",
 		Summary: "Get role of current user in course", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course"},
 	}, ch.GetUserRoleInCourse)
