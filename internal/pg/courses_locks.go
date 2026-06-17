@@ -36,6 +36,10 @@ const (
 		FOR UPDATE
 	`
 
+	getCourseForUpdateSQL = `
+		SELECT 1 FROM courses WHERE id = $1 FOR UPDATE
+	`
+
 	refreshCourseLockSQL = `
 		UPDATE course_locks 
 		SET expires_at = NOW() + MAKE_INTERVAL(secs => $1) 
@@ -83,7 +87,7 @@ func (r *PGRepo) SetLock(
 	err = tx.GetContext(
 		ctx,
 		&dummy,
-		"SELECT 1 FROM courses WHERE id = $1 FOR UPDATE",
+		getCourseForUpdateSQL,
 		model.CourseID,
 	)
 	if err != nil {
@@ -94,10 +98,10 @@ func (r *PGRepo) SetLock(
 	}
 
 	// Check the current state of the lock
-	var existing locks.Lock
+	var existingLock locks.Lock
 	err = tx.GetContext(
 		ctx,
-		&existing,
+		&existingLock,
 		getCourseLockForUpdateSQL,
 		model.CourseID,
 	)
@@ -124,11 +128,10 @@ func (r *PGRepo) SetLock(
 	}
 
 	// If the lock is held by another user and has not expired
-	if existing.UserID != model.UserID ||
-		existing.SessionID != model.SessionID {
-		if time.Now().Before(existing.ExpiresAt) {
-			return nil, locks.ErrLockHeldByAnother
-		}
+	if (existingLock.UserID != model.UserID ||
+		existingLock.SessionID != model.SessionID) &&
+		time.Now().Before(existingLock.ExpiresAt) {
+		return nil, locks.ErrLockHeldByAnother
 	}
 
 	// If the lock already belongs to the user or has expired - update it

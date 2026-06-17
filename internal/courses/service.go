@@ -51,6 +51,8 @@ type InitLockResult struct {
 
 var (
 	ErrCourseNotFound       = errors.New("course not found")
+	ErrSnapshotNotFound     = errors.New("snapshot not found")
+	ErrDraftNotFound        = errors.New("user draft not found")
 	ErrPermissionDenied     = errors.New("permission denied")
 	ErrCourseMemberNotFound = errors.New("user is not a course member")
 	ErrInviteNotFound       = errors.New("invite not found")
@@ -72,6 +74,20 @@ type TxManager interface {
 	ExecInTx(ctx context.Context, fn func(tx *sqlx.Tx) error) error
 }
 
+func (s *Service) CheckCourseMember(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (*CourseMember, error) {
+	member, err := s.repo.GetCourseMember(ctx, userID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("checking permissions: %w", err)
+	}
+	if member == nil || !member.IsActive {
+		return nil, ErrCourseMemberNotFound
+	}
+	return member, nil
+}
+
 func (s *Service) CreateCourse(
 	ctx context.Context,
 	model *CreateCourse,
@@ -84,7 +100,7 @@ func (s *Service) CreateCourse(
 
 		createdCourse, txErr = s.repo.CreateCourse(ctx, tx, model, ownerID)
 		if txErr != nil {
-			return fmt.Errorf("service create course: %w", txErr)
+			return fmt.Errorf("create course: %w", txErr)
 		}
 
 		firstSnapshot := &snapshots.Snapshot{
@@ -97,7 +113,7 @@ func (s *Service) CreateCourse(
 
 		_, txErr = s.snapshotsService.CreateSnapshot(ctx, tx, firstSnapshot)
 		if txErr != nil {
-			return fmt.Errorf("service create initial snapshot: %w", txErr)
+			return fmt.Errorf("create initial snapshot: %w", txErr)
 		}
 
 		publishModel := &PublishSnapshot{
@@ -108,7 +124,7 @@ func (s *Service) CreateCourse(
 
 		txErr = s.repo.PublishSnapshotToCourse(ctx, tx, publishModel)
 		if txErr != nil {
-			return fmt.Errorf("service link initial snapshot: %w", txErr)
+			return fmt.Errorf("link initial snapshot: %w", txErr)
 		}
 
 		createdCourse.ActiveSnapshotID = firstSnapshot.ID
@@ -128,12 +144,9 @@ func (s *Service) CreateInvite(
 	model *CreateInvite,
 	createdBy uuid.UUID,
 ) (*Invite, error) {
-	courseMember, err := s.repo.GetCourseMember(ctx, createdBy, model.CourseID)
+	courseMember, err := s.CheckCourseMember(ctx, createdBy, model.CourseID)
 	if err != nil {
-		return nil, fmt.Errorf("create invite: checking permissions: %w", err)
-	}
-	if courseMember == nil {
-		return nil, ErrCourseMemberNotFound
+		return nil, err
 	}
 	if courseMember.Role != TeacherRole {
 		return nil, ErrPermissionDenied
@@ -218,11 +231,15 @@ func (s *Service) LockAndInitDraft(
 	session *locks.LockSession,
 ) (*InitLockResult, error) {
 	// Check user permissions
-	member, err := s.repo.GetCourseMember(ctx, session.UserID, session.CourseID)
+	courseMember, err := s.CheckCourseMember(
+		ctx,
+		session.UserID,
+		session.CourseID,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("lock and init: check member: %w", err)
+		return nil, err
 	}
-	if member == nil || !member.IsActive || member.Role != TeacherRole {
+	if courseMember.Role != TeacherRole {
 		return nil, ErrPermissionDenied
 	}
 
@@ -297,12 +314,9 @@ func (s *Service) SwitchSnapshot(
 	targetSnapshotID uuid.UUID,
 ) error {
 	// Check active lock
-	isValid, err := s.locksService.ValidateLock(ctx, session)
+	err := s.locksService.ValidateLock(ctx, session)
 	if err != nil {
-		return fmt.Errorf("switch snapshot: validate lock: %w", err)
-	}
-	if !isValid {
-		return locks.ErrLockNotFound
+		return err
 	}
 
 	// Check that the target snapshot exists and is published
@@ -328,7 +342,7 @@ func (s *Service) SwitchSnapshot(
 		return fmt.Errorf("switch snapshot: find current draft: %w", err)
 	}
 	if draft == nil {
-		return locks.ErrLockNotFound
+		return ErrDraftNotFound
 	}
 
 	// Replace draft blocks with target
@@ -350,12 +364,9 @@ func (s *Service) PublishDraft(
 	draftSnapshotID uuid.UUID,
 ) error {
 	// Check active lock
-	isValid, err := s.locksService.ValidateLock(ctx, session)
+	err := s.locksService.ValidateLock(ctx, session)
 	if err != nil {
-		return fmt.Errorf("publish draft: validate lock: %w", err)
-	}
-	if !isValid {
-		return locks.ErrLockNotFound
+		return err
 	}
 
 	draft, err := s.snapshotsService.GetSnapshotByID(ctx, draftSnapshotID)
@@ -363,8 +374,8 @@ func (s *Service) PublishDraft(
 		return fmt.Errorf("publish draft: get draft: %w", err)
 	}
 	if draft == nil || draft.Status != snapshots.DraftStatus ||
-		draft.CourseID != session.CourseID {
-		return locks.ErrLockNotFound
+		draft.CourseID != session.CourseID || draft.CreatedBy != session.UserID {
+		return ErrDraftNotFound
 	}
 
 	publishSnapshot := &PublishSnapshot{
@@ -456,12 +467,66 @@ func (s *Service) GetCourseByID(
 
 func (s *Service) UpdateCourseByID(
 	ctx context.Context,
-	id uuid.UUID,
+	id, userID uuid.UUID,
 	update *UpdateCourse,
 ) (*Course, error) {
+	courseMember, err := s.CheckCourseMember(ctx, userID, id)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, ErrPermissionDenied
+	}
 	return s.repo.UpdateCourseByID(ctx, id, update)
 }
 
-func (s *Service) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
+func (s *Service) DeleteCourseByID(
+	ctx context.Context,
+	id, userID uuid.UUID,
+) error {
+	courseMember, err := s.CheckCourseMember(ctx, userID, id)
+	if err != nil {
+		return err
+	}
+	if courseMember.Role != TeacherRole {
+		return ErrPermissionDenied
+	}
 	return s.repo.DeleteCourseByID(ctx, id)
+}
+
+func (s *Service) GetSnapshotByID(
+	ctx context.Context,
+	snapshotID, userID uuid.UUID,
+) (*snapshots.Snapshot, error) {
+	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
+	if err != nil {
+		return nil, fmt.Errorf("get snapshot: %w", err)
+	}
+	if snapshot == nil {
+		return nil, ErrSnapshotNotFound
+	}
+
+	courseMember, err := s.CheckCourseMember(ctx, userID, snapshot.CourseID)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, ErrPermissionDenied
+	}
+
+	return snapshot, nil
+}
+
+func (s *Service) GetPublishedSnapshots(
+	ctx context.Context,
+	courseID, userID uuid.UUID,
+) ([]*snapshots.Snapshot, error) {
+	courseMember, err := s.CheckCourseMember(ctx, userID, courseID)
+	if err != nil {
+		return nil, err
+	}
+	if courseMember.Role != TeacherRole {
+		return nil, ErrPermissionDenied
+	}
+	return s.snapshotsService.GetPublishedSnapshotsByCourseID(ctx, courseID)
 }
