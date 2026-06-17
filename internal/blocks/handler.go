@@ -93,9 +93,9 @@ func (h *Handler) CreateBlock(
 }
 
 type MoveBlockInput struct {
-	SnapshotID   uuid.UUID  `path:"snapshot_id"`
-	BlockID      uuid.UUID  `path:"block_id"`
-	AfterBlockID *uuid.UUID `                   json:"afterBlockID"`
+	SnapshotID uuid.UUID `path:"snapshot_id"`
+	BlockID    uuid.UUID `path:"block_id"`
+	Body       MoveBlock `json:"body"`
 }
 
 func (h *Handler) MoveBlock(
@@ -114,7 +114,7 @@ func (h *Handler) MoveBlock(
 		input.SnapshotID,
 		userID,
 		sessionID,
-		input.AfterBlockID,
+		input.Body.AfterBlockID,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
