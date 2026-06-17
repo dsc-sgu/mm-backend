@@ -69,9 +69,12 @@ func handleServiceError(err error) error {
 		return nil
 	}
 	switch {
-	case errors.Is(err, ErrPermissionDenied):
+	case errors.Is(err, ErrPermissionDenied),
+		errors.Is(err, ErrCourseMemberNotFound):
 		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, ErrCourseNotFound), errors.Is(err, ErrInviteNotFound):
+	case errors.Is(err, ErrCourseNotFound),
+		errors.Is(err, ErrInviteNotFound),
+		errors.Is(err, ErrSnapshotNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, locks.ErrLockHeldByAnother),
 		errors.Is(err, locks.ErrLockNotFound),
@@ -85,24 +88,6 @@ func handleServiceError(err error) error {
 		return huma.Error410Gone(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
-}
-
-func (h *Handler) checkCourseMember(
-	ctx context.Context,
-	userID, courseID uuid.UUID,
-) (*CourseMember, error) {
-	member, err := h.courseService.GetCourseMember(ctx, userID, courseID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(
-			"failed to check course membership",
-		)
-	}
-	if member == nil || !member.IsActive {
-		return nil, huma.Error403Forbidden(
-			"user is not a member of this course",
-		)
-	}
-	return member, nil
 }
 
 type CreateCourseInput struct {
@@ -204,9 +189,9 @@ func (h *Handler) GetCourseContent(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	_, err := h.checkCourseMember(ctx, userID, input.CourseID)
+	_, err := h.courseService.CheckCourseMember(ctx, userID, input.CourseID)
 	if err != nil {
-		return nil, err
+		return nil, handleServiceError(err)
 	}
 
 	course, err := h.courseService.GetCourseByID(ctx, input.CourseID)
@@ -214,7 +199,7 @@ func (h *Handler) GetCourseContent(
 		return nil, handleServiceError(err)
 	}
 	if course == nil {
-		return nil, huma.Error404NotFound("course not found")
+		return nil, huma.Error404NotFound("")
 	}
 
 	var linkedBlocks []*blocks.Block
@@ -261,22 +246,13 @@ func (h *Handler) GetSnapshotBlocks(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	snapshot, err := h.snapshotService.GetSnapshotByID(ctx, input.SnapshotID)
+	snapshot, err := h.courseService.GetSnapshotByID(
+		ctx,
+		input.SnapshotID,
+		userID,
+	)
 	if err != nil {
 		return nil, handleServiceError(err)
-	}
-	if snapshot == nil {
-		return nil, huma.Error404NotFound("snapshot not found")
-	}
-
-	courseMember, err := h.checkCourseMember(ctx, userID, snapshot.CourseID)
-	if err != nil {
-		return nil, err
-	}
-	if courseMember.Role != TeacherRole {
-		return nil, huma.Error403Forbidden(
-			"user is not a teacher of this course",
-		)
 	}
 
 	// Draft snapshot can be seen only by it's creator
@@ -286,12 +262,12 @@ func (h *Handler) GetSnapshotBlocks(
 			UserID:    userID,
 			SessionID: sessionID,
 		}
-		if isValid, err := h.lockService.ValidateLock(
+		if err := h.lockService.ValidateLock(
 			ctx,
 			lockSession,
-		); err != nil || !isValid {
+		); err != nil {
 			return nil, huma.Error423Locked(
-				"snapshot is a draft and user editing session is not valid",
+				"snapshot is a draft and your editing session is not valid",
 			)
 		}
 	}
@@ -326,19 +302,10 @@ func (h *Handler) GetCourseSnapshots(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseMember, err := h.checkCourseMember(ctx, userID, input.CourseID)
-	if err != nil {
-		return nil, err
-	}
-	if courseMember.Role != TeacherRole {
-		return nil, huma.Error403Forbidden(
-			"user is not a teacher of this course",
-		)
-	}
-
-	list, err := h.snapshotService.GetPublishedSnapshotsByCourseID(
+	list, err := h.courseService.GetPublishedSnapshots(
 		ctx,
 		input.CourseID,
+		userID,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
@@ -376,19 +343,10 @@ func (h *Handler) PatchCourse(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseMember, err := h.checkCourseMember(ctx, userID, input.CourseID)
-	if err != nil {
-		return nil, err
-	}
-	if courseMember.Role != TeacherRole {
-		return nil, huma.Error403Forbidden(
-			"user is not a teacher of this course",
-		)
-	}
-
 	course, err := h.courseService.UpdateCourseByID(
 		ctx,
 		input.CourseID,
+		userID,
 		&input.Body,
 	)
 	if err != nil {
@@ -410,17 +368,7 @@ func (h *Handler) DeleteCourse(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	member, err := h.checkCourseMember(ctx, userID, input.CourseID)
-	if err != nil {
-		return nil, err
-	}
-	if member.Role != TeacherRole {
-		return nil, huma.Error403Forbidden(
-			"only teachers can delete the course",
-		)
-	}
-
-	err = h.courseService.DeleteCourseByID(ctx, input.CourseID)
+	err := h.courseService.DeleteCourseByID(ctx, input.CourseID, userID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -676,16 +624,13 @@ func (h *Handler) GetUserRoleInCourse(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseMember, err := h.checkCourseMember(
+	courseMember, err := h.courseService.CheckCourseMember(
 		ctx,
 		userID,
 		input.CourseID,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
-	}
-	if courseMember == nil {
-		return nil, huma.Error404NotFound("")
 	}
 
 	return &GetUserRoleInCourseOutput{
