@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -214,8 +215,15 @@ func (s *Service) GetAllBlocksBySnapshotID(
 	return s.repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
 }
 
+// Fractional indexing
+const (
+	alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	minChar  = '0'
+	midChar  = 'V'
+)
+
 // rebalanceSnapshotPositions shrinks overgrown position lines,
-// distributing them evenly across the available ASCII range
+// distributing them evenly across the available alphabet
 func (s *Service) rebalanceSnapshotPositions(
 	ctx context.Context,
 	snapshotID uuid.UUID,
@@ -233,67 +241,117 @@ func (s *Service) rebalanceSnapshotPositions(
 	// Redistribute positions:
 	// first block gets the middle position of the range,
 	// every next block gets the position between previous and the end of the range ("~" character)
-	currentPrev := ""
-	for _, block := range blocksList {
-		newPos := CalculateMiddlePosition(currentPrev, "")
+	totalBlocks := len(blocksList)
+	if totalBlocks == 0 {
+		return
+	}
+
+	for i, block := range blocksList {
+		// Calculate weight from 0.0 to 1.0
+		// Add 1 to the value of totalBlocks to leave a gap at the end of the alphabet
+		weight := float64(i+1) / float64(totalBlocks+1)
+
+		// Convert weight to position in alphabet
+		newPos := weightToPosition(weight, alphabet)
 
 		if block.Position != newPos {
 			err = s.repo.UpdateBlockPosition(ctx, block.ID, newPos)
 			if err != nil {
-				zap.L().Error(
-					"rebalance positions: failed to update block position",
-					zap.String("block_id", block.ID.String()),
-					zap.Error(err),
-				)
+				zap.L().
+					Error("rebalance positions: failed to update block position", zap.Error(err))
 			}
 		}
-		currentPrev = newPos
 	}
 	zap.L().
 		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
 }
 
+// weightToPosition converts weight from 0.0 to 1.0 to position in 62-char alphabet
+func weightToPosition(weight float64, alphabet string) string {
+	var result []byte
+	base := float64(len(alphabet))
+
+	for range 4 {
+		weight *= base
+		idx := int(weight)
+
+		result = append(result, alphabet[idx])
+
+		weight -= float64(idx)
+		if weight < 1e-9 { // If the remainder is negligible, round and exit
+			break
+		}
+	}
+	return string(result)
+}
+
 // CalculateMiddlePosition calculates a string that falls lexicographically between two other strings
 func CalculateMiddlePosition(prev, next string) string {
+	// Case 1: both values are empty (blocks table is empty)
+	if prev == "" && next == "" {
+		return string(midChar)
+	}
+
+	// Case 2: insertion at the top
 	if prev == "" {
-		prev = " "
+		runes := []rune(next)
+		for i := len(runes) - 1; i >= 0; i-- {
+			idx := strings.IndexRune(alphabet, runes[i])
+			if idx > 0 {
+				runes[i] = rune(alphabet[idx-1])
+				return string(
+					runes[:i+1],
+				)
+			}
+		}
+		return string(minChar) + string(midChar)
 	}
+
+	// Case 3: insertion at the bottom
 	if next == "" {
-		next = "~"
+		runes := []rune(prev)
+		for i := len(runes) - 1; i >= 0; i-- {
+			idx := strings.IndexRune(alphabet, runes[i])
+			if idx < len(alphabet)-1 {
+				runes[i] = rune(alphabet[idx+1])
+				return string(runes[:i+1])
+			}
+		}
+		return prev + string(midChar)
 	}
 
-	var result []byte
-	i := 0
+	// Case 4: insertion in the middle
+	var result strings.Builder
 
-	for {
-		var p byte = ' '
+	for i := 0; ; i++ {
+		pIdx := 0
 		if i < len(prev) {
-			p = prev[i]
+			pIdx = strings.IndexByte(alphabet, prev[i])
 		}
 
-		var n byte = '~'
+		nIdx := len(alphabet) - 1
 		if i < len(next) {
-			n = next[i]
+			nIdx = strings.IndexByte(alphabet, next[i])
 		}
 
-		if p >= n {
-			// This case should ideally not happen if inputs are always ordered.
-			// If it does, we append the smaller character and continue,
-			// effectively trying to find a difference in the next character.
-			result = append(result, p)
-			i++
+		// If the last chars of positions are the same, increment the length
+		if pIdx == nIdx {
+			result.WriteByte(alphabet[pIdx])
 			continue
 		}
 
-		if n-p > 1 {
-			mid := p + (n-p)/2
-			result = append(result, mid)
+		// If there is a free space between positions, calculate the middle
+		if nIdx-pIdx > 1 {
+			midIdx := pIdx + (nIdx-pIdx)/2
+			result.WriteByte(alphabet[midIdx])
 			break
 		}
 
-		result = append(result, p)
-		i++
+		// If the difference is 1, increment the length
+		result.WriteByte(alphabet[pIdx])
+
+		next = ""
 	}
 
-	return string(result)
+	return result.String()
 }
