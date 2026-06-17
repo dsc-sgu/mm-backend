@@ -33,17 +33,6 @@ CREATE TABLE units (
     owner_id uuid REFERENCES users(id)
 );
 
-CREATE TABLE blocks (
-    id uuid PRIMARY KEY DEFAULT uuidv7(),
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
-    block_type block_type NOT NULL,
-    data jsonb NOT NULL,
-    position varchar(64) NOT NULL,
-    deleted_at timestamp
-    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
-    UNIQUE (id, block_type)
-);
-
 -- NOTE(mchernigin): for example "Programming languages"
 CREATE TABLE disciplines (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
@@ -54,7 +43,7 @@ CREATE TABLE disciplines (
 CREATE TABLE courses (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     discipline_id uuid REFERENCES disciplines(id),
-    active_snapshot_id uuid REFERENCES course_snapshots(id),
+    active_snapshot_id uuid, -- REFERENCES course_snapshots(id)
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
     display_name varchar(128) NOT NULL,
@@ -77,7 +66,23 @@ CREATE TABLE course_snapshots (
     created_at timestamp NOT NULL
 );
 
+ALTER TABLE courses
+ADD CONSTRAINT fk_courses_active_snapshot
+FOREIGN KEY (active_snapshot_id) REFERENCES course_snapshots(id);
+
 CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id, version) WHERE (status = 'published');
+
+CREATE TABLE blocks (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
+    block_type block_type NOT NULL,
+    data jsonb NOT NULL,
+    position varchar(64) NOT NULL,
+    deleted_at timestamp
+
+    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
+    UNIQUE (id, block_type)
+);
 
 -- NOTE(Ezhkin-Kot): pessimistic locking for course editing
 CREATE TABLE course_locks (
