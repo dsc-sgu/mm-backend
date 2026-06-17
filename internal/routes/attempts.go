@@ -3,23 +3,28 @@ package routes
 import (
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/go-fuego/fuego"
 	"github.com/google/uuid"
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type AttemptController struct {
 	attemptService *attempt.Service
+	taskService    *tasks.Service
 }
 
 func NewAttemptController(
 	svc *attempt.Service,
+	taskSvc *tasks.Service,
 ) *AttemptController {
 	return &AttemptController{
 		svc,
+		taskSvc,
 	}
 }
 
@@ -30,7 +35,6 @@ func (c *AttemptController) GetDiff(
 	AttemptID2 := ctx.QueryParam("id2")
 
 	id1, err := uuid.Parse(AttemptID1)
-
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -38,7 +42,6 @@ func (c *AttemptController) GetDiff(
 	}
 
 	id2, err := uuid.Parse(AttemptID2)
-
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("parsing UUID: %w", err).Error(),
@@ -46,7 +49,6 @@ func (c *AttemptController) GetDiff(
 	}
 
 	diff, err := c.attemptService.GetDiff(id1, id2)
-
 	if err != nil {
 		return nil, fuego.BadRequestError{
 			Detail: fmt.Errorf("Cannot make diff: %w", err).Error(),
@@ -64,14 +66,33 @@ func (c *AttemptController) PushAttempt(ctx fuego.ContextNoBody) (string, error)
 		}
 	}
 
-	taskID, err := uuid.Parse(ctx.QueryParam("taskID"))
+	taskGroupID, err := uuid.Parse(ctx.QueryParam("taskGroupID"))
 	if err != nil {
 		return "", fuego.BadRequestError{
-			Detail: fmt.Errorf("parsing taskID: %w", err).Error(),
+			Detail: fmt.Errorf("parsing taskGroupID: %w", err).Error(),
+		}
+	}
+
+	taskPositionStr := ctx.QueryParam("taskPosition")
+	taskPosition := 1
+	if taskPositionStr != "" {
+		taskPosition, err = strconv.Atoi(taskPositionStr)
+		if err != nil || taskPosition < 1 {
+			return "", fuego.BadRequestError{
+				Detail: fmt.Errorf("invalid taskPosition: %w", err).Error(),
+			}
 		}
 	}
 
 	participantID := session.UserIDFromContext(ctx.Context())
+
+	// Resolve task ID from taskGroupID + taskPosition
+	task, err := c.taskService.GetTaskByPosition(ctx.Context(), taskGroupID, taskPosition)
+	if err != nil {
+		return "", fuego.BadRequestError{
+			Detail: fmt.Errorf("task not found at position %d: %w", taskPosition, err).Error(),
+		}
+	}
 
 	zipData, err := io.ReadAll(ctx.Request().Body)
 	if err != nil {
@@ -80,7 +101,7 @@ func (c *AttemptController) PushAttempt(ctx fuego.ContextNoBody) (string, error)
 		}
 	}
 
-	commitHash, err := c.attemptService.PushAttempt(courseID, taskID, participantID, zipData)
+	commitHash, err := c.attemptService.PushAttempt(courseID, taskGroupID, task.ID, participantID, zipData)
 	if err != nil {
 		return "", fuego.InternalServerError{Detail: err.Error()}
 	}

@@ -21,10 +21,10 @@ func NewService(repo RepoManager, repo2 Repo) *Service {
 	return &Service{repo, repo2}
 }
 
-func (s *Service) PushAttempt(courseID, taskID, participantID uuid.UUID, zipData []byte) (string, error) {
+func (s *Service) PushAttempt(courseID, taskGroupID, taskID, participantID uuid.UUID, zipData []byte) (string, error) {
 	repoID := git.RepoID{
 		CourseID:      courseID,
-		TaskID:        taskID,
+		TaskGroupID:   taskGroupID,
 		ParticipantID: participantID,
 	}
 
@@ -33,7 +33,7 @@ func (s *Service) PushAttempt(courseID, taskID, participantID uuid.UUID, zipData
 		return "", fmt.Errorf("extract zip: %w", err)
 	}
 
-	return s.RepoManager.PushAttempt(repoID, files)
+	return s.RepoManager.PushAttempt(repoID, taskID, files)
 }
 
 func unzipFiles(data []byte) ([]git.FileInfo, error) {
