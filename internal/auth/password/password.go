@@ -30,7 +30,7 @@ func Hash(password string, salt []byte) []byte {
 		salt,
 		HASH_TIME,
 		HASH_MEMORY,
-		(uint8)(runtime.NumCPU()),
+		uint8(runtime.NumCPU()),
 		HASH_LEN,
 	)
 	return hash
