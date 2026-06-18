@@ -479,6 +479,84 @@ func (s *Service) initRepoWithTemplate(repoID RepoID) error {
 	return nil
 }
 
+func (s *Service) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error {
+	templateName := TemplatePath(taskGroupID)
+	templatePath := filepath.Join(repoDir, templateName+".git")
+
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		if _, err := gogit.PlainInit(templatePath, true); err != nil {
+			return fmt.Errorf("init template repo: %w", err)
+		}
+	}
+
+	tmpDir, err := os.MkdirTemp("", "template-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	repo, err := gogit.PlainClone(tmpDir, &gogit.CloneOptions{
+		URL: templatePath,
+	})
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+			return err
+		}
+
+		repo, err = gogit.PlainInit(tmpDir, false)
+		if err != nil {
+			return fmt.Errorf("init work repo: %w", err)
+		}
+
+		if _, err := repo.CreateRemote(&config.RemoteConfig{
+			Name: "origin",
+			URLs: []string{templatePath},
+		}); err != nil {
+			return fmt.Errorf("create remote: %w", err)
+		}
+	}
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("get worktree: %w", err)
+	}
+
+	for _, f := range files {
+		path := filepath.Join(tmpDir, f.FileName)
+
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return fmt.Errorf("create dirs for %s: %w", f.FileName, err)
+		}
+
+		if err := os.WriteFile(path, f.Content, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", f.FileName, err)
+		}
+
+		if _, err := wt.Add(f.FileName); err != nil {
+			return fmt.Errorf("git add %s: %w", f.FileName, err)
+		}
+	}
+
+	if _, err := wt.Commit("update template", &gogit.CommitOptions{
+		Author: &object.Signature{
+			Name:  "mm-backend",
+			Email: "mm-backend@mergeminds",
+			When:  time.Now(),
+		},
+	}); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	if err := repo.Push(&gogit.PushOptions{
+		RemoteName: "origin",
+	}); err != nil {
+		return fmt.Errorf("push: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Service) GetCourseIDByTaskGroup(taskGroupID uuid.UUID) (uuid.UUID, error) {
 	return s.db.GetCourseIDByTaskGroup(context.Background(), taskGroupID)
 }
