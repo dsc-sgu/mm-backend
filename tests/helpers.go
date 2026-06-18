@@ -34,27 +34,40 @@ func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
 ) (testcontainers.Container, *nat.Port, error) {
+	return initBackendWithEnv(ctx, net, nil)
+}
+
+func initBackendWithEnv(
+	ctx context.Context,
+	net *testcontainers.DockerNetwork,
+	additionalEnv map[string]string,
+) (testcontainers.Container, *nat.Port, error) {
 	basePort := nat.Port("80/tcp")
 
+	env := map[string]string{
+		"HOST":          "0.0.0.0",
+		"HTTP_PORT":     basePort.Port(),
+		"POSTGRES_PORT": "5432",
+		"POSTGRES_HOST": "mm-postgres",
+		"REDIS_HOST":    "mm-redis",
+		"REDIS_PORT":    "6379",
+		"ENABLE_AUTH":   "true",
+	}
+
+	for k, v := range additionalEnv {
+		env[k] = v
+	}
+
 	req := testcontainers.ContainerRequest{
-		Name: "mm-backend",
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:    "..",
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
 		ExposedPorts: []string{string(basePort)},
-		Env: map[string]string{
-			"HOST":          "0.0.0.0",
-			"HTTP_PORT":     basePort.Port(),
-			"POSTGRES_PORT": "5432",
-			"POSTGRES_HOST": "mm-postgres",
-			"REDIS_HOST":    "mm-redis",
-			"REDIS_PORT":    "6379",
-			"ENABLE_AUTH":   "true",
-		},
-		WaitingFor: wait.ForLog("Server running"),
-		Networks:   []string{net.Name},
+		Env:          env,
+		WaitingFor:   wait.ForLog("Server running"),
+		Networks:     []string{net.Name},
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -91,7 +104,6 @@ func initPostgres(
 	fmt.Println(SQLPath)
 
 	req := testcontainers.ContainerRequest{
-		Name:         "mm-postgres",
 		Image:        "postgres:18.1",
 		ExposedPorts: []string{string(pgPort)},
 		Env: map[string]string{
@@ -113,7 +125,8 @@ func initPostgres(
 			wait.ForLog("database system is ready to accept connections"),
 			wait.ForListeningPort(pgPort),
 		),
-		Networks: []string{net.Name},
+		Networks:       []string{net.Name},
+		NetworkAliases: map[string][]string{net.Name: {"mm-postgres"}},
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -141,11 +154,11 @@ func initRedis(
 	redisPort := nat.Port("6379/tcp")
 
 	req := testcontainers.ContainerRequest{
-		Name:         "mm-redis",
-		Image:        "valkey/valkey:8",
-		ExposedPorts: []string{string(redisPort)},
-		WaitingFor:   wait.ForListeningPort(redisPort),
-		Networks:     []string{net.Name},
+		Image:          "valkey/valkey:8",
+		ExposedPorts:   []string{string(redisPort)},
+		WaitingFor:     wait.ForListeningPort(redisPort),
+		Networks:       []string{net.Name},
+		NetworkAliases: map[string][]string{net.Name: {"mm-redis"}},
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -491,7 +504,7 @@ func GetRoleInCourse(
 	return &roleResp.Role
 }
 
-type InitLockResult struct {
+type LockCourseResult struct {
 	InitType        string    `json:"initType"`
 	DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
 }
@@ -501,7 +514,7 @@ func LockCourse(
 	port *nat.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
-) uuid.UUID {
+) LockCourseResult {
 	t.Helper()
 
 	lockURL := fmt.Sprintf(
@@ -525,10 +538,10 @@ func LockCourse(
 
 	require.Equal(t, http.StatusOK, lockResp.StatusCode)
 
-	var lockResult InitLockResult
+	var lockResult LockCourseResult
 	require.NoError(t, json.NewDecoder(lockResp.Body).Decode(&lockResult))
 
 	require.NotEqual(t, uuid.Nil, lockResult.DraftSnapshotID)
 
-	return lockResult.DraftSnapshotID
+	return lockResult
 }
