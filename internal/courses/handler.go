@@ -81,10 +81,22 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
+	var disciplineID uuid.UUID
+	if input.DisciplineID != "" {
+		disciplineID, err = uuid.Parse(input.DisciplineID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid discipline_id")
+		}
+	}
+
 	courseList, err := h.courseService.GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
+		disciplineID,
+		userID,
+		teacherBool,
+		studentBool,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
