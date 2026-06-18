@@ -714,7 +714,10 @@ func MoveBlockAfter(
 
 	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		require.NoError(t, err)
+	}()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
