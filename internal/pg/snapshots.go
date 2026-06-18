@@ -65,7 +65,12 @@ func (r *PGRepo) CreateSnapshot(
 	if err != nil {
 		return nil, fmt.Errorf("tx prepare named statement: %w", err)
 	}
-	defer stmt.Close()
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			zap.L().
+				Error("failed to close statement", zap.Error(err))
+		}
+	}()
 
 	var newID uuid.UUID
 	err = stmt.GetContext(ctx, &newID, snapshot)
