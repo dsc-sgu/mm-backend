@@ -29,14 +29,22 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 	if err != nil {
 		t.Fatal("create network:", err)
 	}
-	defer net.Remove(ctx)
+	defer func() {
+		if err := net.Remove(ctx); err != nil {
+			t.Logf("Failed to remove network: %v", err)
+		}
+	}()
 
 	// Setup Postgres
 	pgContainer, pgPort, err := initPostgres(ctx, net)
 	if err != nil {
 		t.Fatal("start postgres:", err)
 	}
-	defer pgContainer.Terminate(ctx)
+	defer func() {
+		if err := pgContainer.Terminate(ctx); err != nil {
+			t.Logf("Failed to terminate postgres container: %v", err)
+		}
+	}()
 	dsn := fmt.Sprintf(
 		"host=127.0.0.1 port=%s user=postgres password=postgres dbname=postgres sslmode=disable",
 		pgPort.Port(),
@@ -48,43 +56,96 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 	if err := pgDB.PingContext(ctx); err != nil {
 		log.Fatal("ping postgres:", err)
 	}
-	defer pgDB.Close()
+	defer func() {
+		if err := pgDB.Close(); err != nil {
+			t.Logf("Failed to close postgres connection: %v", err)
+		}
+	}()
 
 	// Setup Redis
 	redisContainer, redisPort, err := initRedis(ctx, net)
 	if err != nil {
 		t.Fatal("start redis:", err)
 	}
-	defer redisContainer.Terminate(ctx)
+	defer func() {
+		if err := redisContainer.Terminate(ctx); err != nil {
+			t.Logf("Failed to terminate redis container: %v", err)
+		}
+	}()
 	redisAddr := fmt.Sprintf("127.0.0.1:%s", redisPort.Port())
 	redisDB := redis.NewClient(&redis.Options{Addr: redisAddr})
 	if err := redisDB.Ping(ctx).Err(); err != nil {
 		log.Fatal("ping redis:", err)
 	}
-	defer redisDB.Close()
+	defer func() {
+		if err := redisDB.Close(); err != nil {
+			t.Logf("Failed to close redis connection: %v", err)
+		}
+	}()
 
 	// Setup Backend with short lock TTL
 	backendEnv := map[string]string{"COURSE_LOCK_TTL_SECONDS": "2"}
-	backendContainer, backendPort, err := initBackendWithEnv(ctx, net, backendEnv)
+	backendContainer, backendPort, err := initBackendWithEnv(
+		ctx,
+		net,
+		backendEnv,
+	)
 	if err != nil {
 		t.Fatal("start backend:", err)
 	}
-	defer backendContainer.Terminate(ctx)
+	defer func() {
+		if err := backendContainer.Terminate(ctx); err != nil {
+			t.Logf("Failed to terminate backend container: %v", err)
+		}
+	}()
 
 	// --- Test Scenario ---
 
 	// 1. Create two teachers and a course
-	userA := CreateAndLoginUser(t, backendPort, "User", "A", "user-a", "a@test.com", "password")
-	userB := CreateAndLoginUser(t, backendPort, "User", "B", "user-b", "b@test.com", "password")
-	disciplineID := CreateTestDiscipline(t, backendPort, &userA, "Optimistic Lock Discipline")
-	courseID := CreateTestCourse(t, backendPort, &userA, disciplineID, "Optimistic Lock Course")
+	userA := CreateAndLoginUser(
+		t,
+		backendPort,
+		"User",
+		"A",
+		"user-a",
+		"a@test.com",
+		"password",
+	)
+	userB := CreateAndLoginUser(
+		t,
+		backendPort,
+		"User",
+		"B",
+		"user-b",
+		"b@test.com",
+		"password",
+	)
+	disciplineID := CreateTestDiscipline(
+		t,
+		backendPort,
+		&userA,
+		"Optimistic Lock Discipline",
+	)
+	courseID := CreateTestCourse(
+		t,
+		backendPort,
+		&userA,
+		disciplineID,
+		"Optimistic Lock Course",
+	)
 
 	// 2. Add User B as a teacher to the course
 	{
 		// This is a simplified version of the invite logic from the other test file.
 		// In a real project, this would be a shared helper.
 		// For this isolated test, it is duplicated.
-		inviteRes, err := createInvite(t, backendPort, &userA, courseID, courses.TeacherRole)
+		inviteRes, err := createInvite(
+			t,
+			backendPort,
+			&userA,
+			courseID,
+			courses.TeacherRole,
+		)
 		require.NoError(t, err)
 		err = joinCourse(t, backendPort, &userB, inviteRes.ID)
 		require.NoError(t, err)
@@ -108,7 +169,13 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 
 	// 6. User B makes a change and publishes successfully.
 	CreateTestBlock(t, backendPort, &userB, userBDraftID)
-	publishStatusCode := PublishDraft(t, backendPort, &userB, courseID, userBDraftID)
+	publishStatusCode := PublishDraft(
+		t,
+		backendPort,
+		&userB,
+		courseID,
+		userBDraftID,
+	)
 	require.Equal(t, http.StatusNoContent, publishStatusCode)
 	t.Log("User B published successfully, incrementing course version.")
 
@@ -122,17 +189,42 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 	// 8. User A ignores the warning and tries to publish their stale draft anyway.
 	// This must fail with a 409 Conflict because the course version has changed.
 	t.Log("User A is attempting to publish stale draft...")
-	finalPublishStatusCode := PublishDraft(t, backendPort, &userA, courseID, userADraftID)
+	finalPublishStatusCode := PublishDraft(
+		t,
+		backendPort,
+		&userA,
+		courseID,
+		userADraftID,
+	)
 	require.Equal(t, http.StatusConflict, finalPublishStatusCode)
 	t.Log("User A's publish failed with 409 Conflict as expected.")
 }
 
 // Minimal helpers for this isolated test to avoid circular dependencies if moved.
-func createInvite(t *testing.T, port *nat.Port, user *TestUser, courseID uuid.UUID, role courses.CourseMemberRole) (courses.Invite, error) {
-	inviteURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/course-invites", port.Port())
+func createInvite(
+	t *testing.T,
+	port *nat.Port,
+	user *TestUser,
+	courseID uuid.UUID,
+	role courses.CourseMemberRole,
+) (courses.Invite, error) {
+	inviteURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/course-invites",
+		port.Port(),
+	)
 	expiresAt := time.Now().Add(24 * time.Hour)
-	inviteBody, _ := json.Marshal(courses.CreateInvite{CourseID: courseID, ProvidedRole: role, ExpiresAt: &expiresAt})
-	req, err := http.NewRequest(http.MethodPost, inviteURL, bytes.NewBuffer(inviteBody))
+	inviteBody, _ := json.Marshal(
+		courses.CreateInvite{
+			CourseID:     courseID,
+			ProvidedRole: role,
+			ExpiresAt:    &expiresAt,
+		},
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		inviteURL,
+		bytes.NewBuffer(inviteBody),
+	)
 	if err != nil {
 		return courses.Invite{}, err
 	}
@@ -144,15 +236,28 @@ func createInvite(t *testing.T, port *nat.Port, user *TestUser, courseID uuid.UU
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		return courses.Invite{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return courses.Invite{}, fmt.Errorf(
+			"unexpected status code: %d",
+			resp.StatusCode,
+		)
 	}
 
 	var invite courses.Invite
 	err = json.NewDecoder(resp.Body).Decode(&invite)
 	return invite, err
 }
-func joinCourse(t *testing.T, port *nat.Port, user *TestUser, inviteID uuid.UUID) error {
-	joinURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/course-invites/%s", port.Port(), inviteID)
+
+func joinCourse(
+	t *testing.T,
+	port *nat.Port,
+	user *TestUser,
+	inviteID uuid.UUID,
+) error {
+	joinURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/course-invites/%s",
+		port.Port(),
+		inviteID,
+	)
 	req, err := http.NewRequest(http.MethodPost, joinURL, nil)
 	if err != nil {
 		return err
@@ -168,4 +273,3 @@ func joinCourse(t *testing.T, port *nat.Port, user *TestUser, inviteID uuid.UUID
 	}
 	return nil
 }
-
