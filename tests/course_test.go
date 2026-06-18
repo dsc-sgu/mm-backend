@@ -18,7 +18,7 @@ import (
 func TestCreateCourse(t *testing.T) {
 	clearDatabases(t)
 
-	userID := CreateTestUser(
+	testUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name",
@@ -27,12 +27,12 @@ func TestCreateCourse(t *testing.T) {
 		"test@email.com",
 		"password",
 	)
-	require.NotZero(t, userID)
+	require.NotZero(t, testUser.ID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline",
 	)
 	require.NotZero(t, disciplineID)
@@ -40,7 +40,7 @@ func TestCreateCourse(t *testing.T) {
 	courseID := CreateTestCourse(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		disciplineID,
 		"Test Course",
 	)
@@ -50,7 +50,7 @@ func TestCreateCourse(t *testing.T) {
 func TestGetCourseByID(t *testing.T) {
 	clearDatabases(t)
 
-	userID := CreateTestUser(
+	testUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name",
@@ -59,12 +59,12 @@ func TestGetCourseByID(t *testing.T) {
 		"test@email.com",
 		"password",
 	)
-	require.NotZero(t, userID)
+	require.NotZero(t, testUser.ID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline",
 	)
 	require.NotZero(t, disciplineID)
@@ -72,23 +72,22 @@ func TestGetCourseByID(t *testing.T) {
 	courseID := CreateTestCourse(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		disciplineID,
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s",
 		backendPort.Port(),
 		courseID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -105,12 +104,14 @@ func TestGetCourseByID(t *testing.T) {
 	require.Equal(t, courseID, recievedCourse.ID)
 	require.Equal(t, "Test Course", recievedCourse.Name)
 	require.Equal(t, disciplineID, recievedCourse.DisciplineID)
+	require.NotNil(t, recievedCourse.ActiveSnapshotID)
+	require.Equal(t, 1, recievedCourse.Version)
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
 	clearDatabases(t)
 
-	userID := CreateTestUser(
+	testUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name",
@@ -119,12 +120,12 @@ func TestGetPaginatedCourse(t *testing.T) {
 		"test@email.com",
 		"password",
 	)
-	require.NotZero(t, userID)
+	require.NotZero(t, testUser.ID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline",
 	)
 	require.NotZero(t, disciplineID)
@@ -133,7 +134,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 		id := CreateTestCourse(
 			t,
 			&backendPort,
-			userID,
+			&testUser,
 			disciplineID,
 			fmt.Sprintf("Course %d", i),
 		)
@@ -144,17 +145,16 @@ func TestGetPaginatedCourse(t *testing.T) {
 	lastID := uuid.Nil
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s",
 		backendPort.Port(),
 		limit,
 		lastID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -177,7 +177,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 func TestUpdateCourse(t *testing.T) {
 	clearDatabases(t)
 
-	userID := CreateTestUser(
+	testUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name",
@@ -186,12 +186,12 @@ func TestUpdateCourse(t *testing.T) {
 		"test@email.com",
 		"password",
 	)
-	require.NotZero(t, userID)
+	require.NotZero(t, testUser.ID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline",
 	)
 	require.NotZero(t, disciplineID)
@@ -199,21 +199,20 @@ func TestUpdateCourse(t *testing.T) {
 	courseID := CreateTestCourse(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		disciplineID,
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s",
 		backendPort.Port(),
 		courseID,
-		userID,
 	)
 
 	body, _ := json.Marshal(courses.UpdateCourse{
-		OwnerID: userID,
+		OwnerID: testUser.ID,
 		Name:    "Updated Test Course",
 	})
 
@@ -225,7 +224,7 @@ func TestUpdateCourse(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -242,13 +241,15 @@ func TestUpdateCourse(t *testing.T) {
 	require.Equal(t, courseID, updatedCourse.ID)
 	require.Equal(t, "Updated Test Course", updatedCourse.Name)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
+	require.NotNil(t, updatedCourse.ActiveSnapshotID)
+	require.Equal(t, 1, updatedCourse.Version)
 }
 
 func TestCourseInviteWorkflow(t *testing.T) {
 	clearDatabases(t)
 
 	// Create a teacher user and a student user
-	teacherUser := CreateTestUser(
+	teacherTestUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Teacher",
@@ -257,7 +258,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		"teacher@test.com",
 		"password",
 	)
-	studentUser := CreateTestUser(
+	studentTestUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Student",
@@ -269,7 +270,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		teacherUser,
+		&teacherTestUser,
 		"Test Discipline",
 	)
 
@@ -277,13 +278,13 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	courseID := CreateTestCourse(
 		t,
 		&backendPort,
-		teacherUser,
+		&teacherTestUser,
 		disciplineID,
 		"Test Course",
 	)
 
 	// Verify that the course creator is automatically set as a teacher
-	role := GetRoleInCourse(t, &backendPort, teacherUser, courseID)
+	role := GetRoleInCourse(t, &backendPort, &teacherTestUser, courseID)
 	require.NotNil(t, role, "Course creator should have a role")
 	require.Equal(
 		t,
@@ -298,14 +299,14 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	// Run sub-tests for the invite workflow
 	t.Run("Fail to create invite as non-teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/courses/invites?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/course-invites",
 			backendPort.Port(),
-			studentUser,
 		)
+		expiresAt := time.Now().Add(24 * time.Hour)
 		inviteBody, _ := json.Marshal(courses.CreateInvite{
 			CourseID:     courseID,
 			ProvidedRole: courses.StudentRole,
-			ExpiresAt:    time.Now().Add(24 * time.Hour),
+			ExpiresAt:    &expiresAt,
 		})
 
 		req, err := http.NewRequest(
@@ -316,7 +317,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := studentTestUser.Client.Do(req)
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -324,19 +325,19 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			}
 		}()
 
-		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 
 	t.Run("Successfully create invite as teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/courses/invites?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/course-invites",
 			backendPort.Port(),
-			teacherUser,
 		)
+		expiresAt := time.Now().Add(24 * time.Hour)
 		inviteBody, _ := json.Marshal(courses.CreateInvite{
 			CourseID:     courseID,
 			ProvidedRole: courses.StudentRole,
-			ExpiresAt:    time.Now().Add(24 * time.Hour),
+			ExpiresAt:    &expiresAt,
 		})
 
 		req, err := http.NewRequest(
@@ -347,7 +348,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := teacherTestUser.Client.Do(req)
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -368,16 +369,15 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		detailsURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/course-invites/%s",
 			backendPort.Port(),
 			inviteID,
-			studentUser,
 		)
 
 		req, err := http.NewRequest(http.MethodGet, detailsURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := studentTestUser.Client.Do(req) // Any authenticated user can get invite details
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -400,16 +400,15 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/course-invites/%s",
 			backendPort.Port(),
 			inviteID,
-			studentUser,
 		)
 
 		req, err := http.NewRequest(http.MethodPost, joinURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := studentTestUser.Client.Do(req)
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -420,7 +419,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Verify new role
-		studentRole := GetRoleInCourse(t, &backendPort, studentUser, courseID)
+		studentRole := GetRoleInCourse(t, &backendPort, &studentTestUser, courseID)
 		require.NotNil(
 			t,
 			studentRole,
@@ -436,16 +435,15 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/courses/invites/%s?fake_user_id=%s",
+			"http://127.0.0.1:%s/api/v1/course-invites/%s",
 			backendPort.Port(),
 			inviteID,
-			studentUser,
 		)
 
 		req, err := http.NewRequest(http.MethodPost, joinURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := studentTestUser.Client.Do(req)
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
