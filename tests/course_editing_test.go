@@ -249,7 +249,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 
 	t.Run("1. Lock course and verify draft creation", func(t *testing.T) {
 		// A teacher can lock a course to start editing.
-		draftSnapshotID = LockCourse(t, &backendPort, &teacher, courseID)
+		draftSnapshotID = LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		require.NotZero(t, draftSnapshotID)
 
 		// The new draft should contain a copy of the active snapshot's blocks (which is none).
@@ -350,7 +350,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		require.Equal(t, json.RawMessage(`{"text":"updated content"}`), studentContent.Blocks[0].Data)
 
 		// Verify the lock is released and can be re-acquired.
-		reLockDraftID := LockCourse(t, &backendPort, &teacher, courseID)
+		reLockDraftID := LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		require.NotZero(t, reLockDraftID)
 		require.NotEqual(t, draftSnapshotID, reLockDraftID) // Should be a new draft.
 
@@ -360,7 +360,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 
 	t.Run("Cancel Edit Workflow", func(t *testing.T) {
 		// Lock the course to create a draft.
-		draftToCancel := LockCourse(t, &backendPort, &teacher, courseID)
+		draftToCancel := LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		CreateTestBlock(t, &backendPort, &teacher, draftToCancel) // Add a block to it.
 
 		// Get the active course content before canceling.
@@ -376,14 +376,14 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		require.Len(t, contentAfter.Blocks, len(contentBefore.Blocks))
 
 		// Verify the lock is released.
-		reLockDraftID := LockCourse(t, &backendPort, &teacher, courseID)
+		reLockDraftID := LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		require.NotZero(t, reLockDraftID)
 		CancelEdit(t, &backendPort, &teacher, courseID) // Cleanup.
 	})
 
 	t.Run("Snapshot Timeline and Switch Workflow", func(t *testing.T) {
 		// Publish one more version to have a history.
-		draftV2 := LockCourse(t, &backendPort, &teacher, courseID)
+		draftV2 := LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		CreateTestBlock(t, &backendPort, &teacher, draftV2)
 		PublishDraft(t, &backendPort, &teacher, courseID, draftV2)
 
@@ -404,7 +404,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		require.NotZero(t, firstSnapshot.ID)
 
 		// Lock the course and switch the draft to the first version.
-		currentDraft := LockCourse(t, &backendPort, &teacher, courseID)
+		currentDraft := LockCourse(t, &backendPort, &teacher, courseID).DraftSnapshotID
 		statusCode := SwitchSnapshot(t, &backendPort, &teacher, courseID, firstSnapshot.ID)
 		require.Equal(t, http.StatusNoContent, statusCode)
 
@@ -418,7 +418,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		conflictCourseID := CreateTestCourse(t, &backendPort, &teacher, disciplineID, "Conflict Course")
 
 		// 2. User A locks the course and gets a draft.
-		userADraft := LockCourse(t, &backendPort, &teacher, conflictCourseID)
+		userADraft := LockCourse(t, &backendPort, &teacher, conflictCourseID).DraftSnapshotID
 		CreateTestBlock(t, &backendPort, &teacher, userADraft) // User A makes a change.
 
 		// 3. User B (otherTeacher) also needs to be a teacher on this new course.
@@ -449,7 +449,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		CancelEdit(t, &backendPort, &teacher, conflictCourseID)
 
 		// 5. User B now acquires the lock, makes a change, and publishes successfully.
-		userBDraft := LockCourse(t, &backendPort, &otherTeacher, conflictCourseID)
+		userBDraft := LockCourse(t, &backendPort, &otherTeacher, conflictCourseID).DraftSnapshotID
 		CreateTestBlock(t, &backendPort, &otherTeacher, userBDraft)
 		publishStatusCode := PublishDraft(t, &backendPort, &otherTeacher, conflictCourseID, userBDraft)
 		require.Equal(t, http.StatusNoContent, publishStatusCode) // B's publish should succeed.

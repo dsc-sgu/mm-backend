@@ -49,7 +49,7 @@ func TestCreateBlock(t *testing.T) {
 		&backendPort,
 		&testUser,
 		courseID,
-	)
+	).DraftSnapshotID
 	require.NotZero(t, draftSnapshotID)
 
 	blockID := CreateTestBlock(
@@ -97,7 +97,7 @@ func TestGetBlockByID(t *testing.T) {
 		&backendPort,
 		&testUser,
 		courseID,
-	)
+	).DraftSnapshotID
 	require.NotZero(t, draftSnapshotID)
 
 	blockID := CreateTestBlock(
@@ -217,7 +217,7 @@ func TestDeleteBlock(t *testing.T) {
 		&backendPort,
 		&testUser,
 		courseID,
-	)
+	).DraftSnapshotID
 	require.NotZero(t, draftSnapshotID)
 
 	// Create two blocks
