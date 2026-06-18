@@ -5,14 +5,17 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/git"
 )
 
 type Service struct {
 	Repo
+	gitRepo git.Repo
 }
 
-func NewService(repo Repo) *Service {
-	return &Service{repo}
+func NewService(repo Repo, gitRepo git.Repo) *Service {
+	return &Service{repo, gitRepo}
 }
 
 func (s *Service) CreateTaskGroup(ctx context.Context, blockID uuid.UUID, model *CreateTaskGroup) (*TaskGroup, error) {
@@ -74,6 +77,23 @@ func (s *Service) DeleteTask(ctx context.Context, taskID uuid.UUID) error {
 
 func (s *Service) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error) {
 	return s.Repo.GetTaskCount(ctx, taskGroupID)
+}
+
+func (s *Service) UploadTemplate(ctx context.Context, blockID uuid.UUID, zipData []byte) error {
+	tg, err := s.Repo.GetTaskGroupByBlockID(ctx, blockID)
+	if err != nil {
+		return err
+	}
+	if tg == nil {
+		return errors.New("task group not found")
+	}
+
+	files, err := git.UnzipFiles(zipData)
+	if err != nil {
+		return err
+	}
+
+	return s.gitRepo.UpdateTemplate(tg.BlockID, files)
 }
 
 func (s *Service) HasSubmittedAttempt(

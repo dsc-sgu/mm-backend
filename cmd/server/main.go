@@ -170,7 +170,7 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
-	taskService := tasks.NewService(pgRepo)
+	taskService := tasks.NewService(pgRepo, gitService)
 	attemptService := attempt.NewService(gitService, pgRepo)
 
 	attemptHandler := attempt.NewHandler(attemptService, taskService)

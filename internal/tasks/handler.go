@@ -142,16 +142,12 @@ func (h *Handler) UploadTemplate(ctx context.Context, input *UploadTemplateInput
 		return nil, huma.Error400BadRequest("parsing block_id: " + err.Error())
 	}
 
-	tg, err := h.taskSvc.GetTaskGroupByBlockID(ctx, blockID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	if tg == nil {
-		return nil, huma.Error404NotFound("task group not found")
-	}
-
 	if len(input.RawBody) == 0 {
 		return nil, huma.Error400BadRequest("empty body")
+	}
+
+	if err := h.taskSvc.UploadTemplate(ctx, blockID, input.RawBody); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
 	return nil, nil
