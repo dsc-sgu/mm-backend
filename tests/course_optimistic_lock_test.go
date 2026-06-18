@@ -233,7 +233,10 @@ func createInvite(
 	if err != nil {
 		return courses.Invite{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		require.NoError(t, err)
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
 		return courses.Invite{}, fmt.Errorf(
@@ -266,7 +269,10 @@ func joinCourse(
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		err := resp.Body.Close()
+		require.NoError(t, err)
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
