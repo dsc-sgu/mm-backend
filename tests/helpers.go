@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"net/http/cookiejar"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,13 +20,20 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	mmgit "github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
+
+type TestUser struct {
+	ID        uuid.UUID
+	Client    *http.Client
+	SessionID uuid.UUID
+}
 
 // Helper functions for tests
 func initBackend(
@@ -50,7 +58,7 @@ func initBackend(
 			"POSTGRES_HOST": "mm-postgres",
 			"REDIS_HOST":    "mm-redis",
 			"REDIS_PORT":    "6379",
-			"ENABLE_AUTH":   "false",
+			"ENABLE_AUTH":   "true",
 		},
 		WaitingFor: wait.ForAll(
 			wait.ForLog("Server running"),
@@ -180,14 +188,16 @@ func clearPostgres(t *testing.T) {
 
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE
-			users,
-			disciplines,
+			course_locks,
+			course_snapshots,
+			blocks,
 			courses,
 			course_members,
+			users,
+			disciplines,
 			students,
 			teachers,
-			invites,
-			blocks
+			invites
 		RESTART IDENTITY CASCADE;
 	`)
 	require.NoError(t, err)
@@ -250,18 +260,91 @@ func CreateTestUser(
 	return createdUser.ID
 }
 
+func LoginUser(
+	t *testing.T,
+	port *nat.Port,
+	email, password string,
+) TestUser {
+	t.Helper()
+
+	loginURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/auth/login",
+		port.Port(),
+	)
+
+	loginBody, _ := json.Marshal(users.LoginUser{
+		Email:    email,
+		Password: password,
+	})
+
+	loginReq, err := http.NewRequest(
+		http.MethodPost,
+		loginURL,
+		bytes.NewBuffer(loginBody),
+	)
+	require.NoError(t, err)
+	loginReq.Header.Set("Content-Type", "application/json")
+
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	client := &http.Client{Jar: jar}
+
+	loginResp, err := client.Do(loginReq)
+	require.NoError(t, err)
+	defer func() {
+		err := loginResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, loginResp.StatusCode)
+
+	var loginResponse users.LoginResponse
+	require.NoError(t, json.NewDecoder(loginResp.Body).Decode(&loginResponse))
+
+	var sessionID uuid.UUID
+	for _, cookie := range loginResp.Cookies() {
+		if cookie.Name == session.CookieName {
+			sessionID, err = uuid.Parse(cookie.Value)
+			require.NoError(t, err)
+			break
+		}
+	}
+
+	require.NotEqual(t, uuid.Nil, sessionID)
+
+	return TestUser{
+		ID:        loginResponse.UserID,
+		Client:    client,
+		SessionID: sessionID,
+	}
+}
+
+func CreateAndLoginUser(
+	t *testing.T,
+	port *nat.Port,
+	firstName, lastName, username, email, password string,
+) TestUser {
+	t.Helper()
+
+	userID := CreateTestUser(t, port, firstName, lastName, username, email, password)
+	testUser := LoginUser(t, port, email, password)
+	require.Equal(t, userID, testUser.ID)
+
+	return testUser
+}
+
 func CreateTestDiscipline(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
+	testUser *TestUser,
 	name string,
 ) uuid.UUID {
 	t.Helper()
 
 	disciplineURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/disciplines?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/disciplines",
 		port.Port(),
-		userID,
 	)
 
 	disciplineBody, _ := json.Marshal(disciplines.CreateDiscipline{
@@ -276,7 +359,7 @@ func CreateTestDiscipline(
 	require.NoError(t, err)
 	disciplineReq.Header.Set("Content-Type", "application/json")
 
-	disciplineResp, err := http.DefaultClient.Do(disciplineReq)
+	disciplineResp, err := testUser.Client.Do(disciplineReq)
 	require.NoError(t, err)
 	defer func() {
 		err := disciplineResp.Body.Close()
@@ -299,7 +382,7 @@ func CreateTestDiscipline(
 func CreateTestCourse(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
+	testUser *TestUser,
 	disciplineID uuid.UUID,
 	name string,
 	displayName string,
@@ -307,9 +390,8 @@ func CreateTestCourse(
 	t.Helper()
 
 	courseURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses",
 		port.Port(),
-		userID,
 	)
 
 	courseBody, _ := json.Marshal(courses.CreateCourse{
@@ -326,7 +408,7 @@ func CreateTestCourse(
 	require.NoError(t, err)
 	courseReq.Header.Set("Content-Type", "application/json")
 
-	courseResp, err := http.DefaultClient.Do(courseReq)
+	courseResp, err := testUser.Client.Do(courseReq)
 	require.NoError(t, err)
 	defer func() {
 		err := courseResp.Body.Close()
@@ -346,21 +428,19 @@ func CreateTestCourse(
 func CreateTestBlock(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
-	courseID uuid.UUID,
+	testUser *TestUser,
+	snapshotID uuid.UUID,
 ) uuid.UUID {
 	t.Helper()
 
 	blockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/blocks/%s/blocks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks",
 		port.Port(),
-		courseID,
-		userID,
+		snapshotID,
 	)
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
-		CourseID:  courseID,
-		BlockType: "text",
+		BlockType: "test",
 		Data:      []byte("true"),
 	})
 	require.NoError(t, err)
@@ -374,7 +454,7 @@ func CreateTestBlock(
 
 	blockReq.Header.Set("Content-Type", "application/json")
 
-	blockResp, err := http.DefaultClient.Do(blockReq)
+	blockResp, err := testUser.Client.Do(blockReq)
 	require.NoError(t, err)
 	defer func() {
 		err := blockResp.Body.Close()
@@ -576,20 +656,20 @@ func runGitCommand(t *testing.T, dir string, identity sshIdentity, args ...strin
 func GetRoleInCourse(
 	t *testing.T,
 	port *nat.Port,
-	userID, courseID uuid.UUID,
+	testUser *TestUser,
+	courseID uuid.UUID,
 ) *courses.CourseMemberRole {
 	t.Helper()
 
 	roleURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/roles/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/course-roles/%s",
 		port.Port(),
 		courseID,
-		userID,
 	)
 	roleReq, err := http.NewRequest(http.MethodGet, roleURL, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(roleReq)
+	resp, err := testUser.Client.Do(roleReq)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -609,4 +689,46 @@ func GetRoleInCourse(
 	require.NoError(t, err)
 
 	return &roleResp.Role
+}
+
+type InitLockResult struct {
+	InitType        string    `json:"initType"`
+	DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
+}
+
+func LockCourse(
+	t *testing.T,
+	port *nat.Port,
+	testUser *TestUser,
+	courseID uuid.UUID,
+) uuid.UUID {
+	t.Helper()
+
+	lockURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/lock",
+		port.Port(),
+		courseID,
+	)
+
+	lockReq, err := http.NewRequest(http.MethodPost, lockURL, nil)
+	require.NoError(t, err)
+	lockReq.Header.Set("Content-Type", "application/json")
+
+	lockResp, err := testUser.Client.Do(lockReq)
+	require.NoError(t, err)
+	defer func() {
+		err := lockResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, lockResp.StatusCode)
+
+	var lockResult InitLockResult
+	require.NoError(t, json.NewDecoder(lockResp.Body).Decode(&lockResult))
+
+	require.NotEqual(t, uuid.Nil, lockResult.DraftSnapshotID)
+
+	return lockResult.DraftSnapshotID
 }
