@@ -35,4 +35,5 @@ type Repo interface {
 	RepoRename(original string, pk gossh.PublicKey) (string, error)
 	GetRepoID(path string, fingerprint string) (RepoID, error)
 	PushAttempt(repoID RepoID, taskID uuid.UUID, files []FileInfo) (string, error)
+	UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error
 }

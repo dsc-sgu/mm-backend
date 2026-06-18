@@ -1,10 +1,13 @@
 package git
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,4 +67,38 @@ type AttemptCommitInfo struct {
 	CommitHash  string
 	CourseID    uuid.UUID
 	TaskGroupID uuid.UUID
+}
+
+func UnzipFiles(data []byte) ([]FileInfo, error) {
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+
+	var files []FileInfo
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", f.Name, err)
+		}
+
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", f.Name, err)
+		}
+
+		files = append(files, FileInfo{
+			FileName:   f.Name,
+			FileSize:   int64(len(content)),
+			UploadedAt: time.Now(),
+			Content:    content,
+		})
+	}
+
+	return files, nil
 }
