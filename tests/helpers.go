@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"path/filepath"
@@ -16,9 +17,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 )
@@ -54,9 +55,7 @@ func initBackendWithEnv(
 		"ENABLE_AUTH":   "true",
 	}
 
-	for k, v := range additionalEnv {
-		env[k] = v
-	}
+	maps.Copy(env, additionalEnv)
 
 	req := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
@@ -134,7 +133,8 @@ func initPostgres(
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
 			Started:          true,
-		})
+		},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -220,7 +220,8 @@ func CreateTestUser(
 ) uuid.UUID {
 	t.Helper()
 
-	userURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/auth/register",
+	userURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/auth/register",
 		port.Port(),
 	)
 
@@ -264,7 +265,8 @@ func LoginUser(
 ) TestUser {
 	t.Helper()
 
-	loginURL := fmt.Sprintf("http://127.0.0.1:%s/api/v1/auth/login",
+	loginURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/auth/login",
 		port.Port(),
 	)
 
@@ -324,7 +326,15 @@ func CreateAndLoginUser(
 ) TestUser {
 	t.Helper()
 
-	userID := CreateTestUser(t, port, firstName, lastName, username, email, password)
+	userID := CreateTestUser(
+		t,
+		port,
+		firstName,
+		lastName,
+		username,
+		email,
+		password,
+	)
 	testUser := LoginUser(t, port, email, password)
 	require.Equal(t, userID, testUser.ID)
 
@@ -426,6 +436,16 @@ func CreateTestBlock(
 	testUser *TestUser,
 	snapshotID uuid.UUID,
 ) uuid.UUID {
+	return CreateTestBlockAfter(t, port, testUser, snapshotID, nil)
+}
+
+func CreateTestBlockAfter(
+	t *testing.T,
+	port *nat.Port,
+	testUser *TestUser,
+	snapshotID uuid.UUID,
+	afterBlockID *uuid.UUID,
+) uuid.UUID {
 	t.Helper()
 
 	blockURL := fmt.Sprintf(
@@ -435,8 +455,9 @@ func CreateTestBlock(
 	)
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
-		BlockType: "test",
-		Data:      []byte("true"),
+		AfterBlockID: afterBlockID,
+		BlockType:    "test",
+		Data:         []byte("true"),
 	})
 	require.NoError(t, err)
 
@@ -464,6 +485,84 @@ func CreateTestBlock(
 	require.NoError(t, json.NewDecoder(blockResp.Body).Decode(&createdBlock))
 
 	return createdBlock.ID
+}
+
+func MoveBlockAfter(
+	t *testing.T,
+	port *nat.Port,
+	testUser *TestUser,
+	snapshotID, blockToMoveID uuid.UUID,
+	afterBlockID *uuid.UUID,
+) {
+	t.Helper()
+
+	moveURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks/%s/move",
+		port.Port(),
+		snapshotID,
+		blockToMoveID,
+	)
+
+	body, _ := json.Marshal(struct {
+		AfterBlockID *uuid.UUID `json:"afterBlockId"`
+	}{
+		AfterBlockID: afterBlockID,
+	})
+
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		moveURL,
+		bytes.NewBuffer(body),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func GetBlockByID(
+	t *testing.T,
+	port *nat.Port,
+	testUser *TestUser,
+	blockID uuid.UUID,
+) blocks.Block {
+	t.Helper()
+
+	getBlockURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/blocks/%s",
+		port.Port(),
+		blockID,
+	)
+
+	getBlockReq, err := http.NewRequest(
+		http.MethodGet,
+		getBlockURL,
+		nil,
+	)
+	require.NoError(t, err)
+
+	getBlockResp, err := testUser.Client.Do(getBlockReq)
+	require.NoError(t, err)
+
+	defer func() {
+		err := getBlockResp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, getBlockResp.StatusCode)
+
+	var returnedBlock blocks.Block
+	require.NoError(
+		t,
+		json.NewDecoder(getBlockResp.Body).Decode(&returnedBlock),
+	)
+
+	return returnedBlock
 }
 
 func GetRoleInCourse(
