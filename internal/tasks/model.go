@@ -36,9 +36,9 @@ type UpdateTaskGroup struct {
 
 type CreateTask struct {
 	TaskGroupID uuid.UUID       `json:"taskGroupID,omitempty" db:"task_group_id"`
-	Data        json.RawMessage `json:"data"                           binding:"required" swaggertype:"object"`
-	MaxGrade    float32         `json:"maxGrade"                       binding:"required"`
-	MaxAttempts int             `json:"maxAttempts"                    binding:"required"`
+	Data        json.RawMessage `json:"data"                                     binding:"required" swaggertype:"object"`
+	MaxGrade    float32         `json:"maxGrade"                                 binding:"required"`
+	MaxAttempts int             `json:"maxAttempts"                              binding:"required"`
 	AvailableAt *time.Time      `json:"availableAt,omitempty"`
 	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 	LeadTime    *time.Time      `json:"leadTime,omitempty"`

@@ -218,9 +218,9 @@ func setupAttemptRoutes(api huma.API, ah *attempt.Handler) {
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/attempts",
-		Summary: "Push attempt via zip upload",
+		Summary:       "Push attempt via zip upload",
 		DefaultStatus: http.StatusCreated,
-		Tags: []string{"Attempt"},
+		Tags:          []string{"Attempt"},
 	}, ah.PushAttempt)
 }
 
@@ -251,9 +251,9 @@ func setupTaskRoutes(api huma.API, th *tasks.Handler) {
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/tasks/{block_id}/template",
-		Summary: "Upload template zip",
+		Summary:       "Upload template zip",
 		DefaultStatus: http.StatusAccepted,
-		Tags: []string{"Task"},
+		Tags:          []string{"Task"},
 	}, th.UploadTemplate)
 
 	huma.Register(api, huma.Operation{
@@ -264,9 +264,9 @@ func setupTaskRoutes(api huma.API, th *tasks.Handler) {
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/tasks/{block_id}/tasks",
-		Summary: "Create a new task within a group",
+		Summary:       "Create a new task within a group",
 		DefaultStatus: http.StatusCreated,
-		Tags: []string{"Task"},
+		Tags:          []string{"Task"},
 	}, th.CreateTask)
 
 	huma.Register(api, huma.Operation{
@@ -277,8 +277,8 @@ func setupTaskRoutes(api huma.API, th *tasks.Handler) {
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodDelete, Path: "/tasks/{block_id}/tasks/{task_id}",
-		Summary: "Delete a task from a group",
+		Summary:       "Delete a task from a group",
 		DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Task"},
+		Tags:          []string{"Task"},
 	}, th.DeleteTask)
 }

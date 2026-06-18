@@ -107,7 +107,15 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
-	courseList, err := h.courseService.GetPaginatedCourses(ctx, input.Limit, lastID, disciplineID, userID, teacherBool, studentBool)
+	courseList, err := h.courseService.GetPaginatedCourses(
+		ctx,
+		input.Limit,
+		lastID,
+		disciplineID,
+		userID,
+		teacherBool,
+		studentBool,
+	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
