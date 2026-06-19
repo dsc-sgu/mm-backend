@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 type SSHKey struct {
@@ -87,7 +88,9 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 		}
 
 		content, err := io.ReadAll(rc)
-		rc.Close()
+		if cerr := rc.Close(); cerr != nil {
+			zap.L().Warn("close file reader", zap.String("file", f.Name), zap.Error(cerr))
+		}
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", f.Name, err)
 		}

@@ -191,7 +191,11 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		zap.L().Debug("Push: no options file", zap.Error(err))
 		return
 	}
-	defer os.Remove(optionsPath)
+	defer func() {
+		if err := os.Remove(optionsPath); err != nil {
+			zap.L().Warn("remove options file", zap.String("path", optionsPath), zap.Error(err))
+		}
+	}()
 
 	options := strings.Split(strings.TrimSpace(string(optionsData)), "\n")
 	if !hasSubmit(options) {
@@ -421,7 +425,8 @@ func (s *Service) PushAttempt(repoID RepoID, taskID uuid.UUID, files []FileInfo)
 		return "", fmt.Errorf("save attempt: %w", err)
 	}
 
-	zap.L().Info("attempt pushed",
+	zap.L().Info(
+		"attempt pushed",
 		zap.String("repo", repoName),
 		zap.String("commit", commitHash.String()),
 	)
@@ -444,7 +449,11 @@ func (s *Service) initRepoWithTemplate(repoID RepoID) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			zap.L().Warn("remove temp dir", zap.String("dir", tmpDir), zap.Error(err))
+		}
+	}()
 
 	repo, err := gogit.PlainClone(tmpDir, &gogit.CloneOptions{
 		URL: templatePath,
@@ -472,7 +481,8 @@ func (s *Service) initRepoWithTemplate(repoID RepoID) error {
 		return fmt.Errorf("push template: %w", err)
 	}
 
-	zap.L().Info("repository initialized from template",
+	zap.L().Info(
+		"repository initialized from template",
 		zap.String("template", templateName),
 		zap.String("repo", repoID.IntoPath()),
 	)
@@ -493,13 +503,19 @@ func (s *Service) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error 
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			zap.L().Warn("remove temp dir", zap.String("dir", tmpDir), zap.Error(err))
+		}
+	}()
 
 	repo, err := gogit.PlainClone(tmpDir, &gogit.CloneOptions{
 		URL: templatePath,
 	})
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		if err := os.RemoveAll(tmpDir); err != nil {
+			zap.L().Warn("remove temp dir", zap.String("dir", tmpDir), zap.Error(err))
+		}
 		if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 			return err
 		}

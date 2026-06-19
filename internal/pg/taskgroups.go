@@ -197,7 +197,8 @@ func (r *PGRepo) CreateTask(ctx context.Context, model *tasks.CreateTask) (*task
 	zap.L().Debug("Executing query", zap.String("query", createTaskSQL))
 
 	var task tasks.Task
-	err := r.db.QueryRowContext(ctx, createTaskSQL,
+	err := r.db.QueryRowContext(
+		ctx, createTaskSQL,
 		model.TaskGroupID, model.Data, model.MaxGrade, model.MaxAttempts,
 		model.AvailableAt, model.DeadlineAt, model.LeadTime,
 	).Scan(&task.ID, &task.TaskGroupID, &task.Position, &task.Data,
@@ -243,7 +244,11 @@ func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID uuid.UUID) ([]*tasks.
 	if err != nil {
 		return nil, fmt.Errorf("get tasks: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			zap.L().Warn("close rows", zap.Error(err))
+		}
+	}()
 
 	var taskList []*tasks.Task
 	for rows.Next() {
@@ -260,7 +265,8 @@ func (r *PGRepo) UpdateTask(ctx context.Context, taskID uuid.UUID, update *tasks
 	zap.L().Debug("Executing query", zap.String("query", updateTaskSQL))
 
 	var task tasks.Task
-	err := r.db.QueryRowContext(ctx, updateTaskSQL,
+	err := r.db.QueryRowContext(
+		ctx, updateTaskSQL,
 		update.Data, update.MaxGrade, update.MaxAttempts,
 		update.AvailableAt, update.DeadlineAt, update.LeadTime, taskID,
 	).Scan(&task.ID, &task.TaskGroupID, &task.Position, &task.Data,
