@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,12 +20,13 @@ import (
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
+	fdiff "github.com/go-git/go-git/v6/plumbing/format/diff"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 
-	"github.com/dsc-sgu/mm-backend/pkg/git"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -52,11 +54,24 @@ func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error
 	repoPath := repoName + ".git"
 	fullPath := filepath.Join(repoDir, repoPath)
 
+	isNew := false
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		isNew = true
 		if err := s.initRepoWithTemplate(repoID); err != nil {
 			zap.L().Error("RepoRename: init from template", zap.Error(err))
 			if err := s.InitRepo(repoID); err != nil {
 				return "", err
+			}
+		}
+	}
+
+	if isNew {
+		patterns, err := s.db.GetTaskPatterns(context.Background(), repoID.TaskGroupID)
+		if err != nil {
+			zap.L().Warn("RepoRename: get patterns", zap.Error(err))
+		} else if len(patterns) > 0 {
+			if err := WritePatternsFile(fullPath, patterns); err != nil {
+				zap.L().Warn("RepoRename: write patterns file", zap.Error(err))
 			}
 		}
 	}
@@ -133,7 +148,58 @@ func (s *Service) GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error) {
 		return nil, fmt.Errorf("compute diff: %w", err)
 	}
 
+	patterns, _ := s.db.GetTaskPatternsByTaskID(context.Background(), info1.TaskID)
+	if len(patterns) > 0 {
+		return filterDiffByPatterns(patch, patterns), nil
+	}
+
 	return strings.Split(patch.String(), "\n"), nil
+}
+
+type filteredPatch struct {
+	message     string
+	filePatches []fdiff.FilePatch
+}
+
+func (p *filteredPatch) FilePatches() []fdiff.FilePatch {
+	return p.filePatches
+}
+
+func (p *filteredPatch) Message() string {
+	return p.message
+}
+
+func filterDiffByPatterns(patch *object.Patch, patterns []string) []string {
+	var fps []fdiff.FilePatch
+	for _, fp := range patch.FilePatches() {
+		from, to := fp.Files()
+		fileName := ""
+		if to != nil {
+			fileName = to.Path()
+		} else if from != nil {
+			fileName = from.Path()
+		}
+		if fileName == "" || matchesAnyPattern(fileName, patterns) {
+			fps = append(fps, fp)
+		}
+	}
+
+	buf := &bytes.Buffer{}
+	encoder := fdiff.NewUnifiedEncoder(buf, fdiff.DefaultContextLines)
+	_ = encoder.Encode(&filteredPatch{
+		message:     patch.Message(),
+		filePatches: fps,
+	})
+	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+}
+
+func matchesAnyPattern(fileName string, patterns []string) bool {
+	for _, p := range patterns {
+		if matched, _ := filepath.Match(p, fileName); matched {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) InitRepo(repoID RepoID) error {
@@ -166,11 +232,11 @@ func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
 	return s.db.CheckPasswordAuth(ctx, password)
 }
 
-func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel {
+func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) pkggit.AccessLevel {
 	if s.db.CheckPublicKeyAuth(nil, pk) {
-		return git.ReadWriteAccess
+		return pkggit.ReadWriteAccess
 	}
-	return git.NoAccess
+	return pkggit.NoAccess
 }
 
 func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
@@ -348,6 +414,14 @@ func (s *Service) PushAttempt(repoID RepoID, taskID uuid.UUID, files []FileInfo)
 	if _, err := os.Stat(bareRepoPath); os.IsNotExist(err) {
 		if err := s.initRepoWithTemplate(repoID); err != nil {
 			return "", fmt.Errorf("init repo: %w", err)
+		}
+		patterns, err := s.db.GetTaskPatterns(context.Background(), repoID.TaskGroupID)
+		if err != nil {
+			zap.L().Warn("PushAttempt: get patterns", zap.Error(err))
+		} else if len(patterns) > 0 {
+			if err := WritePatternsFile(bareRepoPath, patterns); err != nil {
+				zap.L().Warn("PushAttempt: write patterns file", zap.Error(err))
+			}
 		}
 	}
 
