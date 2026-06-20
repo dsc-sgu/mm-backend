@@ -25,6 +25,9 @@ type DBRepo interface {
 	GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error)
 	GetTaskIDByPosition(ctx context.Context, taskGroupID uuid.UUID, position int) (uuid.UUID, error)
 	HasSubmittedAttempt(ctx context.Context, userID uuid.UUID, taskGroupID uuid.UUID, position int) (bool, error)
+
+	GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[int][]string, error)
+	GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
 }
 
 type Repo interface {

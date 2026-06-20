@@ -228,7 +228,62 @@ func EnsureRepo(dir, repo string) error {
 	if err := WritePostReceiveHook(rp); err != nil {
 		return fmt.Errorf("write post-receive hook: %w", err)
 	}
+	if err := WritePreReceiveHook(rp); err != nil {
+		return fmt.Errorf("write pre-receive hook: %w", err)
+	}
 	return nil
+}
+
+// WritePreReceiveHook writes a pre-receive hook that checks push for
+// required file patterns defined in .patterns file.
+// If the push does not contain any files matching the patterns for the
+// specified task position, it rejects the push with an error message.
+func WritePreReceiveHook(repoPath string) error {
+	hooksDir := filepath.Join(repoPath, "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return fmt.Errorf("create hooks dir: %w", err)
+	}
+	script := `#!/bin/sh
+PATTERNS_FILE="$GIT_DIR/.mm-patterns"
+[ -f "$PATTERNS_FILE" ] || exit 0
+
+TASK_POS=""
+if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
+    i=0
+    while [ $i -lt "$GIT_PUSH_OPTION_COUNT" ]; do
+        eval "opt=\$GIT_PUSH_OPTION_$i"
+        case "$opt" in
+            task=*) TASK_POS="${opt#task=}" ;;
+        esac
+        i=$((i+1))
+    done
+fi
+[ -n "$TASK_POS" ] || exit 0
+
+PATTERNS=$(grep "^$TASK_POS:" "$PATTERNS_FILE" | cut -d: -f2-)
+[ -n "$PATTERNS" ] || exit 0
+
+while read OLD NEW REF; do
+    [ "$NEW" = "0000000000000000000000000000000000000000" ] && continue
+    [ "$NEW" = "$OLD" ] && continue
+    FILES=$(git diff-tree --no-commit-id -r --name-only "$NEW" 2>/dev/null)
+    [ -z "$FILES" ] && continue
+    for file in $FILES; do
+        for pattern in $PATTERNS; do
+            case "$file" in
+                $pattern) exit 0 ;;
+            esac
+        done
+    done
+done
+
+echo "ERROR: no files match required patterns for task $TASK_POS ($PATTERNS)" >&2
+exit 1
+`
+	return os.WriteFile(
+		filepath.Join(hooksDir, "pre-receive"),
+		[]byte(script), 0o755,
+	)
 }
 
 // WritePostReceiveHook writes a post-receive hook that saves push options
