@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -12,6 +13,16 @@ import (
 )
 
 const (
+	getTaskPatternsSQL = `
+		SELECT position, data FROM tasks
+		WHERE task_group_id = $1 AND data ? 'patterns'
+		ORDER BY position
+	`
+
+	getTaskPatternsByTaskIDSQL = `
+		SELECT data FROM tasks WHERE id = $1
+	`
+
 	createTaskGroupSQL = `
 		INSERT INTO task_groups (block_id, name)
 		VALUES ($1, $2)
@@ -324,6 +335,55 @@ func (r *PGRepo) GetTaskIDByPosition(ctx context.Context, taskGroupID uuid.UUID,
 		return uuid.Nil, fmt.Errorf("get task id by position: %w", err)
 	}
 	return taskID, nil
+}
+
+func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[int][]string, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsSQL))
+
+	rows, err := r.db.QueryxContext(ctx, getTaskPatternsSQL, taskGroupID)
+	if err != nil {
+		return nil, fmt.Errorf("get task patterns: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[int][]string)
+	for rows.Next() {
+		var position int
+		var data json.RawMessage
+		if err := rows.Scan(&position, &data); err != nil {
+			return nil, fmt.Errorf("scan task patterns: %w", err)
+		}
+		var taskData struct {
+			Patterns []string `json:"patterns"`
+		}
+		if err := json.Unmarshal(data, &taskData); err != nil {
+			continue
+		}
+		if len(taskData.Patterns) > 0 {
+			result[position] = taskData.Patterns
+		}
+	}
+	return result, rows.Err()
+}
+
+func (r *PGRepo) GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsByTaskIDSQL))
+
+	var data json.RawMessage
+	err := r.db.GetContext(ctx, &data, getTaskPatternsByTaskIDSQL, taskID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get task patterns by id: %w", err)
+	}
+	var taskData struct {
+		Patterns []string `json:"patterns"`
+	}
+	if err := json.Unmarshal(data, &taskData); err != nil {
+		return nil, nil
+	}
+	return taskData.Patterns, nil
 }
 
 func (r *PGRepo) HasSubmittedAttempt(
