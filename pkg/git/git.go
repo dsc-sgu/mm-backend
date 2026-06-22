@@ -67,6 +67,16 @@ const (
 	AdminAccess
 )
 
+type GitCmd string
+
+const (
+	GitUploadPack    GitCmd = "git-upload-pack"
+	GitUploadArchive GitCmd = "git-upload-archive"
+	GitReceivePack   GitCmd = "git-receive-pack"
+)
+
+const defaultWorkDir = ""
+
 // GitHooks is an interface that allows for custom authorization
 // implementations and post push/fetch notifications. Prior to git access,
 // AuthRepo will be called with the ssh.Session public key and the repo name.
@@ -81,8 +91,8 @@ type GitHooks = Hooks // nolint: revive
 // Implementers return the appropriate AccessLevel.
 type Hooks interface {
 	AuthRepo(string, ssh.PublicKey) AccessLevel
-	Push(string, ssh.PublicKey)
-	Fetch(string, ssh.PublicKey)
+	OnPush(string, string, ssh.PublicKey)
+	OnFetch(string, string, ssh.PublicKey)
 }
 
 // Middleware adds Git server functionality to the ssh.Server. Repos are stored
@@ -101,38 +111,41 @@ func Middleware(
 			if len(cmd) == 2 {
 				gc := cmd[0]
 				pk := s.PublicKey()
-				repo, err := RepoRename(cmd[1], pk)
+				rawRepo := cmd[1]
+				repo, err := RepoRename(rawRepo, pk)
 				if err != nil {
+					log.Error("repo rename failed", "error", err, "repo", rawRepo)
 					Fatal(s, err)
 					return
 				}
 				access := gh.AuthRepo(repo, pk)
-				switch gc {
-				case "git-receive-pack":
+				switch GitCmd(gc) {
+				case GitReceivePack:
 					switch access {
 					case ReadWriteAccess, AdminAccess:
-						err := GitPack(s, gc, repoDir, repo)
-						if err != nil {
+						if err := GitPack(s, gc, repoDir, repo); err != nil {
+							log.Error("git push failed", "error", err, "repo", rawRepo)
 							Fatal(s, ErrSystemMalfunction)
 						} else {
-							gh.Push(cmd[1], pk)
+							gh.OnPush(rawRepo, repo, pk)
 						}
 					default:
 						Fatal(s, ErrNotAuthed)
 					}
 					return
-				case "git-upload-archive", "git-upload-pack":
+				case GitUploadPack, GitUploadArchive:
 					switch access {
 					case ReadOnlyAccess, ReadWriteAccess, AdminAccess:
-						err := GitPack(s, gc, repoDir, repo)
-						switch err {
-						case ErrInvalidRepo:
-							Fatal(s, ErrInvalidRepo)
-						case nil:
-							gh.Fetch(repo, pk)
-						default:
-							log.Error("unknown git error", "error", err)
-							Fatal(s, ErrSystemMalfunction)
+						if err := GitPack(s, gc, repoDir, repo); err != nil {
+							switch {
+							case errors.Is(err, ErrInvalidRepo):
+								Fatal(s, ErrInvalidRepo)
+							default:
+								log.Error("unknown git error", "error", err)
+								Fatal(s, ErrSystemMalfunction)
+							}
+						} else {
+							gh.OnFetch(rawRepo, repo, pk)
 						}
 					default:
 						Fatal(s, ErrNotAuthed)
@@ -148,8 +161,8 @@ func Middleware(
 func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
-	switch gitCmd {
-	case "git-upload-archive", "git-upload-pack":
+	switch GitCmd(gitCmd) {
+	case GitUploadArchive, GitUploadPack:
 		exists, err := FileExists(rp)
 		if !exists {
 			return ErrInvalidRepo
@@ -157,13 +170,13 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 		if err != nil {
 			return err
 		}
-		return RunGit(s, "", cmd, rp)
-	case "git-receive-pack":
+		return RunGit(s, defaultWorkDir, cmd, rp)
+	case GitReceivePack:
 		err := EnsureRepo(repoDir, repo)
 		if err != nil {
 			return err
 		}
-		err = RunGit(s, "", "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
+		err = RunGit(s, defaultWorkDir, "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
 		if err != nil {
 			return err
 		}
@@ -346,13 +359,13 @@ func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
 	}
 	// Rename the default branch to the first branch available
 	_, err = r.Head()
-	if err == plumbing.ErrReferenceNotFound {
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		err = RunGit(s, repoPath, "branch", "-M", fb.Name().Short())
 		if err != nil {
 			return err
 		}
 	}
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return err
 	}
 	return nil
