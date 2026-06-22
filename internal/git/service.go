@@ -293,7 +293,11 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		zap.L().Debug("Push: no tags file", zap.Error(err))
 		return
 	}
-	defer os.Remove(tagsPath)
+	defer func() {
+		if err := os.Remove(tagsPath); err != nil {
+			zap.L().Warn("remove push-tags file", zap.String("path", tagsPath), zap.Error(err))
+		}
+	}()
 
 	for _, hashStr := range strings.Fields(string(tagsData)) {
 		if err := s.db.SaveAttempt(repoID, taskID, hashStr); err != nil {
