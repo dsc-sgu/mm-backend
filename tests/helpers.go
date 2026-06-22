@@ -460,7 +460,7 @@ func CreateTestBlockAfter(
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
 		AfterBlockID: afterBlockID,
-		BlockType:    "test",
+		BlockType:    "text",
 		Data:         []byte("true"),
 	})
 	require.NoError(t, err)

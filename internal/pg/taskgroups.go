@@ -3,10 +3,10 @@ package pg
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
@@ -14,150 +14,127 @@ import (
 
 const (
 	getTaskPatternsSQL = `
-		SELECT position, data FROM tasks
-		WHERE task_group_id = $1 AND data ? 'patterns'
-		ORDER BY position
+		SELECT name, patterns FROM tasks
+		WHERE task_group_id = $1 AND array_length(patterns, 1) > 0
+		ORDER BY name
+	`
+
+	getTaskByNameSQL = `
+		SELECT block_id FROM tasks WHERE task_group_id = $1 AND name = $2
 	`
 
 	getTaskPatternsByTaskIDSQL = `
-		SELECT data FROM tasks WHERE id = $1
+		SELECT patterns FROM tasks WHERE block_id = $1
 	`
 
 	createTaskGroupSQL = `
-		INSERT INTO task_groups (block_id, name)
+		INSERT INTO task_groups (course_id, name)
 		VALUES ($1, $2)
+		RETURNING id, course_id, name
 	`
 
-	getTaskGroupByBlockIDSQL = `
-		SELECT block_id, name FROM task_groups WHERE block_id = $1
+	getTaskGroupByIDSQL = `
+		SELECT id, course_id, name FROM task_groups WHERE id = $1
 	`
 
 	getTaskGroupByNameSQL = `
-		SELECT tg.block_id, tg.name
-		FROM task_groups tg
-		JOIN blocks b ON b.id = tg.block_id
-		WHERE tg.name = $1 AND b.course_id = $2
+		SELECT id, course_id, name
+		FROM task_groups
+		WHERE name = $1 AND course_id = $2
 	`
 
 	updateTaskGroupSQL = `
-		UPDATE task_groups SET name = $1 WHERE block_id = $2
-		RETURNING block_id, name
+		UPDATE task_groups SET name = $1 WHERE id = $2
+		RETURNING id, course_id, name
 	`
 
 	deleteTaskGroupSQL = `
-		DELETE FROM task_groups WHERE block_id = $1
+		DELETE FROM task_groups WHERE id = $1
 	`
 
 	createTaskSQL = `
-		INSERT INTO tasks (task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time)
-		VALUES ($1, (SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE task_group_id = $1), $2, $3, $4, $5, $6, $7)
-		RETURNING id, task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time
+		INSERT INTO tasks (block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
 	`
 
 	getTaskByIDSQL = `
-		SELECT id, task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time
-		FROM tasks WHERE id = $1
-	`
-
-	getTaskByPositionSQL = `
-		SELECT id, task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time
-		FROM tasks WHERE task_group_id = $1 AND position = $2
+		SELECT block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
+		FROM tasks WHERE block_id = $1
 	`
 
 	getTasksSQL = `
-		SELECT id, task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time
-		FROM tasks WHERE task_group_id = $1 ORDER BY position
+		SELECT block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
+		FROM tasks WHERE task_group_id = $1 ORDER BY name
 	`
 
 	updateTaskSQL = `
 		UPDATE tasks
-		SET data = COALESCE($1, data),
+		SET patterns = COALESCE($1::text[], patterns),
 		    max_grade = COALESCE($2, max_grade),
 		    max_attempts = COALESCE($3, max_attempts),
 		    available_at = COALESCE($4, available_at),
-		    deadline_at = COALESCE($5, deadline_at),
-		    lead_time = COALESCE($6, lead_time)
-		WHERE id = $7
-		RETURNING id, task_group_id, position, data, max_grade, max_attempts, available_at, deadline_at, lead_time
+		    deadline_at = COALESCE($5, deadline_at)
+		WHERE block_id = $6
+		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
 	`
 
 	deleteTaskSQL = `
-		DELETE FROM tasks WHERE id = $1
+		DELETE FROM tasks WHERE block_id = $1
 	`
 
 	getTaskGroupIDByNameSQL = `
-		SELECT tg.block_id
-		FROM task_groups tg
-		JOIN blocks b ON b.id = tg.block_id
-		WHERE tg.name = $1 AND b.course_id = $2
+		SELECT id FROM task_groups WHERE name = $1 AND course_id = $2
 	`
 
 	getCourseIDByTaskGroupSQL = `
-		SELECT b.course_id
-		FROM blocks b
-		JOIN task_groups tg ON tg.block_id = b.id
-		WHERE tg.block_id = $1
-	`
-
-	getTaskIDByPositionSQL = `
-		SELECT id FROM tasks WHERE task_group_id = $1 AND position = $2
+		SELECT course_id FROM task_groups WHERE id = $1
 	`
 
 	getTaskCountSQL = `
 		SELECT COUNT(*) FROM tasks WHERE task_group_id = $1
-	`
-
-	hasSubmittedAttemptSQL = `
-		SELECT EXISTS(
-			SELECT 1 FROM attempts a
-			JOIN tasks t ON a.task_id = t.id
-			JOIN attempt_transitions att ON att.attempt_id = a.id
-			WHERE a.user_id = $1 AND t.task_group_id = $2 AND t.position = $3 AND att.state = 'submitted'
-		)
 	`
 )
 
 func (r *PGRepo) GetTaskGroupIDByName(ctx context.Context, name string, courseID uuid.UUID) (uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskGroupIDByNameSQL))
 
-	var blockID uuid.UUID
-	err := r.db.GetContext(ctx, &blockID, getTaskGroupIDByNameSQL, name, courseID)
+	var groupID uuid.UUID
+	err := r.db.GetContext(ctx, &groupID, getTaskGroupIDByNameSQL, name, courseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return uuid.Nil, fmt.Errorf("task group %q in course %s: not found", name, courseID)
 		}
 		return uuid.Nil, fmt.Errorf("get task group id by name: %w", err)
 	}
-	return blockID, nil
+	return groupID, nil
 }
 
 func (r *PGRepo) CreateTaskGroup(
 	ctx context.Context,
-	blockID uuid.UUID,
 	model *tasks.CreateTaskGroup,
 ) (*tasks.TaskGroup, error) {
 	zap.L().Debug("Executing query", zap.String("query", createTaskGroupSQL))
 
-	if _, err := r.db.ExecContext(ctx, createTaskGroupSQL, blockID, model.Name); err != nil {
+	var tg tasks.TaskGroup
+	err := r.db.QueryRowContext(ctx, createTaskGroupSQL, model.CourseID, model.Name).
+		Scan(&tg.ID, &tg.CourseID, &tg.Name)
+	if err != nil {
 		return nil, fmt.Errorf("create task group: %w", err)
 	}
-
-	return &tasks.TaskGroup{
-		BlockID: blockID,
-		Name:    model.Name,
-	}, nil
+	return &tg, nil
 }
 
-func (r *PGRepo) GetTaskGroupByBlockID(ctx context.Context, blockID uuid.UUID) (*tasks.TaskGroup, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskGroupByBlockIDSQL))
+func (r *PGRepo) GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*tasks.TaskGroup, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskGroupByIDSQL))
 
 	var tg tasks.TaskGroup
-	err := r.db.GetContext(ctx, &tg, getTaskGroupByBlockIDSQL, blockID)
+	err := r.db.GetContext(ctx, &tg, getTaskGroupByIDSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("get task group by block %s: %w", blockID, err)
+		return nil, fmt.Errorf("get task group %s: %w", id, err)
 	}
 	return &tg, nil
 }
@@ -178,26 +155,27 @@ func (r *PGRepo) GetTaskGroupByName(ctx context.Context, name string, courseID u
 
 func (r *PGRepo) UpdateTaskGroup(
 	ctx context.Context,
-	blockID uuid.UUID,
+	id uuid.UUID,
 	update *tasks.UpdateTaskGroup,
 ) (*tasks.TaskGroup, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateTaskGroupSQL))
 
 	var tg tasks.TaskGroup
-	err := r.db.QueryRowContext(ctx, updateTaskGroupSQL, *update.Name, blockID).Scan(&tg.BlockID, &tg.Name)
+	err := r.db.QueryRowContext(ctx, updateTaskGroupSQL, *update.Name, id).
+		Scan(&tg.ID, &tg.CourseID, &tg.Name)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task group %s: not found", blockID)
+			return nil, fmt.Errorf("task group %s: not found", id)
 		}
 		return nil, fmt.Errorf("update task group: %w", err)
 	}
 	return &tg, nil
 }
 
-func (r *PGRepo) DeleteTaskGroup(ctx context.Context, blockID uuid.UUID) error {
+func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteTaskGroupSQL))
 
-	_, err := r.db.ExecContext(ctx, deleteTaskGroupSQL, blockID)
+	_, err := r.db.ExecContext(ctx, deleteTaskGroupSQL, id)
 	if err != nil {
 		return fmt.Errorf("delete task group: %w", err)
 	}
@@ -210,10 +188,10 @@ func (r *PGRepo) CreateTask(ctx context.Context, model *tasks.CreateTask) (*task
 	var task tasks.Task
 	err := r.db.QueryRowContext(
 		ctx, createTaskSQL,
-		model.TaskGroupID, model.Data, model.MaxGrade, model.MaxAttempts,
-		model.AvailableAt, model.DeadlineAt, model.LeadTime,
-	).Scan(&task.ID, &task.TaskGroupID, &task.Position, &task.Data,
-		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt, &task.LeadTime)
+		model.BlockID, model.TaskGroupID, model.Name, pq.StringArray(model.Patterns),
+		model.MaxGrade, model.MaxAttempts, model.AvailableAt, model.DeadlineAt,
+	).Scan(&task.ID, &task.TaskGroupID, &task.Name, &task.Patterns,
+		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt)
 	if err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
 	}
@@ -230,20 +208,6 @@ func (r *PGRepo) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*tasks.Task
 			return nil, fmt.Errorf("task %s: not found", taskID)
 		}
 		return nil, fmt.Errorf("get task by id: %w", err)
-	}
-	return &task, nil
-}
-
-func (r *PGRepo) GetTaskByPosition(ctx context.Context, taskGroupID uuid.UUID, position int) (*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskByPositionSQL))
-
-	var task tasks.Task
-	err := r.db.GetContext(ctx, &task, getTaskByPositionSQL, taskGroupID, position)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task at position %d in group %s: not found", position, taskGroupID)
-		}
-		return nil, fmt.Errorf("get task by position: %w", err)
 	}
 	return &task, nil
 }
@@ -275,13 +239,18 @@ func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID uuid.UUID) ([]*tasks.
 func (r *PGRepo) UpdateTask(ctx context.Context, taskID uuid.UUID, update *tasks.UpdateTask) (*tasks.Task, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateTaskSQL))
 
+	var patterns any
+	if update.Patterns != nil {
+		patterns = pq.StringArray(*update.Patterns)
+	}
+
 	var task tasks.Task
 	err := r.db.QueryRowContext(
 		ctx, updateTaskSQL,
-		update.Data, update.MaxGrade, update.MaxAttempts,
-		update.AvailableAt, update.DeadlineAt, update.LeadTime, taskID,
-	).Scan(&task.ID, &task.TaskGroupID, &task.Position, &task.Data,
-		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt, &task.LeadTime)
+		patterns, update.MaxGrade, update.MaxAttempts,
+		update.AvailableAt, update.DeadlineAt, taskID,
+	).Scan(&task.ID, &task.TaskGroupID, &task.Name, &task.Patterns,
+		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("task %s: not found", taskID)
@@ -323,21 +292,7 @@ func (r *PGRepo) GetCourseIDByTaskGroup(ctx context.Context, taskGroupID uuid.UU
 	return courseID, nil
 }
 
-func (r *PGRepo) GetTaskIDByPosition(ctx context.Context, taskGroupID uuid.UUID, position int) (uuid.UUID, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskIDByPositionSQL))
-
-	var taskID uuid.UUID
-	err := r.db.GetContext(ctx, &taskID, getTaskIDByPositionSQL, taskGroupID, position)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return uuid.Nil, fmt.Errorf("task at position %d in group %s: not found", position, taskGroupID)
-		}
-		return uuid.Nil, fmt.Errorf("get task id by position: %w", err)
-	}
-	return taskID, nil
-}
-
-func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[int][]string, error) {
+func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[string][]string, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsSQL))
 
 	rows, err := r.db.QueryxContext(ctx, getTaskPatternsSQL, taskGroupID)
@@ -350,58 +305,48 @@ func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (ma
 		}
 	}()
 
-	result := make(map[int][]string)
+	result := make(map[string][]string)
 	for rows.Next() {
-		var position int
-		var data json.RawMessage
-		if err := rows.Scan(&position, &data); err != nil {
+		var name string
+		var patterns pq.StringArray
+		if err := rows.Scan(&name, &patterns); err != nil {
 			return nil, fmt.Errorf("scan task patterns: %w", err)
 		}
-		var taskData struct {
-			Patterns []string `json:"patterns"`
-		}
-		if err := json.Unmarshal(data, &taskData); err != nil {
-			continue
-		}
-		if len(taskData.Patterns) > 0 {
-			result[position] = taskData.Patterns
+		if len(patterns) > 0 {
+			result[name] = patterns
 		}
 	}
 	return result, rows.Err()
 }
 
+func (r *PGRepo) GetTaskByName(
+	ctx context.Context,
+	taskGroupID uuid.UUID,
+	name string,
+) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskByNameSQL))
+
+	var taskID uuid.UUID
+	err := r.db.QueryRowContext(ctx, getTaskByNameSQL, taskGroupID, name).Scan(&taskID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, fmt.Errorf("task %q in group %s: not found", name, taskGroupID)
+		}
+		return uuid.Nil, fmt.Errorf("get task by name: %w", err)
+	}
+	return taskID, nil
+}
+
 func (r *PGRepo) GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsByTaskIDSQL))
 
-	var data json.RawMessage
-	err := r.db.GetContext(ctx, &data, getTaskPatternsByTaskIDSQL, taskID)
+	var patterns pq.StringArray
+	err := r.db.GetContext(ctx, &patterns, getTaskPatternsByTaskIDSQL, taskID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get task patterns by id: %w", err)
 	}
-	var taskData struct {
-		Patterns []string `json:"patterns"`
-	}
-	if err := json.Unmarshal(data, &taskData); err != nil {
-		return nil, nil
-	}
-	return taskData.Patterns, nil
-}
-
-func (r *PGRepo) HasSubmittedAttempt(
-	ctx context.Context,
-	userID uuid.UUID,
-	taskGroupID uuid.UUID,
-	position int,
-) (bool, error) {
-	zap.L().Debug("Executing query", zap.String("query", hasSubmittedAttemptSQL))
-
-	var exists bool
-	err := r.db.GetContext(ctx, &exists, hasSubmittedAttemptSQL, userID, taskGroupID, position)
-	if err != nil {
-		return false, fmt.Errorf("has submitted attempt: %w", err)
-	}
-	return exists, nil
+	return patterns, nil
 }

@@ -20,11 +20,11 @@ sequenceDiagram
     participant Middleware as pkg/git Middleware
     participant Hooks as App (Hooks)
 
-    Student->>Middleware: git push ssh://server/course/task
-    Middleware->>Hooks: repoRename("/course/task", pubkey) → "abc123.git"
+    Student->>Middleware: git push ssh://server/course/group
+    Middleware->>Hooks: RepoRename("/course/group", pubkey) → "abc123.git"
     Middleware->>Hooks: AuthRepo("abc123.git", pubkey) → ReadWriteAccess
     Middleware->>Student: git protocol (packfile exchange)
-    Middleware->>Hooks: Push("abc123.git", pubkey)
+    Middleware->>Hooks: OnPush("/course/group", "abc123.git", pubkey)
 ```
 
 ### git fetch
@@ -35,9 +35,9 @@ sequenceDiagram
     participant Middleware as pkg/git Middleware
     participant Hooks as App (Hooks)
 
-    Teacher->>Middleware: git fetch ssh://server/course/task
-    Middleware->>Hooks: repoRename("/course/task", pubkey) → "abc123.git"
+    Teacher->>Middleware: git fetch ssh://server/course/group
+    Middleware->>Hooks: RepoRename("/course/group", pubkey) → "abc123.git"
     Middleware->>Hooks: AuthRepo("abc123.git", pubkey) → ReadOnlyAccess
     Middleware->>Teacher: git protocol (packfile exchange)
-    Middleware->>Hooks: Fetch("abc123.git", pubkey)
+    Middleware->>Hooks: OnFetch("/course/group", "abc123.git", pubkey)
 ```
