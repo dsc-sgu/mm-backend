@@ -1,7 +1,7 @@
 # Git Service — Architecture & User Flow
 
 This API allows participants to work on study projects using the built-in Git server and register attempts.
-- **CLI**: `git push -o "submit"` — the last commit becomes an attempt for teacher review.
+- **CLI**: `git tag <name> && git push origin <name> -o "<N>"` — tags a commit and submits it as an attempt for task N.
 - **Web UI**: participants upload files to create an attempt.
 
 ## Push Flow
@@ -15,7 +15,7 @@ sequenceDiagram
     participant Git as system git
     participant DB as PostgreSQL
 
-    C->>SSH: `git push -o "submit" ssh://host:2222/course_name/task_name`
+    C->>SSH: `git push origin v1 -o "1"` (ssh://host:2222/course_name/task_name)
     SSH->>MW: authenticated session
     MW->>DB: looks for course and task group IDs
     DB-->>MW: return course and task group IDs
@@ -24,19 +24,22 @@ sequenceDiagram
     MW->>DB: gives fingerprint     
     DB-->>MW: access level
     alt ReadWrite or Admin access
-        MW->>Git: user uses `git push` that transforms to `git-receive-pack`    
-        Git->>Git: post-receive git hook writes push-options to file
-        Git-->>MW: git packfile exchange done
-        MW->>Svc: Push hook triggers
-        Svc->>Svc: Push hook read push-options file
-        alt "submit" appears in push-options
-            Svc->>Svc: opens bare repo via go-git
-            Svc->>Svc: reads HEAD commit hash
-            Svc->>DB: registers attempt
+        MW->>Git: git-receive-pack runs system git
+        Git->>Git: pre-receive hook checks tag refs against .mm-patterns
+        alt no matching files for task position
+            Git-->>MW: reject push (exit 1)
+        else matches or no patterns
+            Git->>Git: post-receive hook writes push-tags + push-options to files
+            Git-->>MW: git packfile exchange done
+            MW->>Svc: Push hook triggers
+            Svc->>Svc: read push-options (task position)
+            Svc->>Svc: read push-tags (new tag commit hashes)
+            alt task > 1
+                Svc->>DB: check previous task completed
+                DB-->>Svc: ok / not ok
+            end
+            Svc->>DB: register attempt for each new tag
             DB-->>Svc: saved
-            Svc-->>MW: attempt created
-        else no "submit"
-            Svc-->>MW: no attempt
         end
     else NoAccess
         MW-->>C: Fatal error
