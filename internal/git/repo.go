@@ -35,22 +35,27 @@ type DeleteSSHKey struct {
 	Fingerprint string `json:"fingerprint" db:"fingerprint" binding:"required"`
 }
 
-const PatternsFileName = ".patterns"
+// PatternsFileName must match the file read by the pre-receive hook in pkg/git.
+const PatternsFileName = ".mm-patterns"
 
 func PatternsFilePath(repoPath string) string {
 	return filepath.Join(repoPath, PatternsFileName)
 }
 
-func WritePatternsFile(repoPath string, patterns map[int][]string) error {
+// WritePatternsFile materializes per-task solution masks for the pre-receive
+// hook. Format is one "<task name>\t<glob>" line per pattern; the hook looks up
+// patterns by the submit task name. Tab is used as the separator since task
+// names are free text (a colon would clash with names).
+func WritePatternsFile(repoPath string, patterns map[string][]string) error {
 	var buf strings.Builder
-	positions := make([]int, 0, len(patterns))
-	for pos := range patterns {
-		positions = append(positions, pos)
+	names := make([]string, 0, len(patterns))
+	for name := range patterns {
+		names = append(names, name)
 	}
-	sort.Ints(positions)
-	for _, pos := range positions {
-		for _, p := range patterns[pos] {
-			fmt.Fprintf(&buf, "%d:%s\n", pos, p)
+	sort.Strings(names)
+	for _, name := range names {
+		for _, p := range patterns[name] {
+			fmt.Fprintf(&buf, "%s\t%s\n", name, p)
 		}
 	}
 	return os.WriteFile(PatternsFilePath(repoPath), []byte(buf.String()), 0o644)

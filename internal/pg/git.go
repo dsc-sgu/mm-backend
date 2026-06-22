@@ -41,12 +41,11 @@ const (
 	`
 
 	getAttemptCommitInfoSQL = `
-		SELECT a.user_id, a.task_id, att.transition_data, t.task_group_id, b.course_id
+		SELECT a.user_id, a.task_id, att.transition_data, t.task_group_id, tg.course_id
 		FROM attempts a
 		JOIN attempt_transitions att ON att.attempt_id = a.id
-		JOIN tasks t ON a.task_id = t.id
-		JOIN task_groups tg ON t.task_group_id = tg.block_id
-		JOIN blocks b ON tg.block_id = b.id
+		JOIN tasks t ON a.task_id = t.block_id
+		JOIN task_groups tg ON t.task_group_id = tg.id
 		WHERE a.id = $1 AND att.state = 'submitted'
 		ORDER BY att.transition_at DESC
 		LIMIT 1
