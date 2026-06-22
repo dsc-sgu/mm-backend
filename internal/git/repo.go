@@ -50,7 +50,7 @@ func WritePatternsFile(repoPath string, patterns map[int][]string) error {
 	sort.Ints(positions)
 	for _, pos := range positions {
 		for _, p := range patterns[pos] {
-			buf.WriteString(fmt.Sprintf("%d:%s\n", pos, p))
+			fmt.Fprintf(&buf, "%d:%s\n", pos, p)
 		}
 	}
 	return os.WriteFile(PatternsFilePath(repoPath), []byte(buf.String()), 0o644)
