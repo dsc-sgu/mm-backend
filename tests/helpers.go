@@ -344,7 +344,7 @@ func CreateTestBlock(
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
 		CourseID:  courseID,
-		BlockType: "test",
+		BlockType: "text",
 		Data:      []byte("true"),
 	})
 	require.NoError(t, err)

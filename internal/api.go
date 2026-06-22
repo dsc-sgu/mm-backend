@@ -226,7 +226,7 @@ func setupAttemptRoutes(api huma.API, ah *attempt.Handler) {
 
 func setupTaskRoutes(api huma.API, th *tasks.Handler) {
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/tasks/{block_id}",
+		Method: http.MethodGet, Path: "/tasks/{group_id}",
 		Summary: "Get task group with its tasks", DefaultStatus: http.StatusOK,
 		Tags: []string{"Task"},
 	}, th.GetTaskGroup)
@@ -238,45 +238,45 @@ func setupTaskRoutes(api huma.API, th *tasks.Handler) {
 	}, th.CreateTaskGroup)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPatch, Path: "/tasks/{block_id}",
+		Method: http.MethodPatch, Path: "/tasks/{group_id}",
 		Summary: "Update existing task group", DefaultStatus: http.StatusOK,
 		Tags: []string{"Task"},
 	}, th.PatchTaskGroup)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodDelete, Path: "/tasks/{block_id}",
+		Method: http.MethodDelete, Path: "/tasks/{group_id}",
 		Summary: "Delete task group", DefaultStatus: http.StatusNoContent,
 		Tags: []string{"Task"},
 	}, th.DeleteTaskGroup)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/tasks/{block_id}/template",
+		Method: http.MethodPost, Path: "/tasks/{group_id}/template",
 		Summary:       "Upload template zip",
 		DefaultStatus: http.StatusAccepted,
 		Tags:          []string{"Task"},
 	}, th.UploadTemplate)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/tasks/{block_id}/tasks",
+		Method: http.MethodGet, Path: "/tasks/{group_id}/tasks",
 		Summary: "Get all tasks in a group", DefaultStatus: http.StatusOK,
 		Tags: []string{"Task"},
 	}, th.GetTasks)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/tasks/{block_id}/tasks",
+		Method: http.MethodPost, Path: "/tasks/{group_id}/tasks",
 		Summary:       "Create a new task within a group",
 		DefaultStatus: http.StatusCreated,
 		Tags:          []string{"Task"},
 	}, th.CreateTask)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPatch, Path: "/tasks/{block_id}/tasks/{task_id}",
+		Method: http.MethodPatch, Path: "/tasks/{group_id}/tasks/{task_id}",
 		Summary: "Update a task within a group", DefaultStatus: http.StatusOK,
 		Tags: []string{"Task"},
 	}, th.PatchTask)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodDelete, Path: "/tasks/{block_id}/tasks/{task_id}",
+		Method: http.MethodDelete, Path: "/tasks/{group_id}/tasks/{task_id}",
 		Summary:       "Delete a task from a group",
 		DefaultStatus: http.StatusNoContent,
 		Tags:          []string{"Task"},
