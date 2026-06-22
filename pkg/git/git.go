@@ -234,10 +234,11 @@ func EnsureRepo(dir, repo string) error {
 	return nil
 }
 
-// WritePreReceiveHook writes a pre-receive hook that checks push for
+// WritePreReceiveHook writes a pre-receive hook that checks tag pushes for
 // required file patterns defined in .patterns file.
-// If the push does not contain any files matching the patterns for the
-// specified task position, it rejects the push with an error message.
+// Only tag refs (refs/tags/*) are checked; branch refs are always allowed.
+// The task position must be passed as a numeric push option (e.g. -o "1").
+// Files are checked via git ls-tree on the tag's commit.
 func WritePreReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -245,7 +246,6 @@ func WritePreReceiveHook(repoPath string) error {
 	}
 	script := `#!/bin/sh
 PATTERNS_FILE="$GIT_DIR/.mm-patterns"
-[ -f "$PATTERNS_FILE" ] || exit 0
 
 TASK_POS=""
 if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
@@ -253,20 +253,26 @@ if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
     while [ $i -lt "$GIT_PUSH_OPTION_COUNT" ]; do
         eval "opt=\$GIT_PUSH_OPTION_$i"
         case "$opt" in
-            task=*) TASK_POS="${opt#task=}" ;;
+            ''|*[!0-9]*) ;;
+            *) TASK_POS="$opt" ;;
         esac
         i=$((i+1))
     done
 fi
-[ -n "$TASK_POS" ] || exit 0
-
-PATTERNS=$(grep "^$TASK_POS:" "$PATTERNS_FILE" | cut -d: -f2-)
-[ -n "$PATTERNS" ] || exit 0
 
 while read OLD NEW REF; do
-    [ "$NEW" = "0000000000000000000000000000000000000000" ] && continue
-    [ "$NEW" = "$OLD" ] && continue
-    FILES=$(git diff-tree --no-commit-id -r --name-only "$NEW" 2>/dev/null)
+    case "$REF" in
+        refs/heads/*) continue ;;
+        refs/tags/*)
+            [ "$OLD" != "0000000000000000000000000000000000000000" ] && echo "ERROR: tag updates not allowed" >&2 && exit 1
+            ;;
+        *) continue ;;
+    esac
+    [ -z "$TASK_POS" ] && continue
+    [ -f "$PATTERNS_FILE" ] || continue
+    PATTERNS=$(grep "^$TASK_POS:" "$PATTERNS_FILE" | cut -d: -f2-)
+    [ -z "$PATTERNS" ] && continue
+    FILES=$(git ls-tree --name-only -r "$NEW" 2>/dev/null)
     [ -z "$FILES" ] && continue
     for file in $FILES; do
         for pattern in $PATTERNS; do
@@ -275,10 +281,9 @@ while read OLD NEW REF; do
             esac
         done
     done
+    echo "ERROR: no files match required patterns for task $TASK_POS ($PATTERNS)" >&2
+    exit 1
 done
-
-echo "ERROR: no files match required patterns for task $TASK_POS ($PATTERNS)" >&2
-exit 1
 `
 	return os.WriteFile(
 		filepath.Join(hooksDir, "pre-receive"),
@@ -286,14 +291,19 @@ exit 1
 	)
 }
 
-// WritePostReceiveHook writes a post-receive hook that saves push options
-// to a file for the Push hook to read.
+// WritePostReceiveHook writes a post-receive hook that saves new tag commit hashes
+// and push options to files for the Push hook to read.
 func WritePostReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		return fmt.Errorf("create hooks dir: %w", err)
 	}
 	script := `#!/bin/sh
+while read OLD NEW REF; do
+  case "$REF" in refs/tags/*)
+    [ "$OLD" = "0000000000000000000000000000000000000000" ] && echo "$NEW"
+  ;; esac
+done > "$GIT_DIR/push-tags"
 if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
   i=0
   while [ $i -lt $GIT_PUSH_OPTION_COUNT ]; do
