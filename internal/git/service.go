@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -250,8 +249,9 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 	}
 
 	shaPath := repoID.IntoPath() + ".git"
-	optionsPath := filepath.Join(repoDir, shaPath, "push-options")
+	repoBase := filepath.Join(repoDir, shaPath)
 
+	optionsPath := filepath.Join(repoBase, "push-options")
 	optionsData, err := os.ReadFile(optionsPath)
 	if err != nil {
 		zap.L().Debug("Push: no options file", zap.Error(err))
@@ -263,19 +263,9 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		}
 	}()
 
-	options := strings.Split(strings.TrimSpace(string(optionsData)), "\n")
-	if !hasSubmit(options) {
-		return
-	}
-
-	pos := parseTaskPosition(options)
+	pos := parseNumericPosition(strings.Split(strings.TrimSpace(string(optionsData)), "\n"))
 	if pos == 0 {
-		count, err := s.db.GetTaskCount(context.Background(), repoID.TaskGroupID)
-		if err != nil || count != 1 {
-			zap.L().Warn("Push: cannot determine task position", zap.Error(err))
-			return
-		}
-		pos = 1
+		return
 	}
 
 	if pos > 1 {
@@ -297,34 +287,30 @@ func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
 		return
 	}
 
-	bareRepo, err := gogit.PlainOpen(filepath.Join(repoDir, shaPath))
+	tagsPath := filepath.Join(repoBase, "push-tags")
+	tagsData, err := os.ReadFile(tagsPath)
 	if err != nil {
-		zap.L().Error("Push: open repo", zap.Error(err))
+		zap.L().Debug("Push: no tags file", zap.Error(err))
 		return
 	}
+	defer os.Remove(tagsPath)
 
-	head, err := bareRepo.Head()
-	if err != nil {
-		zap.L().Error("Push: get HEAD", zap.Error(err))
-		return
-	}
-
-	if err := s.db.SaveAttempt(repoID, taskID, head.Hash().String()); err != nil {
-		zap.L().Error("Push: save attempt", zap.Error(err))
+	for _, hashStr := range strings.Fields(string(tagsData)) {
+		if err := s.db.SaveAttempt(repoID, taskID, hashStr); err != nil {
+			zap.L().Error("Push: save attempt", zap.Error(err))
+		}
 	}
 }
 
-func hasSubmit(options []string) bool {
-	return slices.Contains(options, "submit")
-}
-
-func parseTaskPosition(options []string) int {
+func parseNumericPosition(options []string) int {
 	for _, opt := range options {
-		if strings.HasPrefix(opt, "task=") {
-			pos, err := strconv.Atoi(strings.TrimPrefix(opt, "task="))
-			if err == nil && pos > 0 {
-				return pos
-			}
+		opt = strings.TrimSpace(opt)
+		if opt == "" {
+			continue
+		}
+		pos, err := strconv.Atoi(opt)
+		if err == nil && pos > 0 {
+			return pos
 		}
 	}
 	return 0

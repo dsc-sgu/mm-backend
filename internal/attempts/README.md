@@ -10,7 +10,11 @@ There are two ways to create an attempt:
 
 1. **Web interface** — upload a ZIP archive with solution files. The backend extracts the files, makes a commit in the group's git repository, and saves the attempt with the commit hash.
 
-2. **SSH git push** — push commits with `-o "submit"` option. After git-receive-pack accepts the data, the push hook saves an attempt referencing the HEAD commit. Optionally specify `-o "task=N"` to target a specific task in the group (defaults to position 1 if the group has exactly one task).
+2. **SSH git tag push** — create a tag and push it with a numeric push option indicating the task position:
+   ```
+   git tag submission-1 && git push origin submission-1 -o "1"
+   ```
+   The pre-receive hook verifies the tag's commit contains files matching the task's patterns. If they match, the post-receive hook saves the tag's commit hash and push options. The Push hook reads these files and creates an attempt for the tag's commit.
 
 ### Sequential validation
 
@@ -34,12 +38,12 @@ sequenceDiagram
         Backend->>Backend: Resolve task ID from group + position
         Backend->>Git: Push files to group repo (clone/write/commit)
         Git->>DB: Save attempt (user, task, commit hash)
-    else SSH push
-        Student->>Git: git push -o "submit" [-o "task=N"]
-        Git->>Git: Receive push data, post-receive hook saves options
-        Git->>Git: Read options, parse task position
-        Git->>Git: If task > 1, check previous task completed
-        Git->>DB: Save attempt (user, task, HEAD commit hash)
+    else SSH tag push
+        Student->>Git: git tag v1 && git push origin v1 -o "1"
+        Git->>Git: pre-receive hook checks tag's files against patterns
+        Git->>Git: post-receive hook saves new tag commit + push-options
+        Git->>Git: Push hook reads files, validates sequence
+        Git->>DB: Save attempt (user, task, tag's commit hash)
     end
 ```
 
@@ -49,3 +53,5 @@ sequenceDiagram
 - Attempts are linked to individual tasks, not to the whole group.
 - The commit hash is stored in `attempt_transitions.transition_data` as JSON.
 - Both push methods write to the same repository.
+- Tag updates (force-push) are rejected by the pre-receive hook.
+- Branch pushes never create attempts — only tag pushes with a numeric option do.
