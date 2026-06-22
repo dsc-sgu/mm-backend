@@ -238,7 +238,7 @@ func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) pkggit.AccessLevel {
 	return pkggit.NoAccess
 }
 
-func (s *Service) Push(originalPath string, pk ssh.PublicKey) {
+func (s *Service) OnPush(originalPath string, repo string, pk ssh.PublicKey) {
 	zap.L().Info("Push hook called", zap.String("path", originalPath))
 
 	fingerprint := gossh.FingerprintSHA256(pk)
@@ -320,8 +320,8 @@ func parseNumericPosition(options []string) int {
 	return 0
 }
 
-func (s *Service) Fetch(repo string, pk ssh.PublicKey) {
-	zap.L().Info("Fetch hook called", zap.String("repo", repo))
+func (s *Service) OnFetch(originalPath string, repo string, pk ssh.PublicKey) {
+	zap.L().Info("Fetch hook called", zap.String("original", originalPath), zap.String("repo", repo))
 }
 
 func (s *Service) GetRepoID(path string, fingerprint string) (RepoID, error) {
