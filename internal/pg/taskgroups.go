@@ -344,7 +344,11 @@ func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (ma
 	if err != nil {
 		return nil, fmt.Errorf("get task patterns: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			zap.L().Warn("close task patterns rows", zap.Error(err))
+		}
+	}()
 
 	result := make(map[int][]string)
 	for rows.Next() {
