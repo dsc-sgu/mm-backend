@@ -23,10 +23,9 @@ type DBRepo interface {
 	GetTaskGroupIDByName(ctx context.Context, name string, courseID uuid.UUID) (uuid.UUID, error)
 	GetCourseIDByTaskGroup(ctx context.Context, taskGroupID uuid.UUID) (uuid.UUID, error)
 	GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error)
-	GetTaskIDByPosition(ctx context.Context, taskGroupID uuid.UUID, position int) (uuid.UUID, error)
-	HasSubmittedAttempt(ctx context.Context, userID uuid.UUID, taskGroupID uuid.UUID, position int) (bool, error)
+	GetTaskByName(ctx context.Context, taskGroupID uuid.UUID, name string) (uuid.UUID, error)
 
-	GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[int][]string, error)
+	GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[string][]string, error)
 	GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
 }
 

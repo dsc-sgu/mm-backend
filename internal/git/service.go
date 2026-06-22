@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -53,9 +52,7 @@ func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error
 	repoPath := repoName + ".git"
 	fullPath := filepath.Join(repoDir, repoPath)
 
-	isNew := false
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		isNew = true
 		if err := s.initRepoWithTemplate(repoID); err != nil {
 			zap.L().Error("RepoRename: init from template", zap.Error(err))
 			if err := s.InitRepo(repoID); err != nil {
@@ -64,15 +61,13 @@ func (s *Service) RepoRename(original string, pk gossh.PublicKey) (string, error
 		}
 	}
 
-	if isNew {
-		patterns, err := s.db.GetTaskPatterns(context.Background(), repoID.TaskGroupID)
-		if err != nil {
-			zap.L().Warn("RepoRename: get patterns", zap.Error(err))
-		} else if len(patterns) > 0 {
-			if err := WritePatternsFile(fullPath, patterns); err != nil {
-				zap.L().Warn("RepoRename: write patterns file", zap.Error(err))
-			}
-		}
+	// Refresh the masks file on every push so the pre-receive gate always sees
+	// the current masks (written unconditionally so removed masks are cleared).
+	patterns, err := s.db.GetTaskPatterns(context.Background(), repoID.TaskGroupID)
+	if err != nil {
+		zap.L().Warn("RepoRename: get patterns", zap.Error(err))
+	} else if err := WritePatternsFile(fullPath, patterns); err != nil {
+		zap.L().Warn("RepoRename: write patterns file", zap.Error(err))
 	}
 
 	return repoPath, nil
@@ -263,27 +258,14 @@ func (s *Service) OnPush(originalPath string, repo string, pk ssh.PublicKey) {
 		}
 	}()
 
-	pos := parseNumericPosition(strings.Split(strings.TrimSpace(string(optionsData)), "\n"))
-	if pos == 0 {
+	taskName := parseSubmitOption(strings.Split(strings.TrimSpace(string(optionsData)), "\n"))
+	if taskName == "" {
 		return
 	}
 
-	if pos > 1 {
-		ok, err := s.db.HasSubmittedAttempt(context.Background(), repoID.ParticipantID, repoID.TaskGroupID, pos-1)
-		if err != nil {
-			zap.L().Error("Push: sequential check", zap.Error(err))
-			return
-		}
-		if !ok {
-			zap.L().Warn("Push rejected: previous task not completed",
-				zap.Int("position", pos))
-			return
-		}
-	}
-
-	taskID, err := s.db.GetTaskIDByPosition(context.Background(), repoID.TaskGroupID, pos)
+	taskID, err := s.db.GetTaskByName(context.Background(), repoID.TaskGroupID, taskName)
 	if err != nil {
-		zap.L().Error("Push: get task by position", zap.Error(err))
+		zap.L().Error("Push: get task by name", zap.String("task", taskName), zap.Error(err))
 		return
 	}
 
@@ -306,18 +288,14 @@ func (s *Service) OnPush(originalPath string, repo string, pk ssh.PublicKey) {
 	}
 }
 
-func parseNumericPosition(options []string) int {
+// parseSubmitOption returns the task name from a "submit=<name>" push option.
+func parseSubmitOption(options []string) string {
 	for _, opt := range options {
-		opt = strings.TrimSpace(opt)
-		if opt == "" {
-			continue
-		}
-		pos, err := strconv.Atoi(opt)
-		if err == nil && pos > 0 {
-			return pos
+		if v, ok := strings.CutPrefix(strings.TrimSpace(opt), "submit="); ok {
+			return strings.TrimSpace(v)
 		}
 	}
-	return 0
+	return ""
 }
 
 func (s *Service) OnFetch(originalPath string, repo string, pk ssh.PublicKey) {
@@ -398,6 +376,25 @@ func (s *Service) GitListMiddleware(next ssh.Handler) ssh.Handler {
 }
 
 func (s *Service) PushAttempt(repoID RepoID, taskID uuid.UUID, files []FileInfo) (string, error) {
+	// Web path bypasses the pre-receive hook (go-git does not run hooks), so the
+	// mask gate is duplicated here: reject if no uploaded file matches the task's
+	// patterns. Keep in sync with WritePreReceiveHook in pkg/git.
+	patterns, err := s.db.GetTaskPatternsByTaskID(context.Background(), taskID)
+	if err != nil {
+		zap.L().Warn("PushAttempt: get patterns", zap.Error(err))
+	} else if len(patterns) > 0 {
+		matched := false
+		for _, f := range files {
+			if matchesAnyPattern(f.FileName, patterns) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return "", fmt.Errorf("no uploaded files match required patterns for this task (%v)", patterns)
+		}
+	}
+
 	repoName := repoID.IntoPath()
 	bareRepoPath := filepath.Join(repoDir, repoName+".git")
 

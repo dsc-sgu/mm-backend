@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
-CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task_group');
+CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task');
 
 CREATE TABLE unit_types (
     id uuid PRIMARY KEY,
@@ -34,10 +34,13 @@ CREATE TABLE units (
 
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
-    block_type TEXT NOT NULL,
+    block_type block_type NOT NULL,
     data jsonb NOT NULL,
     course_id uuid, -- REFERENCES courses(id)
-    position integer NOT NULL
+    position integer NOT NULL,
+
+    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
+    UNIQUE (id, block_type)
 );
 
 -- NOTE(mchernigin): for example "Programming languages"
@@ -153,29 +156,39 @@ CREATE TABLE course_users_groups (
     PRIMARY KEY (user_id, course_id, group_id)
 );
 
+-- NOTE(nrydanov): ephemeral entity (not a block) — groups tasks into one shared
+-- git repo; course_id is here so the SSH layer resolves <course>/<group name>
 CREATE TABLE task_groups (
-    block_id uuid PRIMARY KEY REFERENCES blocks(id),
-    name varchar(128) NOT NULL
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    course_id uuid NOT NULL REFERENCES courses(id),
+    name varchar(128) NOT NULL,
+
+    UNIQUE (course_id, name)
 );
 
+-- NOTE(nrydanov): task is a subtype of block — the composite FK plus
+-- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
 CREATE TABLE tasks (
-    id uuid PRIMARY KEY DEFAULT uuidv7(),
-    task_group_id uuid NOT NULL REFERENCES task_groups(block_id),
-    position integer NOT NULL,
-    data jsonb NOT NULL DEFAULT '{}',
+    block_id uuid PRIMARY KEY,
+    block_type block_type NOT NULL DEFAULT 'task',
+    task_group_id uuid NOT NULL REFERENCES task_groups(id),
+    name varchar(128) NOT NULL,
+    -- glob patterns matching the files that count as this task's solution
+    patterns text[] NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
     max_attempts integer NOT NULL,
     available_at timestamp,
     deadline_at timestamp,
-    lead_time time,
 
-    UNIQUE (task_group_id, position)
+    FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
+    CHECK (block_type = 'task'),
+    UNIQUE (task_group_id, name)
 );
 
 CREATE TABLE attempts (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
-    task_id uuid NOT NULL REFERENCES tasks(id)
+    task_id uuid NOT NULL REFERENCES tasks(block_id)
 );
 
 CREATE TABLE attempt_transitions (
