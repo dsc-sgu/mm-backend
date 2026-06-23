@@ -2,8 +2,6 @@ package attempt
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -50,10 +48,10 @@ func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOut
 }
 
 type PushAttemptInput struct {
-	CourseID     string `query:"courseID"`
-	TaskGroupID  string `query:"taskGroupID"`
-	TaskPosition string `query:"taskPosition"`
-	RawBody      []byte
+	CourseID    string `query:"courseID"`
+	TaskGroupID string `query:"taskGroupID"`
+	TaskID      string `query:"taskID"`
+	RawBody     []byte
 }
 
 type PushAttemptOutput struct {
@@ -73,12 +71,9 @@ func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*Pu
 		return nil, huma.Error400BadRequest("parsing taskGroupID: " + err.Error())
 	}
 
-	taskPosition := 1
-	if input.TaskPosition != "" {
-		taskPosition, err = strconv.Atoi(input.TaskPosition)
-		if err != nil || taskPosition < 1 {
-			return nil, huma.Error400BadRequest("invalid taskPosition")
-		}
+	taskID, err := uuid.Parse(input.TaskID)
+	if err != nil {
+		return nil, huma.Error400BadRequest("parsing taskID: " + err.Error())
 	}
 
 	participantID := session.UserIDFromContext(ctx)
@@ -86,21 +81,12 @@ func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*Pu
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	if taskPosition > 1 {
-		ok, err := h.taskSvc.HasSubmittedAttempt(ctx, participantID, taskGroupID, taskPosition-1)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(err.Error())
-		}
-		if !ok {
-			return nil, huma.Error400BadRequest(
-				fmt.Sprintf("task %d not completed yet. complete task %d first.", taskPosition-1, taskPosition-1),
-			)
-		}
-	}
-
-	task, err := h.taskSvc.GetTaskByPosition(ctx, taskGroupID, taskPosition)
+	task, err := h.taskSvc.GetTaskByID(ctx, taskID)
 	if err != nil {
-		return nil, huma.Error400BadRequest(fmt.Sprintf("task not found at position %d: %s", taskPosition, err.Error()))
+		return nil, huma.Error400BadRequest("task not found: " + err.Error())
+	}
+	if task.TaskGroupID != taskGroupID {
+		return nil, huma.Error400BadRequest("task does not belong to the given task group")
 	}
 
 	commitHash, err := h.svc.PushAttempt(courseID, taskGroupID, task.ID, participantID, input.RawBody)

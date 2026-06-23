@@ -18,24 +18,24 @@ func NewService(repo Repo, gitRepo git.Repo) *Service {
 	return &Service{repo, gitRepo}
 }
 
-func (s *Service) CreateTaskGroup(ctx context.Context, blockID uuid.UUID, model *CreateTaskGroup) (*TaskGroup, error) {
-	return s.Repo.CreateTaskGroup(ctx, blockID, model)
+func (s *Service) CreateTaskGroup(ctx context.Context, model *CreateTaskGroup) (*TaskGroup, error) {
+	return s.Repo.CreateTaskGroup(ctx, model)
 }
 
-func (s *Service) GetTaskGroupByBlockID(ctx context.Context, blockID uuid.UUID) (*TaskGroup, error) {
-	return s.Repo.GetTaskGroupByBlockID(ctx, blockID)
+func (s *Service) GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*TaskGroup, error) {
+	return s.Repo.GetTaskGroupByID(ctx, id)
 }
 
 func (s *Service) GetTaskGroupByName(ctx context.Context, name string, courseID uuid.UUID) (*TaskGroup, error) {
 	return s.Repo.GetTaskGroupByName(ctx, name, courseID)
 }
 
-func (s *Service) UpdateTaskGroup(ctx context.Context, blockID uuid.UUID, update *UpdateTaskGroup) (*TaskGroup, error) {
-	return s.Repo.UpdateTaskGroup(ctx, blockID, update)
+func (s *Service) UpdateTaskGroup(ctx context.Context, id uuid.UUID, update *UpdateTaskGroup) (*TaskGroup, error) {
+	return s.Repo.UpdateTaskGroup(ctx, id, update)
 }
 
-func (s *Service) DeleteTaskGroup(ctx context.Context, blockID uuid.UUID) error {
-	return s.Repo.DeleteTaskGroup(ctx, blockID)
+func (s *Service) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
+	return s.Repo.DeleteTaskGroup(ctx, id)
 }
 
 func (s *Service) CreateTask(ctx context.Context, model *CreateTask) (*Task, error) {
@@ -44,10 +44,6 @@ func (s *Service) CreateTask(ctx context.Context, model *CreateTask) (*Task, err
 
 func (s *Service) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*Task, error) {
 	return s.Repo.GetTaskByID(ctx, taskID)
-}
-
-func (s *Service) GetTaskByPosition(ctx context.Context, taskGroupID uuid.UUID, position int) (*Task, error) {
-	return s.Repo.GetTaskByPosition(ctx, taskGroupID, position)
 }
 
 func (s *Service) GetTasks(ctx context.Context, taskGroupID uuid.UUID) ([]*Task, error) {
@@ -79,8 +75,8 @@ func (s *Service) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int,
 	return s.Repo.GetTaskCount(ctx, taskGroupID)
 }
 
-func (s *Service) UploadTemplate(ctx context.Context, blockID uuid.UUID, zipData []byte) error {
-	tg, err := s.Repo.GetTaskGroupByBlockID(ctx, blockID)
+func (s *Service) UploadTemplate(ctx context.Context, groupID uuid.UUID, zipData []byte) error {
+	tg, err := s.Repo.GetTaskGroupByID(ctx, groupID)
 	if err != nil {
 		return err
 	}
@@ -93,14 +89,5 @@ func (s *Service) UploadTemplate(ctx context.Context, blockID uuid.UUID, zipData
 		return err
 	}
 
-	return s.gitRepo.UpdateTemplate(tg.BlockID, files)
-}
-
-func (s *Service) HasSubmittedAttempt(
-	ctx context.Context,
-	userID uuid.UUID,
-	taskGroupID uuid.UUID,
-	position int,
-) (bool, error) {
-	return s.Repo.HasSubmittedAttempt(ctx, userID, taskGroupID, position)
+	return s.gitRepo.UpdateTemplate(tg.ID, files)
 }

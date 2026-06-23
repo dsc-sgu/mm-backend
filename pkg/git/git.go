@@ -248,10 +248,12 @@ func EnsureRepo(dir, repo string) error {
 }
 
 // WritePreReceiveHook writes a pre-receive hook that checks tag pushes for
-// required file patterns defined in .patterns file.
+// required file patterns defined in the .mm-patterns file.
 // Only tag refs (refs/tags/*) are checked; branch refs are always allowed.
-// The task position must be passed as a numeric push option (e.g. -o "1").
-// Files are checked via git ls-tree on the tag's commit.
+// The submitted task is selected via the "submit=<name>" push option
+// (e.g. -o submit=task1). Patterns are looked up by task name; the file is
+// tab-separated ("<name>\t<glob>"). Files are checked via git ls-tree on the
+// tag's commit.
 func WritePreReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -259,15 +261,15 @@ func WritePreReceiveHook(repoPath string) error {
 	}
 	script := `#!/bin/sh
 PATTERNS_FILE="$GIT_DIR/.mm-patterns"
+TAB=$(printf '\t')
 
-TASK_POS=""
+SUBMIT=""
 if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
     i=0
     while [ $i -lt "$GIT_PUSH_OPTION_COUNT" ]; do
         eval "opt=\$GIT_PUSH_OPTION_$i"
         case "$opt" in
-            ''|*[!0-9]*) ;;
-            *) TASK_POS="$opt" ;;
+            submit=*) SUBMIT="${opt#submit=}" ;;
         esac
         i=$((i+1))
     done
@@ -281,9 +283,12 @@ while read OLD NEW REF; do
             ;;
         *) continue ;;
     esac
-    [ -z "$TASK_POS" ] && continue
+    [ -z "$SUBMIT" ] && continue
     [ -f "$PATTERNS_FILE" ] || continue
-    PATTERNS=$(grep "^$TASK_POS:" "$PATTERNS_FILE" | cut -d: -f2-)
+    PATTERNS=""
+    while IFS="$TAB" read -r pname ppat; do
+        [ "$pname" = "$SUBMIT" ] && PATTERNS="$PATTERNS $ppat"
+    done < "$PATTERNS_FILE"
     [ -z "$PATTERNS" ] && continue
     FILES=$(git ls-tree --name-only -r "$NEW" 2>/dev/null)
     [ -z "$FILES" ] && continue
@@ -294,7 +299,7 @@ while read OLD NEW REF; do
             esac
         done
     done
-    echo "ERROR: no files match required patterns for task $TASK_POS ($PATTERNS)" >&2
+    echo "ERROR: no files match required patterns for task '$SUBMIT' ($PATTERNS)" >&2
     exit 1
 done
 `
