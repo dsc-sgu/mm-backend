@@ -298,10 +298,19 @@ func CalculateMiddlePosition(prev, next string) string {
 		for i := len(runes) - 1; i >= 0; i-- {
 			idx := strings.IndexRune(alphabet, runes[i])
 			if idx > 0 {
+				// If we decrease the character and it becomes equal to minChar (0),
+				// we add midChar to give a buffer for future moves (0V).
+				if idx-1 == 0 {
+					return string(
+						runes[:i],
+					) + string(
+						alphabet[0],
+					) + string(
+						midChar,
+					)
+				}
 				runes[i] = rune(alphabet[idx-1])
-				return string(
-					runes[:i+1],
-				)
+				return string(runes[:i+1])
 			}
 		}
 		return string(minChar) + string(midChar)
