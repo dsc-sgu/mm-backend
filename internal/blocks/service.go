@@ -101,7 +101,7 @@ func (s *Service) CreateBlock(
 		)
 	}
 
-	calculatedPos := CalculateMiddlePosition(leftPos, rightPos)
+	calculatedPos := calculateMiddlePosition(leftPos, rightPos)
 
 	block, err := s.repo.CreateBlock(ctx, model, calculatedPos)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *Service) MoveBlock(
 		return fmt.Errorf("move block: get positions: %w", err)
 	}
 
-	newPosition := CalculateMiddlePosition(leftPos, rightPos)
+	newPosition := calculateMiddlePosition(leftPos, rightPos)
 
 	err = s.repo.UpdateBlockPosition(ctx, blockID, newPosition)
 	if err != nil {
@@ -285,8 +285,8 @@ func weightToPosition(weight float64, alphabet string) string {
 	return string(result)
 }
 
-// CalculateMiddlePosition calculates a string that falls lexicographically between two other strings
-func CalculateMiddlePosition(prev, next string) string {
+// calculateMiddlePosition calculates a string that falls lexicographically between two other strings
+func calculateMiddlePosition(prev, next string) string {
 	// Case 1: both values are empty (blocks table is empty)
 	if prev == "" && next == "" {
 		return string(midChar)
