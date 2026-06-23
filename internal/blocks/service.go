@@ -173,7 +173,7 @@ func (s *Service) UpdateBlockContent(
 
 	block, err := s.repo.GetBlockByID(ctx, blockID)
 	if err != nil {
-		return nil, fmt.Errorf("move block: get block: %w", err)
+		return nil, fmt.Errorf("update block: get block: %w", err)
 	}
 	if block == nil || block.SnapshotID != snapshotID {
 		return nil, ErrBlockNotFound
@@ -192,7 +192,7 @@ func (s *Service) DeleteBlockByID(
 
 	block, err := s.repo.GetBlockByID(ctx, blockID)
 	if err != nil {
-		return fmt.Errorf("move block: get block: %w", err)
+		return fmt.Errorf("update block: get block: %w", err)
 	}
 	if block == nil || block.SnapshotID != snapshotID {
 		return ErrBlockNotFound
