@@ -29,7 +29,8 @@ func handleServiceError(err error) error {
 		return nil
 	}
 	switch {
-	case errors.Is(err, ErrSnapshotNotFound):
+	case errors.Is(err, ErrSnapshotNotFound),
+		errors.Is(err, ErrBlockNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, ErrSnapshotNotDraft):
 		return huma.Error400BadRequest(err.Error())
