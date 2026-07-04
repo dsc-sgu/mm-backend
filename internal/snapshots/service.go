@@ -15,14 +15,6 @@ func NewService(repo Repo) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) CreateSnapshot(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	snapshot *Snapshot,
-) (*Snapshot, error) {
-	return s.repo.CreateSnapshot(ctx, tx, snapshot)
-}
-
 func (s *Service) GetSnapshotByID(
 	ctx context.Context,
 	id uuid.UUID,
@@ -44,18 +36,8 @@ func (s *Service) FindUserDraft(
 	return s.repo.FindUserDraft(ctx, courseID, userID)
 }
 
-func (s *Service) UpdateSnapshotStatus(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	id uuid.UUID,
-	status Status,
-) error {
-	return s.repo.UpdateSnapshotStatus(ctx, tx, id, status)
-}
-
 func (s *Service) CreateDraftFromActual(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	courseID uuid.UUID,
 	targetVersion int,
 	userID uuid.UUID,
@@ -63,7 +45,6 @@ func (s *Service) CreateDraftFromActual(
 ) (*Snapshot, error) {
 	return s.repo.CreateDraftFromActual(
 		ctx,
-		tx,
 		courseID,
 		targetVersion,
 		userID,
@@ -73,13 +54,11 @@ func (s *Service) CreateDraftFromActual(
 
 func (s *Service) SwitchSnapshotContent(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	draftSnapshotID uuid.UUID,
 	targetSnapshotID uuid.UUID,
 ) error {
 	return s.repo.SwitchSnapshotContent(
 		ctx,
-		tx,
 		draftSnapshotID,
 		targetSnapshotID,
 	)
@@ -95,8 +74,7 @@ func (s *Service) DeleteAllSnapshotsByCourseID(
 
 func (s *Service) DiscardDraft(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	draftSnapshotID uuid.UUID,
 ) error {
-	return s.repo.DiscardDraft(ctx, tx, draftSnapshotID)
+	return s.repo.DiscardDraft(ctx, draftSnapshotID)
 }

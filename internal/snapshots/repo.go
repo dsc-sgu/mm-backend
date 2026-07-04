@@ -27,11 +27,6 @@ type Snapshot struct {
 }
 
 type Repo interface {
-	CreateSnapshot(
-		ctx context.Context,
-		tx *sqlx.Tx,
-		snapshot *Snapshot,
-	) (*Snapshot, error)
 	GetSnapshotByID(ctx context.Context, id uuid.UUID) (*Snapshot, error)
 	GetPublishedSnapshotsByCourseID(
 		ctx context.Context,
@@ -41,23 +36,19 @@ type Repo interface {
 		ctx context.Context,
 		courseID, userID uuid.UUID,
 	) (*Snapshot, error)
-	UpdateSnapshotStatus(
-		ctx context.Context,
-		tx *sqlx.Tx,
-		id uuid.UUID,
-		status Status,
-	) error
+	// CreateDraftFromActual atomically creates a draft snapshot and copies
+	// all blocks from the actual snapshot into it.
 	CreateDraftFromActual(
 		ctx context.Context,
-		tx *sqlx.Tx,
 		courseID uuid.UUID,
 		targetVersion int,
 		userID uuid.UUID,
 		actualSnapshotID uuid.UUID,
 	) (*Snapshot, error)
+	// SwitchSnapshotContent atomically replaces the draft's blocks with the
+	// target snapshot's blocks.
 	SwitchSnapshotContent(
 		ctx context.Context,
-		tx *sqlx.Tx,
 		draftSnapshotID uuid.UUID,
 		targetSnapshotID uuid.UUID,
 	) error
@@ -66,9 +57,10 @@ type Repo interface {
 		tx *sqlx.Tx,
 		courseID uuid.UUID,
 	) error
+	// DiscardDraft atomically marks the draft snapshot as stale and deletes
+	// all its blocks.
 	DiscardDraft(
 		ctx context.Context,
-		tx *sqlx.Tx,
 		draftSnapshotID uuid.UUID,
 	) error
 }

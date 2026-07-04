@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 )
 
 type CourseMemberRole string
@@ -37,12 +36,6 @@ type CreateCourse struct {
 type UpdateCourse struct {
 	OwnerID uuid.UUID `json:"ownerID,omitempty" db:"owner_id"`
 	Name    string    `json:"name,omitempty"    db:"name"`
-}
-
-type PublishSnapshot struct {
-	CourseID        uuid.UUID `json:"courseID"`
-	NewSnapshotID   uuid.UUID `json:"newSnapshotID"`
-	ExpectedVersion int       `json:"expectedVersion"`
 }
 
 // CourseMember is the database representation of a course member.
@@ -102,9 +95,10 @@ type InviteDetails struct {
 }
 
 type Repo interface {
-	CreateCourse(
+	// CreateCourseWithInitialSnapshot atomically creates a course together with
+	// its first published snapshot and links them.
+	CreateCourseWithInitialSnapshot(
 		ctx context.Context,
-		tx *sqlx.Tx,
 		model *CreateCourse,
 		ownerID uuid.UUID,
 	) (*Course, error)
@@ -120,10 +114,12 @@ type Repo interface {
 		update *UpdateCourse,
 	) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
-	PublishSnapshotToCourse(
+	// PublishDraft atomically links the draft snapshot as the course's active
+	// snapshot (checking the optimistic lock) and marks it published.
+	PublishDraft(
 		ctx context.Context,
-		tx *sqlx.Tx,
-		model *PublishSnapshot,
+		courseID, draftSnapshotID uuid.UUID,
+		expectedVersion int,
 	) error
 	CreateInvite(
 		ctx context.Context,
