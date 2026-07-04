@@ -173,7 +173,7 @@ func main() {
 	gitService := git.NewService(pgRepo)
 
 	blockService := blocks.NewService(pgRepo, snapshotService, lockService, config.LexoRankThreshold)
-	courseService := courses.NewService(pgRepo, snapshotService, lockService, pgRepo)
+	courseService := courses.NewService(pgRepo, snapshotService, lockService)
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)

@@ -150,6 +150,7 @@ func (r *PGRepo) FindUserDraft(
 	return &snapshot, nil
 }
 
+// UpdateSnapshotStatus updates a snapshot's status within an existing transaction.
 func (r *PGRepo) UpdateSnapshotStatus(
 	ctx context.Context,
 	tx *sqlx.Tx,
@@ -171,29 +172,34 @@ func (r *PGRepo) UpdateSnapshotStatus(
 	return nil
 }
 
-// CreateDraftFromActual creates draft from actual snapshot and copies all blocks to it
+// CreateDraftFromActual atomically creates a draft from the actual snapshot
+// and copies all its blocks into the draft.
 func (r *PGRepo) CreateDraftFromActual(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	courseID uuid.UUID,
 	targetVersion int,
 	userID uuid.UUID,
 	actualSnapshotID uuid.UUID,
 ) (*snapshots.Snapshot, error) {
-	draft := &snapshots.Snapshot{
-		CourseID:  courseID,
-		Version:   targetVersion,
-		Status:    snapshots.DraftStatus,
-		CreatedBy: userID,
-		CreatedAt: time.Now(),
-	}
+	var createdDraft *snapshots.Snapshot
 
-	createdDraft, err := r.CreateSnapshot(ctx, tx, draft)
-	if err != nil {
-		return nil, err
-	}
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		draft := &snapshots.Snapshot{
+			CourseID:  courseID,
+			Version:   targetVersion,
+			Status:    snapshots.DraftStatus,
+			CreatedBy: userID,
+			CreatedAt: time.Now(),
+		}
 
-	err = r.CopyBlocksToSnapshot(ctx, tx, actualSnapshotID, createdDraft.ID)
+		var txErr error
+		createdDraft, txErr = r.CreateSnapshot(ctx, tx, draft)
+		if txErr != nil {
+			return txErr
+		}
+
+		return r.CopyBlocksToSnapshot(ctx, tx, actualSnapshotID, createdDraft.ID)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("tx copy blocks to new snapshot: %w", err)
 	}
@@ -201,35 +207,35 @@ func (r *PGRepo) CreateDraftFromActual(
 	return createdDraft, nil
 }
 
-// SwitchSnapshotContent deletes current draft blocks and copies blocks from target snapshot
+// SwitchSnapshotContent atomically deletes the current draft's blocks and
+// copies blocks from the target snapshot.
 func (r *PGRepo) SwitchSnapshotContent(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	draftSnapshotID uuid.UUID,
 	targetSnapshotID uuid.UUID,
 ) error {
-	zap.L().
-		Debug("Executing block delete query within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		zap.L().
+			Debug("Executing block delete query within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
 
-	// Delete current draft blocks
-	err := r.DeleteAllBlocksBySnapshotID(ctx, tx, draftSnapshotID)
-	if err != nil {
-		return fmt.Errorf(
-			"tx delete current draft blocks: %w",
-			err,
-		)
-	}
+		// Delete current draft blocks
+		if err := r.DeleteAllBlocksBySnapshotID(ctx, tx, draftSnapshotID); err != nil {
+			return fmt.Errorf(
+				"tx delete current draft blocks: %w",
+				err,
+			)
+		}
 
-	zap.L().
-		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
+		zap.L().
+			Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
 
-	// Copy blocks from target
-	err = r.CopyBlocksToSnapshot(ctx, tx, targetSnapshotID, draftSnapshotID)
-	if err != nil {
-		return fmt.Errorf("tx copy blocks from target to draft: %w", err)
-	}
+		// Copy blocks from target
+		if err := r.CopyBlocksToSnapshot(ctx, tx, targetSnapshotID, draftSnapshotID); err != nil {
+			return fmt.Errorf("tx copy blocks from target to draft: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // DeleteAllSnapshotsByCourseID marks all snapshots of a course as 'stale'. It is used for a cascading soft deletion of a course.
@@ -252,28 +258,29 @@ func (r *PGRepo) DeleteAllSnapshotsByCourseID(
 	return nil
 }
 
-// DiscardDraft marks draft snapshot as 'stale' and deletes all it's blocks
+// DiscardDraft atomically marks the draft snapshot as 'stale' and deletes all its blocks.
 func (r *PGRepo) DiscardDraft(
 	ctx context.Context,
-	tx *sqlx.Tx,
 	draftSnapshotID uuid.UUID,
 ) error {
-	if err := r.UpdateSnapshotStatus(
-		ctx,
-		tx,
-		draftSnapshotID,
-		snapshots.StaleStatus,
-	); err != nil {
-		return fmt.Errorf("discard draft update status: %w", err)
-	}
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := r.UpdateSnapshotStatus(
+			ctx,
+			tx,
+			draftSnapshotID,
+			snapshots.StaleStatus,
+		); err != nil {
+			return fmt.Errorf("discard draft update status: %w", err)
+		}
 
-	if err := r.DeleteAllBlocksBySnapshotID(
-		ctx,
-		tx,
-		draftSnapshotID,
-	); err != nil {
-		return fmt.Errorf("discard draft deleting blocks: %w", err)
-	}
+		if err := r.DeleteAllBlocksBySnapshotID(
+			ctx,
+			tx,
+			draftSnapshotID,
+		); err != nil {
+			return fmt.Errorf("discard draft deleting blocks: %w", err)
+		}
 
-	return nil
+		return nil
+	})
 }

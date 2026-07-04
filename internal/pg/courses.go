@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 const (
@@ -115,7 +116,60 @@ func (r *PGRepo) ExecInTx(
 	return tx.Commit()
 }
 
-func (r *PGRepo) CreateCourse(
+// CreateCourseWithInitialSnapshot atomically creates a course together with
+// its first published snapshot and links them.
+func (r *PGRepo) CreateCourseWithInitialSnapshot(
+	ctx context.Context,
+	model *courses.CreateCourse,
+	ownerID uuid.UUID,
+) (*courses.Course, error) {
+	var createdCourse *courses.Course
+
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		var txErr error
+
+		createdCourse, txErr = r.createCourseTx(ctx, tx, model, ownerID)
+		if txErr != nil {
+			return fmt.Errorf("create course: %w", txErr)
+		}
+
+		firstSnapshot := &snapshots.Snapshot{
+			CourseID:  createdCourse.ID,
+			Version:   1,
+			Status:    snapshots.PublishedStatus,
+			CreatedBy: ownerID,
+			CreatedAt: time.Now(),
+		}
+
+		createdSnapshot, txErr := r.CreateSnapshot(ctx, tx, firstSnapshot)
+		if txErr != nil {
+			return fmt.Errorf("create initial snapshot: %w", txErr)
+		}
+
+		txErr = r.publishSnapshotToCourseTx(
+			ctx,
+			tx,
+			createdCourse.ID,
+			createdSnapshot.ID,
+			0,
+		)
+		if txErr != nil {
+			return fmt.Errorf("link initial snapshot: %w", txErr)
+		}
+
+		createdCourse.ActiveSnapshotID = &createdSnapshot.ID
+		createdCourse.Version = 1
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return createdCourse, nil
+}
+
+func (r *PGRepo) createCourseTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
 	model *courses.CreateCourse,
@@ -266,10 +320,38 @@ func (r *PGRepo) UpdateCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) PublishSnapshotToCourse(
+// PublishDraft atomically links the draft snapshot as the course's active
+// snapshot (checking the optimistic lock) and marks it published.
+func (r *PGRepo) PublishDraft(
+	ctx context.Context,
+	courseID, draftSnapshotID uuid.UUID,
+	expectedVersion int,
+) error {
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := r.publishSnapshotToCourseTx(
+			ctx,
+			tx,
+			courseID,
+			draftSnapshotID,
+			expectedVersion,
+		); err != nil {
+			return err
+		}
+
+		return r.UpdateSnapshotStatus(
+			ctx,
+			tx,
+			draftSnapshotID,
+			snapshots.PublishedStatus,
+		)
+	})
+}
+
+func (r *PGRepo) publishSnapshotToCourseTx(
 	ctx context.Context,
 	tx *sqlx.Tx,
-	model *courses.PublishSnapshot,
+	courseID, newSnapshotID uuid.UUID,
+	expectedVersion int,
 ) error {
 	zap.L().
 		Debug("Executing query within transaction", zap.String("query", publishSnapshotToCourseSQL))
@@ -277,9 +359,9 @@ func (r *PGRepo) PublishSnapshotToCourse(
 	res, err := tx.ExecContext(
 		ctx,
 		publishSnapshotToCourseSQL,
-		model.NewSnapshotID,
-		model.CourseID,
-		model.ExpectedVersion,
+		newSnapshotID,
+		courseID,
+		expectedVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("tx publish course version: %w", err)
