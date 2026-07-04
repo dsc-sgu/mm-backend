@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
@@ -19,20 +18,17 @@ type Service struct {
 	repo             Repo
 	snapshotsService *snapshots.Service
 	locksService     *locks.Service
-	txManager        TxManager
 }
 
 func NewService(
 	repo Repo,
 	snapshotsService *snapshots.Service,
 	locksService *locks.Service,
-	txManager TxManager,
 ) *Service {
 	return &Service{
 		repo:             repo,
 		snapshotsService: snapshotsService,
 		locksService:     locksService,
-		txManager:        txManager,
 	}
 }
 
@@ -69,11 +65,6 @@ var (
 	)
 )
 
-// TxManager is an interface for executing transactions on the service level
-type TxManager interface {
-	ExecInTx(ctx context.Context, fn func(tx *sqlx.Tx) error) error
-}
-
 func (s *Service) CheckCourseMember(
 	ctx context.Context,
 	userID, courseID uuid.UUID,
@@ -93,50 +84,7 @@ func (s *Service) CreateCourse(
 	model *CreateCourse,
 	ownerID uuid.UUID,
 ) (*Course, error) {
-	var createdCourse *Course
-
-	err := s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		var txErr error
-
-		createdCourse, txErr = s.repo.CreateCourse(ctx, tx, model, ownerID)
-		if txErr != nil {
-			return fmt.Errorf("create course: %w", txErr)
-		}
-
-		firstSnapshot := &snapshots.Snapshot{
-			CourseID:  createdCourse.ID,
-			Version:   1,
-			Status:    snapshots.PublishedStatus,
-			CreatedBy: ownerID,
-			CreatedAt: time.Now(),
-		}
-
-		_, txErr = s.snapshotsService.CreateSnapshot(ctx, tx, firstSnapshot)
-		if txErr != nil {
-			return fmt.Errorf("create initial snapshot: %w", txErr)
-		}
-
-		publishModel := &PublishSnapshot{
-			CourseID:        createdCourse.ID,
-			NewSnapshotID:   firstSnapshot.ID,
-			ExpectedVersion: 0,
-		}
-
-		txErr = s.repo.PublishSnapshotToCourse(ctx, tx, publishModel)
-		if txErr != nil {
-			return fmt.Errorf("link initial snapshot: %w", txErr)
-		}
-
-		createdCourse.ActiveSnapshotID = &firstSnapshot.ID
-		createdCourse.Version = 1
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return createdCourse, nil
+	return s.repo.CreateCourseWithInitialSnapshot(ctx, model, ownerID)
 }
 
 func (s *Service) CreateInvite(
@@ -283,22 +231,16 @@ func (s *Service) LockAndInitDraft(
 	}
 
 	// Case 3: Draft does not exist, create a new one
-	var newDraft *snapshots.Snapshot
-	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		var txErr error
-		targetVersion := course.Version + 1
-		newDraft, txErr = s.snapshotsService.CreateDraftFromActual(
-			ctx,
-			tx,
-			session.CourseID,
-			targetVersion,
-			session.UserID,
-			*course.ActiveSnapshotID,
-		)
-		return txErr
-	})
+	targetVersion := course.Version + 1
+	newDraft, err := s.snapshotsService.CreateDraftFromActual(
+		ctx,
+		session.CourseID,
+		targetVersion,
+		session.UserID,
+		*course.ActiveSnapshotID,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("lock and init: create draft tx: %w", err)
+		return nil, fmt.Errorf("lock and init: create draft: %w", err)
 	}
 
 	return &InitLockResult{
@@ -349,14 +291,11 @@ func (s *Service) SwitchSnapshot(
 	}
 
 	// Replace draft blocks with target
-	return s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		return s.snapshotsService.SwitchSnapshotContent(
-			ctx,
-			tx,
-			draft.ID,
-			targetSnapshotID,
-		)
-	})
+	return s.snapshotsService.SwitchSnapshotContent(
+		ctx,
+		draft.ID,
+		targetSnapshotID,
+	)
 }
 
 // PublishDraft checks optimistic lock, fixes editings,
@@ -381,32 +320,15 @@ func (s *Service) PublishDraft(
 		return ErrDraftNotFound
 	}
 
-	publishSnapshot := &PublishSnapshot{
-		CourseID:        session.CourseID,
-		NewSnapshotID:   draftSnapshotID,
-		ExpectedVersion: draft.Version - 1,
+	err = s.repo.PublishDraft(
+		ctx,
+		session.CourseID,
+		draftSnapshotID,
+		draft.Version-1,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrSnapshotConflict
 	}
-
-	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		txErr := s.repo.PublishSnapshotToCourse(
-			ctx,
-			tx,
-			publishSnapshot,
-		)
-		if txErr != nil {
-			if errors.Is(txErr, sql.ErrNoRows) {
-				return ErrSnapshotConflict
-			}
-			return txErr
-		}
-
-		return s.snapshotsService.UpdateSnapshotStatus(
-			ctx,
-			tx,
-			draftSnapshotID,
-			snapshots.PublishedStatus,
-		)
-	})
 	if err != nil {
 		return err
 	}
@@ -436,11 +358,8 @@ func (s *Service) CancelEdit(
 		return s.locksService.Unlock(ctx, session)
 	}
 
-	err = s.txManager.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		return s.snapshotsService.DiscardDraft(ctx, tx, draft.ID)
-	})
-	if err != nil {
-		return fmt.Errorf("cancel edit: discard draft tx: %w", err)
+	if err := s.snapshotsService.DiscardDraft(ctx, draft.ID); err != nil {
+		return fmt.Errorf("cancel edit: discard draft: %w", err)
 	}
 
 	return s.locksService.Unlock(ctx, session)
