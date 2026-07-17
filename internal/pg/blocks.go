@@ -19,13 +19,13 @@ const (
 		RETURNING id
 	`
 
-	getBlockByIdSQL = `
+	getBlockByIDSQL = `
 		SELECT id, snapshot_id, block_type, data, position, deleted_at
 		FROM blocks
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	getAllBlocksBySnapshotIdSQL = `
+	getAllBlocksBySnapshotIDSQL = `
 		SELECT id, snapshot_id, block_type, data, position
 		FROM blocks
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
@@ -45,13 +45,13 @@ const (
 		WHERE id = $2 AND deleted_at IS NULL
 	`
 
-	deleteBlockByIdSQL = `
+	deleteBlockByIDSQL = `
 		UPDATE blocks
 		SET deleted_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	deleteAllBlocksBySnapshotIdSQL = `
+	deleteAllBlocksBySnapshotIDSQL = `
 		UPDATE blocks
 		SET deleted_at = NOW()
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
@@ -126,10 +126,10 @@ func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", getBlockByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", getBlockByIDSQL))
 
 	var block blocks.Block
-	err := r.db.GetContext(ctx, &block, getBlockByIdSQL, id)
+	err := r.db.GetContext(ctx, &block, getBlockByIDSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -144,12 +144,12 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 	snapshotID uuid.UUID,
 ) ([]*blocks.Block, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", getAllBlocksBySnapshotIdSQL))
+		Debug("Executing query", zap.String("query", getAllBlocksBySnapshotIDSQL))
 
 	var blockList []*blocks.Block
 	rows, err := r.db.QueryxContext(
 		ctx,
-		getAllBlocksBySnapshotIdSQL,
+		getAllBlocksBySnapshotIDSQL,
 		snapshotID,
 	)
 	if err != nil {
@@ -274,9 +274,9 @@ func (r *PGRepo) UpdateBlockPosition(
 }
 
 func (r *PGRepo) DeleteBlockByID(ctx context.Context, id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIDSQL))
 
-	res, err := r.db.ExecContext(ctx, deleteBlockByIdSQL, id)
+	res, err := r.db.ExecContext(ctx, deleteBlockByIDSQL, id)
 	if err != nil {
 		return err
 	}
@@ -293,13 +293,13 @@ func (r *PGRepo) DeleteAllBlocksBySnapshotID(
 	snapshotID uuid.UUID,
 ) error {
 	zap.L().
-		Debug("Executing blocks delete within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
+		Debug("Executing blocks delete within transaction", zap.String("query", deleteAllBlocksBySnapshotIDSQL))
 
 	if snapshotID == uuid.Nil {
 		return fmt.Errorf("blocks delete: snapshot id is nil")
 	}
 
-	_, err := tx.ExecContext(ctx, deleteAllBlocksBySnapshotIdSQL, snapshotID)
+	_, err := tx.ExecContext(ctx, deleteAllBlocksBySnapshotIDSQL, snapshotID)
 	if err != nil {
 		return fmt.Errorf("tx soft delete blocks by snapshot: %w", err)
 	}
