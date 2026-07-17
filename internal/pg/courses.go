@@ -42,7 +42,7 @@ const (
 		RETURNING id
 	`
 
-	getCourseByIdSQL = `
+	getCourseByIDSQL = `
 		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
@@ -53,7 +53,7 @@ const (
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
-	getAllCoursesByCourseIdSQL = `
+	getAllCoursesByCourseIDSQL = `
 		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
 		FROM courses
 		WHERE id > $2 AND deleted_at IS NULL
@@ -67,13 +67,13 @@ const (
 		WHERE user_id = $1 AND course_id = $2
 	`
 
-	getInviteByIdSQL = `
+	getInviteByIDSQL = `
 		SELECT id, course_id, provided_role, created_by, created_at, expires_at, is_revoked
 		FROM invites
 		WHERE id = $1
 	`
 
-	updateCourseByIdSQL = `
+	updateCourseByIDSQL = `
 		UPDATE courses
 		SET owner_id = COALESCE($1, owner_id), display_name = COALESCE($2, display_name)
 		WHERE id = $3 AND deleted_at IS NULL
@@ -86,7 +86,7 @@ const (
  		WHERE id = $2 AND version = $3 AND deleted_at IS NULL
 	`
 
-	deleteCourseByIdSQL = `
+	deleteCourseByIDSQL = `
 		UPDATE courses
 		SET deleted_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
@@ -238,10 +238,10 @@ func (r *PGRepo) GetCourseByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", getCourseByIDSQL))
 
 	var course courses.Course
-	err := r.db.GetContext(ctx, &course, getCourseByIdSQL, id)
+	err := r.db.GetContext(ctx, &course, getCourseByIDSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -335,10 +335,10 @@ func (r *PGRepo) UpdateCourseByID(
 	id uuid.UUID,
 	update *courses.UpdateCourse,
 ) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateCourseByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", updateCourseByIDSQL))
 
 	var course courses.Course
-	err := r.db.QueryRowxContext(ctx, updateCourseByIdSQL, update.OwnerID, update.DisplayName, id).
+	err := r.db.QueryRowxContext(ctx, updateCourseByIDSQL, update.OwnerID, update.DisplayName, id).
 		StructScan(&course)
 	if err != nil {
 		return nil, err
@@ -406,9 +406,9 @@ func (r *PGRepo) publishSnapshotToCourseTx(
 }
 
 func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIDSQL))
 
-	res, err := r.db.ExecContext(ctx, deleteCourseByIdSQL, id)
+	res, err := r.db.ExecContext(ctx, deleteCourseByIDSQL, id)
 	if err != nil {
 		return err
 	}
@@ -458,10 +458,10 @@ func (r *PGRepo) GetInviteByID(
 	ctx context.Context,
 	inviteID uuid.UUID,
 ) (*courses.Invite, error) {
-	zap.L().Debug("Executing query", zap.String("query", getInviteByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", getInviteByIDSQL))
 
 	var invite courses.Invite
-	err := r.db.GetContext(ctx, &invite, getInviteByIdSQL, inviteID)
+	err := r.db.GetContext(ctx, &invite, getInviteByIDSQL, inviteID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
