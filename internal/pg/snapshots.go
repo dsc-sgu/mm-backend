@@ -20,7 +20,7 @@ const (
 		RETURNING id
 	`
 
-	getSnapshotByIdSQL = `
+	getSnapshotByIDSQL = `
 		SELECT id, course_id, version, status, created_by, created_at
 		FROM course_snapshots
 		WHERE id = $1 AND status != 'stale'
@@ -33,7 +33,7 @@ const (
 		LIMIT 1
 	`
 
-	getPublishedSnapshotsByCourseIdSQL = `
+	getPublishedSnapshotsByCourseIDSQL = `
 		SELECT id, course_id, version, status, created_by, created_at
 		FROM course_snapshots
 		WHERE course_id = $1 AND status = 'published'
@@ -46,7 +46,7 @@ const (
 		WHERE id = $2
 	`
 
-	deleteAllSnapshotsByCourseIdSQL = `
+	deleteAllSnapshotsByCourseIDSQL = `
 		UPDATE course_snapshots
 		SET status = 'stale'
 		WHERE course_id = $1 AND status != 'stale'
@@ -86,10 +86,10 @@ func (r *PGRepo) GetSnapshotByID(
 	ctx context.Context,
 	id uuid.UUID,
 ) (*snapshots.Snapshot, error) {
-	zap.L().Debug("Executing query", zap.String("query", getSnapshotByIdSQL))
+	zap.L().Debug("Executing query", zap.String("query", getSnapshotByIDSQL))
 
 	var snapshot snapshots.Snapshot
-	err := r.db.GetContext(ctx, &snapshot, getSnapshotByIdSQL, id)
+	err := r.db.GetContext(ctx, &snapshot, getSnapshotByIDSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -105,7 +105,7 @@ func (r *PGRepo) GetPublishedSnapshotsByCourseID(
 	courseID uuid.UUID,
 ) ([]*snapshots.Snapshot, error) {
 	zap.L().
-		Debug("Executing query", zap.String("query", getPublishedSnapshotsByCourseIdSQL))
+		Debug("Executing query", zap.String("query", getPublishedSnapshotsByCourseIDSQL))
 
 	if courseID == uuid.Nil {
 		return nil, fmt.Errorf("get published snapshots: course id is nil")
@@ -116,7 +116,7 @@ func (r *PGRepo) GetPublishedSnapshotsByCourseID(
 	err := r.db.SelectContext(
 		ctx,
 		&snapshotsList,
-		getPublishedSnapshotsByCourseIdSQL,
+		getPublishedSnapshotsByCourseIDSQL,
 		courseID,
 	)
 	if err != nil {
@@ -198,7 +198,12 @@ func (r *PGRepo) CreateDraftFromActual(
 			return txErr
 		}
 
-		return r.CopyBlocksToSnapshot(ctx, tx, actualSnapshotID, createdDraft.ID)
+		return r.CopyBlocksToSnapshot(
+			ctx,
+			tx,
+			actualSnapshotID,
+			createdDraft.ID,
+		)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("tx copy blocks to new snapshot: %w", err)
@@ -216,10 +221,14 @@ func (r *PGRepo) SwitchSnapshotContent(
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		zap.L().
-			Debug("Executing block delete query within transaction", zap.String("query", deleteAllBlocksBySnapshotIdSQL))
+			Debug("Executing block delete query within transaction", zap.String("query", deleteAllBlocksBySnapshotIDSQL))
 
 		// Delete current draft blocks
-		if err := r.DeleteAllBlocksBySnapshotID(ctx, tx, draftSnapshotID); err != nil {
+		if err := r.DeleteAllBlocksBySnapshotID(
+			ctx,
+			tx,
+			draftSnapshotID,
+		); err != nil {
 			return fmt.Errorf(
 				"tx delete current draft blocks: %w",
 				err,
@@ -230,7 +239,12 @@ func (r *PGRepo) SwitchSnapshotContent(
 			Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
 
 		// Copy blocks from target
-		if err := r.CopyBlocksToSnapshot(ctx, tx, targetSnapshotID, draftSnapshotID); err != nil {
+		if err := r.CopyBlocksToSnapshot(
+			ctx,
+			tx,
+			targetSnapshotID,
+			draftSnapshotID,
+		); err != nil {
 			return fmt.Errorf("tx copy blocks from target to draft: %w", err)
 		}
 
@@ -245,13 +259,13 @@ func (r *PGRepo) DeleteAllSnapshotsByCourseID(
 	courseID uuid.UUID,
 ) error {
 	zap.L().
-		Debug("Executing query within transaction", zap.String("query", deleteAllSnapshotsByCourseIdSQL))
+		Debug("Executing query within transaction", zap.String("query", deleteAllSnapshotsByCourseIDSQL))
 
 	if courseID == uuid.Nil {
 		return fmt.Errorf("snapshots cascade delete: course id is nil")
 	}
 
-	_, err := tx.ExecContext(ctx, deleteAllSnapshotsByCourseIdSQL, courseID)
+	_, err := tx.ExecContext(ctx, deleteAllSnapshotsByCourseIDSQL, courseID)
 	if err != nil {
 		return fmt.Errorf("tx soft delete snapshots: %w", err)
 	}
