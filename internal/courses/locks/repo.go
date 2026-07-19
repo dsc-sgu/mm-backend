@@ -13,6 +13,7 @@ type Lock struct {
 	UserID    uuid.UUID `db:"user_id"`
 	SessionID uuid.UUID `db:"session_id"`
 	ExpiresAt time.Time `db:"expires_at"`
+	IsValid   bool      `db:"is_valid"`
 }
 
 // LockSession is the input for setting or refreshing a lock

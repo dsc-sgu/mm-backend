@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -14,7 +13,7 @@ import (
 
 const (
 	getCourseLockSQL = `
-		SELECT course_id, user_id, session_id, expires_at
+		SELECT course_id, user_id, session_id, expires_at, (expires_at > NOW()) AS is_valid
 		FROM course_locks
 		WHERE course_id = $1
 	`
@@ -23,27 +22,18 @@ const (
 		INSERT INTO course_locks (course_id, user_id, session_id, expires_at)
 		VALUES ($1, $2, $3, NOW() + MAKE_INTERVAL(secs => $4))
 		ON CONFLICT (course_id) DO UPDATE
-		SET user_id = EXCLUDED.user_id, 
-		    session_id = EXCLUDED.session_id, 
+		SET user_id = EXCLUDED.user_id,
+		    session_id = EXCLUDED.session_id,
 		    expires_at = EXCLUDED.expires_at
+		WHERE course_locks.expires_at < NOW()
+		   OR (course_locks.user_id = EXCLUDED.user_id AND course_locks.session_id = EXCLUDED.session_id)
 		RETURNING course_id, user_id, session_id, expires_at
 	`
 
-	getCourseLockForUpdateSQL = `
-		SELECT course_id, user_id, session_id, expires_at 
-		FROM course_locks 
-		WHERE course_id = $1 
-		FOR UPDATE
-	`
-
-	getCourseForUpdateSQL = `
-		SELECT 1 FROM courses WHERE id = $1 FOR UPDATE
-	`
-
 	refreshCourseLockSQL = `
-		UPDATE course_locks 
-		SET expires_at = NOW() + MAKE_INTERVAL(secs => $1) 
-		WHERE course_id = $2
+		UPDATE course_locks
+		SET expires_at = NOW() + MAKE_INTERVAL(secs => $1)
+		WHERE course_id = $2 AND user_id = $3 AND session_id = $4 AND expires_at > NOW()
 	`
 
 	deleteCourseLockSQL = `
@@ -69,87 +59,32 @@ func (r *PGRepo) GetLock(
 	return &lock, nil
 }
 
-// SetLock creates a new course lock for a user
-// or intercepts an existing one if it has expired or belongs to the same user
+// SetLock creates a new course lock for a user, or takes over an existing one
+// if it has expired or already belongs to the same user/session
 func (r *PGRepo) SetLock(
 	ctx context.Context,
 	model *locks.LockSession,
 	ttlSeconds int,
 ) (*locks.Lock, error) {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("set lock: begin tx: %w", err)
-	}
-	defer rollback(tx)
+	zap.L().Debug("Executing query", zap.String("query", setCourseLockSQL))
 
-	// Block course row for update
-	var dummy int
-	err = tx.GetContext(
-		ctx,
-		&dummy,
-		getCourseForUpdateSQL,
-		model.CourseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("course not found for locking")
-		}
-		return nil, fmt.Errorf("lock course row: %w", err)
-	}
-
-	// Check the current state of the lock
-	var existingLock locks.Lock
-	err = tx.GetContext(
-		ctx,
-		&existingLock,
-		getCourseLockForUpdateSQL,
-		model.CourseID,
-	)
-	// If the lock does not exist, create a new one
-	if err != nil {
-		if err == sql.ErrNoRows {
-			var newLock locks.Lock
-			err = tx.QueryRowxContext(
-				ctx,
-				setCourseLockSQL,
-				model.CourseID,
-				model.UserID,
-				model.SessionID,
-				ttlSeconds,
-			).
-				StructScan(&newLock)
-			if err != nil {
-				return nil, fmt.Errorf("insert new lock: %w", err)
-			}
-
-			return &newLock, tx.Commit()
-		}
-		return nil, fmt.Errorf("check existing lock: %w", err)
-	}
-
-	// If the lock is held by another user and has not expired
-	if (existingLock.UserID != model.UserID ||
-		existingLock.SessionID != model.SessionID) &&
-		time.Now().Before(existingLock.ExpiresAt) {
-		return nil, locks.ErrLockHeldByAnother
-	}
-
-	// If the lock already belongs to the user or has expired - update it
 	var newLock locks.Lock
-	err = tx.QueryRowxContext(
+	err := r.db.QueryRowxContext(
 		ctx,
 		setCourseLockSQL,
 		model.CourseID,
 		model.UserID,
 		model.SessionID,
 		ttlSeconds,
-	).
-		StructScan(&newLock)
+	).StructScan(&newLock)
 	if err != nil {
-		return nil, fmt.Errorf("upsert lock: %w", err)
+		if err == sql.ErrNoRows {
+			return nil, locks.ErrLockHeldByAnother
+		}
+		return nil, fmt.Errorf("set lock: %w", err)
 	}
 
-	return &newLock, tx.Commit()
+	return &newLock, nil
 }
 
 // RefreshLock refreshes the lifetime of a course lock
@@ -158,51 +93,49 @@ func (r *PGRepo) RefreshLock(
 	model *locks.LockSession,
 	ttlSeconds int,
 ) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("refresh lock transaction failed: %w", err)
-	}
-	defer rollback(tx)
+	zap.L().Debug("Executing query", zap.String("query", refreshCourseLockSQL))
 
-	var currentLock locks.Lock
-
-	// Get the current lock for update
-	err = tx.GetContext(
-		ctx,
-		&currentLock,
-		getCourseLockForUpdateSQL,
-		model.CourseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return locks.ErrLockNotFound
-		}
-		return fmt.Errorf("refresh lock check: %w", err)
-	}
-
-	// Check if the lock is held by someone else
-	if currentLock.UserID != model.UserID ||
-		currentLock.SessionID != model.SessionID {
-		return locks.ErrLockHeldByAnother
-	}
-
-	// Check if the lock has expired
-	if time.Now().After(currentLock.ExpiresAt) {
-		return locks.ErrLockExpired
-	}
-
-	// If the lock is still valid, refresh it's lifetime
-	_, err = tx.ExecContext(
+	res, err := r.db.ExecContext(
 		ctx,
 		refreshCourseLockSQL,
 		ttlSeconds,
 		model.CourseID,
+		model.UserID,
+		model.SessionID,
 	)
 	if err != nil {
-		return fmt.Errorf("refresh lock update: %w", err)
+		return fmt.Errorf("refresh lock: %w", err)
 	}
 
-	return tx.Commit()
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("refresh lock rows affected: %w", err)
+	}
+	if affected > 0 {
+		return nil
+	}
+
+	return r.classifyLockFailure(ctx, model)
+}
+
+// classifyLockFailure re-reads the current lock state to turn a failed
+// guarded write into a precise sentinel error.
+func (r *PGRepo) classifyLockFailure(
+	ctx context.Context,
+	model *locks.LockSession,
+) error {
+	currentLock, err := r.GetLock(ctx, model.CourseID)
+	if err != nil {
+		return fmt.Errorf("classify lock failure: %w", err)
+	}
+	if currentLock == nil {
+		return locks.ErrLockNotFound
+	}
+	if currentLock.UserID != model.UserID ||
+		currentLock.SessionID != model.SessionID {
+		return locks.ErrLockHeldByAnother
+	}
+	return locks.ErrLockExpired
 }
 
 func (r *PGRepo) Unlock(ctx context.Context, model *locks.LockSession) error {
