@@ -3,12 +3,14 @@ package courses
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
@@ -19,6 +21,7 @@ type Handler struct {
 	blockService    *blocks.Service
 	lockService     *locks.Service
 	snapshotService *snapshots.Service
+	usersService    *users.Service
 }
 
 func NewHandler(
@@ -26,12 +29,56 @@ func NewHandler(
 	blockService *blocks.Service,
 	lockService *locks.Service,
 	snapshotService *snapshots.Service,
+	usersService *users.Service,
 ) *Handler {
 	return &Handler{
 		courseService:   courseService,
 		blockService:    blockService,
 		lockService:     lockService,
 		snapshotService: snapshotService,
+		usersService:    usersService,
+	}
+}
+
+// LockHolderInfo identifies the user who currently holds a course's edit lock.
+type LockHolderInfo struct {
+	ID         uuid.UUID `json:"id"`
+	FirstName  string    `json:"firstName"`
+	LastName   string    `json:"lastName"`
+	Patronymic string    `json:"patronymic,omitempty"`
+	Username   string    `json:"username"`
+}
+
+type LockConflictBody struct {
+	status int
+	Detail string          `json:"detail"`
+	Holder *LockHolderInfo `json:"holder"`
+}
+
+func (e *LockConflictBody) Error() string { return e.Detail }
+
+// lockConflictError builds the enriched 423 response
+// for a lock held by another user
+func (h *Handler) lockConflictError(
+	ctx context.Context,
+	holderID uuid.UUID,
+	baseErr error,
+) error {
+	holder, err := h.usersService.GetUserByID(ctx, holderID)
+	if err != nil || holder == nil {
+		return huma.Error423Locked(baseErr.Error())
+	}
+
+	return &LockConflictBody{
+		status: http.StatusLocked,
+		Detail: baseErr.Error(),
+		Holder: &LockHolderInfo{
+			ID:         holder.ID,
+			FirstName:  holder.FirstName,
+			LastName:   holder.LastName,
+			Patronymic: holder.Patronymic,
+			Username:   holder.Username,
+		},
 	}
 }
 
@@ -404,8 +451,11 @@ func (h *Handler) LockCourse(
 		SessionID: sessionID,
 	}
 
-	result, err := h.courseService.LockAndInitDraft(ctx, lockSession)
+	result, holderID, err := h.courseService.LockAndInitDraft(ctx, lockSession)
 	if err != nil {
+		if holderID != nil {
+			return nil, h.lockConflictError(ctx, *holderID, err)
+		}
 		return nil, handleServiceError(err)
 	}
 
@@ -432,8 +482,11 @@ func (h *Handler) Heartbeat(
 		SessionID: sessionID,
 	}
 
-	err := h.lockService.RefreshLock(ctx, lockSession)
+	holderID, err := h.lockService.RefreshLock(ctx, lockSession)
 	if err != nil {
+		if holderID != nil {
+			return nil, h.lockConflictError(ctx, *holderID, err)
+		}
 		return nil, handleServiceError(err)
 	}
 

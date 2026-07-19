@@ -382,6 +382,15 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			require.NoError(t, err)
 		}()
 		require.Equal(t, http.StatusLocked, resp.StatusCode)
+
+		// The 423 response should identify who currently holds the lock.
+		var conflict courses.LockConflictBody
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&conflict))
+		require.NotNil(t, conflict.Holder)
+		require.Equal(t, teacher.ID, conflict.Holder.ID)
+		require.Equal(t, "Teacher", conflict.Holder.FirstName)
+		require.Equal(t, "User", conflict.Holder.LastName)
+		require.Equal(t, "teacher", conflict.Holder.Username)
 	})
 
 	t.Run("3. Edit blocks within draft", func(t *testing.T) {
