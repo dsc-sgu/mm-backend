@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -48,7 +47,7 @@ func (s *Service) ValidateLock(
 		return ErrLockHeldByAnother
 	}
 
-	if time.Now().After(currentLock.ExpiresAt) {
+	if !currentLock.IsValid {
 		return ErrLockExpired
 	}
 
