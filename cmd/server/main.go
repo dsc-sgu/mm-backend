@@ -183,7 +183,7 @@ func main() {
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
-	courseHandler := courses.NewHandler(courseService, blockService, lockService, snapshotService)
+	courseHandler := courses.NewHandler(courseService, blockService, lockService, snapshotService, userService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
 	gitHandler := git.NewHandler(gitService)
 

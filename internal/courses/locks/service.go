@@ -64,11 +64,14 @@ func (s *Service) GetLock(
 func (s *Service) SetLock(
 	ctx context.Context,
 	model *LockSession,
-) (*Lock, error) {
+) (*Lock, *uuid.UUID, error) {
 	return s.repo.SetLock(ctx, model, s.lockTTLSeconds)
 }
 
-func (s *Service) RefreshLock(ctx context.Context, model *LockSession) error {
+func (s *Service) RefreshLock(
+	ctx context.Context,
+	model *LockSession,
+) (*uuid.UUID, error) {
 	return s.repo.RefreshLock(ctx, model, s.lockTTLSeconds)
 }
 

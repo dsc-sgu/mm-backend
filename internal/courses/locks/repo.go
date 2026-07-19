@@ -13,7 +13,7 @@ type Lock struct {
 	UserID    uuid.UUID `db:"user_id"`
 	SessionID uuid.UUID `db:"session_id"`
 	ExpiresAt time.Time `db:"expires_at"`
-	IsValid   bool      `db:"is_valid"`
+	IsValid   bool
 }
 
 // LockSession is the input for setting or refreshing a lock
@@ -29,7 +29,11 @@ type Repo interface {
 		ctx context.Context,
 		model *LockSession,
 		ttlSeconds int,
-	) (*Lock, error)
-	RefreshLock(ctx context.Context, model *LockSession, ttlSeconds int) error
+	) (*Lock, *uuid.UUID, error)
+	RefreshLock(
+		ctx context.Context,
+		model *LockSession,
+		ttlSeconds int,
+	) (*uuid.UUID, error)
 	Unlock(ctx context.Context, model *LockSession) error
 }

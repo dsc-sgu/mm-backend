@@ -65,7 +65,7 @@ func (r *PGRepo) SetLock(
 	ctx context.Context,
 	model *locks.LockSession,
 	ttlSeconds int,
-) (*locks.Lock, error) {
+) (*locks.Lock, *uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", setCourseLockSQL))
 
 	var newLock locks.Lock
@@ -79,12 +79,16 @@ func (r *PGRepo) SetLock(
 	).StructScan(&newLock)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, locks.ErrLockHeldByAnother
+			holderID, lookupErr := r.currentLockHolderID(ctx, model.CourseID)
+			if lookupErr != nil {
+				return nil, nil, lookupErr
+			}
+			return nil, holderID, locks.ErrLockHeldByAnother
 		}
-		return nil, fmt.Errorf("set lock: %w", err)
+		return nil, nil, fmt.Errorf("set lock: %w", err)
 	}
 
-	return &newLock, nil
+	return &newLock, nil, nil
 }
 
 // RefreshLock refreshes the lifetime of a course lock
@@ -92,7 +96,7 @@ func (r *PGRepo) RefreshLock(
 	ctx context.Context,
 	model *locks.LockSession,
 	ttlSeconds int,
-) error {
+) (*uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", refreshCourseLockSQL))
 
 	res, err := r.db.ExecContext(
@@ -104,38 +108,55 @@ func (r *PGRepo) RefreshLock(
 		model.SessionID,
 	)
 	if err != nil {
-		return fmt.Errorf("refresh lock: %w", err)
+		return nil, fmt.Errorf("refresh lock: %w", err)
 	}
 
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("refresh lock rows affected: %w", err)
+		return nil, fmt.Errorf("refresh lock rows affected: %w", err)
 	}
 	if affected > 0 {
-		return nil
+		return nil, nil
 	}
 
 	return r.classifyLockFailure(ctx, model)
 }
 
 // classifyLockFailure re-reads the current lock state to turn a failed
-// guarded write into a precise sentinel error.
+// guarded write into a precise sentinel error. The returned *uuid.UUID is
+// the current holder's user id, non-nil only when err is ErrLockHeldByAnother.
 func (r *PGRepo) classifyLockFailure(
 	ctx context.Context,
 	model *locks.LockSession,
-) error {
+) (*uuid.UUID, error) {
 	currentLock, err := r.GetLock(ctx, model.CourseID)
 	if err != nil {
-		return fmt.Errorf("classify lock failure: %w", err)
+		return nil, fmt.Errorf("classify lock failure: %w", err)
 	}
 	if currentLock == nil {
-		return locks.ErrLockNotFound
+		return nil, locks.ErrLockNotFound
 	}
 	if currentLock.UserID != model.UserID ||
 		currentLock.SessionID != model.SessionID {
-		return locks.ErrLockHeldByAnother
+		return &currentLock.UserID, locks.ErrLockHeldByAnother
 	}
-	return locks.ErrLockExpired
+	return nil, locks.ErrLockExpired
+}
+
+// currentLockHolderID reports who currently holds the course's lock, used
+// only to enrich a failed SetLock attempt with identifying information
+func (r *PGRepo) currentLockHolderID(
+	ctx context.Context,
+	courseID uuid.UUID,
+) (*uuid.UUID, error) {
+	currentLock, err := r.GetLock(ctx, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("lock holder lookup: %w", err)
+	}
+	if currentLock == nil {
+		return nil, nil
+	}
+	return &currentLock.UserID, nil
 }
 
 func (r *PGRepo) Unlock(ctx context.Context, model *locks.LockSession) error {
