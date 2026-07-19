@@ -80,7 +80,7 @@ func (r *PGRepo) SetLock(
 	if err != nil {
 		return nil, fmt.Errorf("set lock: begin tx: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer rollback(tx)
 
 	// Block course row for update
 	var dummy int
@@ -162,7 +162,7 @@ func (r *PGRepo) RefreshLock(
 	if err != nil {
 		return fmt.Errorf("refresh lock transaction failed: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer rollback(tx)
 
 	var currentLock locks.Lock
 
@@ -208,7 +208,7 @@ func (r *PGRepo) RefreshLock(
 func (r *PGRepo) Unlock(ctx context.Context, model *locks.LockSession) error {
 	zap.L().Debug("Executing query", zap.String("query", deleteCourseLockSQL))
 
-	res, err := r.db.ExecContext(
+	_, err := r.db.ExecContext(
 		ctx,
 		deleteCourseLockSQL,
 		model.CourseID,
@@ -217,11 +217,6 @@ func (r *PGRepo) Unlock(ctx context.Context, model *locks.LockSession) error {
 	)
 	if err != nil {
 		return fmt.Errorf("delete course lock: %w", err)
-	}
-
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return nil
 	}
 
 	return nil

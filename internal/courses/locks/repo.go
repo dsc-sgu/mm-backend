@@ -9,10 +9,10 @@ import (
 
 // Lock is the database representation of a course lock
 type Lock struct {
-	CourseID  uuid.UUID `json:"courseId"  db:"course_id"  binding:"required"`
-	UserID    uuid.UUID `json:"userId"    db:"user_id"    binding:"required"`
-	SessionID uuid.UUID `json:"sessionId" db:"session_id" binding:"required"`
-	ExpiresAt time.Time `json:"expiresAt" db:"expires_at" binding:"required"`
+	CourseID  uuid.UUID `db:"course_id"`
+	UserID    uuid.UUID `db:"user_id"`
+	SessionID uuid.UUID `db:"session_id"`
+	ExpiresAt time.Time `db:"expires_at"`
 }
 
 // LockSession is the input for setting or refreshing a lock

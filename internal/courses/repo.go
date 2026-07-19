@@ -23,7 +23,7 @@ type Course struct {
 	Name             string     `json:"name"                       db:"name"               binding:"required"`
 	Version          int        `json:"version"                    db:"version"            binding:"required"`
 	CreatedAt        time.Time  `json:"createdAt"                  db:"created_at"         binding:"required"`
-	DeletedAt        *time.Time `json:"deletedAt,omitempty"        db:"deleted_at"`
+	DeletedAt        *time.Time `json:"-"                          db:"deleted_at"`
 }
 
 // CreateCourse is the input for creating a course, used by both the service and repository layers.
@@ -34,8 +34,8 @@ type CreateCourse struct {
 
 // UpdateCourse is the input for updating a course, used by both the service and repository layers.
 type UpdateCourse struct {
-	OwnerID uuid.UUID `json:"ownerID,omitempty" db:"owner_id"`
-	Name    string    `json:"name,omitempty"    db:"name"`
+	OwnerID *uuid.UUID `json:"ownerID,omitempty" db:"owner_id"`
+	Name    *string    `json:"name,omitempty"    db:"name"`
 }
 
 // CourseMember is the database representation of a course member.
@@ -79,7 +79,7 @@ type Invite struct {
 type CreateInvite struct {
 	CourseID     uuid.UUID        `json:"courseID"            binding:"required"`
 	ProvidedRole CourseMemberRole `json:"providedRole"        binding:"required"`
-	ExpiresAt    *time.Time       `json:"expiresAt,omitempty" binding:"required"`
+	ExpiresAt    *time.Time       `json:"expiresAt,omitempty"`
 }
 
 // InviteDetails is built by the service layer and returned to the handler.

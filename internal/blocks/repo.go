@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 )
 
 // TextData is the database representation of a text block's data.
@@ -29,26 +28,34 @@ type Block struct {
 	BlockType  string          `json:"blockType"  db:"block_type"  binding:"required"`
 	Data       json.RawMessage `json:"data"       db:"data"        binding:"required"`
 	Position   string          `json:"position"   db:"position"    binding:"required"`
-	DeletedAt  *time.Time      `json:"deletedAt"  db:"deleted_at"`
+	DeletedAt  *time.Time      `json:"-"          db:"deleted_at"`
 }
 
 // CreateBlock is the input for creating a block, used by both the service and repository layers.
 type CreateBlock struct {
 	SnapshotID   uuid.UUID       `json:"-"                      db:"snapshot_id" binding:"required"`
 	BlockType    string          `json:"blockType"              db:"block_type"  binding:"required"`
-	Data         json.RawMessage `json:"data"                   db:"data"                           swaggertype:"object"`
+	Data         json.RawMessage `json:"data"                   db:"data"        binding:"required" swaggertype:"object"`
 	AfterBlockID *uuid.UUID      `json:"afterBlockID,omitempty"`
 }
 
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
 type UpdateBlock struct {
-	BlockType string          `json:"blockType,omitempty" db:"block_type"`
+	BlockType *string         `json:"blockType,omitempty" db:"block_type"`
 	Data      json.RawMessage `json:"data,omitempty"      db:"data"       swaggertype:"object"`
 }
 
 // MoveBlock is the input for moving a block.
 type MoveBlock struct {
-	AfterBlockID *uuid.UUID `json:"afterBlockID,omitempty" binding:"required"`
+	AfterBlockID *uuid.UUID `json:"afterBlockID,omitempty"`
+}
+
+// AdjacentPositions holds the positions of the blocks surrounding an
+// insertion or move point, empty string meaning there is no neighbor on
+// that side.
+type AdjacentPositions struct {
+	Prev string
+	Next string
 }
 
 type Repo interface {
@@ -66,7 +73,7 @@ type Repo interface {
 		ctx context.Context,
 		snapshotID uuid.UUID,
 		afterBlockID *uuid.UUID,
-	) (string, string, error)
+	) (AdjacentPositions, error)
 	UpdateBlockContent(
 		ctx context.Context,
 		id uuid.UUID,
@@ -78,15 +85,4 @@ type Repo interface {
 		newPosition string,
 	) error
 	DeleteBlockByID(ctx context.Context, id uuid.UUID) error
-	DeleteAllBlocksBySnapshotID(
-		ctx context.Context,
-		tx *sqlx.Tx,
-		snapshotID uuid.UUID,
-	) error
-	CopyBlocksToSnapshot(
-		ctx context.Context,
-		tx *sqlx.Tx,
-		sourceSnapshotID uuid.UUID,
-		targetSnapshotID uuid.UUID,
-	) error
 }

@@ -21,7 +21,10 @@ var (
 	ErrInvalidBlockForMoveAfter = errors.New(
 		"block cannot be moved after itself",
 	)
-	ErrBlockNotFound = errors.New("block not found")
+	ErrBlockNotFound      = errors.New("block not found")
+	ErrAfterBlockNotFound = errors.New(
+		"after_block_id does not exist in this snapshot",
+	)
 )
 
 type Service struct {
@@ -89,7 +92,7 @@ func (s *Service) CreateBlock(
 		return nil, err
 	}
 
-	leftPos, rightPos, err := s.repo.GetPositionsForMove(
+	positions, err := s.repo.GetPositionsForMove(
 		ctx,
 		model.SnapshotID,
 		model.AfterBlockID,
@@ -101,7 +104,7 @@ func (s *Service) CreateBlock(
 		)
 	}
 
-	calculatedPos := calculateMiddlePosition(leftPos, rightPos)
+	calculatedPos := calculateMiddlePosition(positions.Prev, positions.Next)
 
 	block, err := s.repo.CreateBlock(ctx, model, calculatedPos)
 	if err != nil {
@@ -138,7 +141,7 @@ func (s *Service) MoveBlock(
 		return ErrBlockNotFound
 	}
 
-	leftPos, rightPos, err := s.repo.GetPositionsForMove(
+	positions, err := s.repo.GetPositionsForMove(
 		ctx,
 		snapshotID,
 		afterBlockID,
@@ -147,7 +150,7 @@ func (s *Service) MoveBlock(
 		return fmt.Errorf("move block: get positions: %w", err)
 	}
 
-	newPosition := calculateMiddlePosition(leftPos, rightPos)
+	newPosition := calculateMiddlePosition(positions.Prev, positions.Next)
 
 	err = s.repo.UpdateBlockPosition(ctx, blockID, newPosition)
 	if err != nil {
@@ -192,7 +195,7 @@ func (s *Service) DeleteBlockByID(
 
 	block, err := s.repo.GetBlockByID(ctx, blockID)
 	if err != nil {
-		return fmt.Errorf("update block: get block: %w", err)
+		return fmt.Errorf("delete block: get block: %w", err)
 	}
 	if block == nil || block.SnapshotID != snapshotID {
 		return ErrBlockNotFound
