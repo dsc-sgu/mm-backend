@@ -173,11 +173,14 @@ func (s *Service) JoinCourseByInvite(
 	return invite.CourseID, nil
 }
 
-// LockAndInitDraft initializes draft and sets pessimistic lock for the course
+// LockAndInitDraft initializes draft and sets pessimistic lock for the
+// course. The returned *uuid.UUID is the current lock holder's user id,
+// non-nil only when err is locks.ErrLockHeldByAnother, so the caller can
+// look up and surface who is currently editing.
 func (s *Service) LockAndInitDraft(
 	ctx context.Context,
 	session *locks.LockSession,
-) (*InitLockResult, error) {
+) (*InitLockResult, *uuid.UUID, error) {
 	// Check user permissions
 	courseMember, err := s.CheckCourseMember(
 		ctx,
@@ -185,16 +188,16 @@ func (s *Service) LockAndInitDraft(
 		session.CourseID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if courseMember.Role != TeacherRole {
-		return nil, ErrPermissionDenied
+		return nil, nil, ErrPermissionDenied
 	}
 
 	// Try to set pessimistic lock for the course
-	_, err = s.locksService.SetLock(ctx, session)
+	_, holderID, err := s.locksService.SetLock(ctx, session)
 	if err != nil {
-		return nil, err
+		return nil, holderID, err
 	}
 
 	draft, err := s.snapshotsService.FindUserDraft(
@@ -203,15 +206,15 @@ func (s *Service) LockAndInitDraft(
 		session.UserID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("lock and init: find draft: %w", err)
+		return nil, nil, fmt.Errorf("lock and init: find draft: %w", err)
 	}
 
 	course, err := s.repo.GetCourseByID(ctx, session.CourseID)
 	if err != nil {
-		return nil, fmt.Errorf("lock and init: get course: %w", err)
+		return nil, nil, fmt.Errorf("lock and init: get course: %w", err)
 	}
 	if course == nil {
-		return nil, ErrCourseNotFound
+		return nil, nil, ErrCourseNotFound
 	}
 
 	// If user's draft already exists, check that it is still actual
@@ -221,13 +224,13 @@ func (s *Service) LockAndInitDraft(
 			return &InitLockResult{
 				InitType:        InitTypeRestored,
 				DraftSnapshotID: draft.ID,
-			}, nil
+			}, nil, nil
 		}
 		// Case 2: Draft exists but it version is stale
 		return &InitLockResult{
 			InitType:        InitTypeStaleConflict,
 			DraftSnapshotID: draft.ID,
-		}, nil
+		}, nil, nil
 	}
 
 	// Case 3: Draft does not exist, create a new one
@@ -240,13 +243,13 @@ func (s *Service) LockAndInitDraft(
 		*course.ActiveSnapshotID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("lock and init: create draft: %w", err)
+		return nil, nil, fmt.Errorf("lock and init: create draft: %w", err)
 	}
 
 	return &InitLockResult{
 		InitType:        InitTypeNew,
 		DraftSnapshotID: newDraft.ID,
-	}, nil
+	}, nil, nil
 }
 
 // SwitchSnapshot replaces the draft content with the selected snapshot
