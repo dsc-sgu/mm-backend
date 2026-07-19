@@ -58,9 +58,9 @@ const (
 	`
 
 	getBlockPositionSQL = `
-		SELECT position 
-		FROM blocks 
-		WHERE id = $1 AND deleted_at IS NULL
+		SELECT position
+		FROM blocks
+		WHERE id = $1 AND snapshot_id = $2 AND deleted_at IS NULL
 	`
 
 	getNextBlockPositionSQL = `
@@ -153,9 +153,6 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 		snapshotID,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, err
 	}
 	defer func() {
@@ -182,13 +179,12 @@ func (r *PGRepo) GetPositionsForMove(
 	ctx context.Context,
 	snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
-) (string, string, error) {
-	var leftPos, rightPos string
-
+) (blocks.AdjacentPositions, error) {
 	// If after_block_id is null, get first block position
 	if afterBlockID == nil {
 		zap.L().
 			Debug("Executing query", zap.String("query", getFirstBlockPositionSQL))
+		var rightPos string
 		err := r.db.GetContext(
 			ctx,
 			&rightPos,
@@ -196,26 +192,41 @@ func (r *PGRepo) GetPositionsForMove(
 			snapshotID,
 		)
 		if err != nil && err != sql.ErrNoRows {
-			return "", "", fmt.Errorf("get first block position: %w", err)
+			return blocks.AdjacentPositions{}, fmt.Errorf(
+				"get first block position: %w",
+				err,
+			)
 		}
-		return "", rightPos, nil
+		return blocks.AdjacentPositions{Next: rightPos}, nil
 	}
 
 	// Else get prev and next block positions
 	zap.L().Debug("Executing query", zap.String("query", getBlockPositionSQL))
-	err := r.db.GetContext(ctx, &leftPos, getBlockPositionSQL, *afterBlockID)
+	var leftPos string
+	err := r.db.GetContext(
+		ctx,
+		&leftPos,
+		getBlockPositionSQL,
+		*afterBlockID,
+		snapshotID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", "", fmt.Errorf(
-				"after_block_id %s not found",
+			return blocks.AdjacentPositions{}, fmt.Errorf(
+				"%w: %s",
+				blocks.ErrAfterBlockNotFound,
 				*afterBlockID,
 			)
 		}
-		return "", "", fmt.Errorf("get prev block position: %w", err)
+		return blocks.AdjacentPositions{}, fmt.Errorf(
+			"get prev block position: %w",
+			err,
+		)
 	}
 
 	zap.L().
 		Debug("Executing query", zap.String("query", getNextBlockPositionSQL))
+	var rightPos string
 	err = r.db.GetContext(
 		ctx,
 		&rightPos,
@@ -224,10 +235,13 @@ func (r *PGRepo) GetPositionsForMove(
 		leftPos,
 	)
 	if err != nil && err != sql.ErrNoRows {
-		return "", "", fmt.Errorf("get next block position: %w", err)
+		return blocks.AdjacentPositions{}, fmt.Errorf(
+			"get next block position: %w",
+			err,
+		)
 	}
 
-	return leftPos, rightPos, nil
+	return blocks.AdjacentPositions{Prev: leftPos, Next: rightPos}, nil
 }
 
 func (r *PGRepo) UpdateBlockContent(
@@ -237,12 +251,19 @@ func (r *PGRepo) UpdateBlockContent(
 ) (*blocks.Block, error) {
 	zap.L().Debug("Executing query", zap.String("query", updateBlockContentSQL))
 
+	// nil Data must reach the driver as SQL NULL (not an empty string), so
+	// that COALESCE leaves the existing column value untouched.
+	var data any
+	if len(model.Data) > 0 {
+		data = string(model.Data)
+	}
+
 	var block blocks.Block
 	err := r.db.QueryRowxContext(
 		ctx,
 		updateBlockContentSQL,
 		model.BlockType,
-		string(model.Data),
+		data,
 		id,
 	).
 		StructScan(&block)

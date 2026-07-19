@@ -32,7 +32,9 @@ func handleServiceError(err error) error {
 	case errors.Is(err, ErrSnapshotNotFound),
 		errors.Is(err, ErrBlockNotFound):
 		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, ErrSnapshotNotDraft):
+	case errors.Is(err, ErrSnapshotNotDraft),
+		errors.Is(err, ErrAfterBlockNotFound),
+		errors.Is(err, ErrInvalidBlockForMoveAfter):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, locks.ErrLockHeldByAnother),
 		errors.Is(err, locks.ErrLockNotFound),

@@ -104,13 +104,13 @@ func (r *PGRepo) ExecInTx(
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback()
+			rollback(tx)
 			panic(p)
 		}
 	}()
 
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback()
+		rollback(tx)
 		return err
 	}
 	return tx.Commit()
@@ -284,9 +284,6 @@ func (r *PGRepo) GetPaginatedCourses(
 		lastID,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
@@ -453,11 +450,7 @@ func (r *PGRepo) EnrollUserByInvite(
 	if err != nil {
 		return fmt.Errorf("enroll user: begin transaction: %w", err)
 	}
-	defer func() {
-		if err := tx.Rollback(); err != nil {
-			zap.L().Error(err.Error())
-		}
-	}()
+	defer rollback(tx)
 
 	courseMember := courses.CourseMember{
 		UserID:   userID,
