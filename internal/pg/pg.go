@@ -1,7 +1,11 @@
 package pg
 
 import (
+	"database/sql"
+	"errors"
+
 	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
@@ -20,6 +24,14 @@ type PGRepo struct {
 
 func NewPGRepo(db *sqlx.DB) *PGRepo {
 	return &PGRepo{db}
+}
+
+// rollback rolls back tx and logs unexpected failures. sql.ErrTxDone is
+// expected whenever the transaction was already committed and is not an error.
+func rollback(tx *sqlx.Tx) {
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		zap.L().Error("rollback failed", zap.Error(err))
+	}
 }
 
 // Check interfaces

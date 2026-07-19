@@ -100,14 +100,14 @@ func TestGetCourseByID(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var recievedCourse courses.Course
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedCourse))
+	var receivedCourse courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedCourse))
 
-	require.Equal(t, courseID, recievedCourse.ID)
-	require.Equal(t, "Test Course", recievedCourse.Name)
-	require.Equal(t, disciplineID, recievedCourse.DisciplineID)
-	require.NotNil(t, recievedCourse.ActiveSnapshotID)
-	require.Equal(t, 1, recievedCourse.Version)
+	require.Equal(t, courseID, receivedCourse.ID)
+	require.Equal(t, "Test Course", receivedCourse.Name)
+	require.Equal(t, disciplineID, receivedCourse.DisciplineID)
+	require.NotNil(t, receivedCourse.ActiveSnapshotID)
+	require.Equal(t, 1, receivedCourse.Version)
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
@@ -225,10 +225,10 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var recievedCourses []*courses.Course
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedCourses))
+	var receivedCourses []*courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedCourses))
 
-	require.Len(t, recievedCourses, limit)
+	require.Len(t, receivedCourses, limit)
 
 	require.Equal(t, "Course 0", recievedCourses[0].Name)
 	require.Equal(t, "Course 1", recievedCourses[1].Name)
@@ -301,7 +301,6 @@ func TestGetPaginatedCourse(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&recievedCourses4))
 
 	require.Len(t, recievedCourses4, 0)
-
 }
 
 func TestUpdateCourse(t *testing.T) {
@@ -342,9 +341,10 @@ func TestUpdateCourse(t *testing.T) {
 		courseID,
 	)
 
+	updatedName := "Updated Test Course"
 	body, _ := json.Marshal(courses.UpdateCourse{
-		OwnerID: testUser.ID,
-		DisplayName: "Updated Test Course",
+		OwnerID:     &testUser.ID,
+		DisplayName: &updatedName,
 	})
 
 	req, err := http.NewRequest(
