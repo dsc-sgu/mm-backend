@@ -58,6 +58,8 @@ type LockConflictBody struct {
 
 func (e *LockConflictBody) Error() string { return e.Detail }
 
+func (e *LockConflictBody) GetStatus() int { return e.status }
+
 // lockConflictError builds the enriched 423 response
 // for a lock held by another user
 func (h *Handler) lockConflictError(
@@ -320,9 +322,7 @@ func (h *Handler) GetSnapshotBlocks(
 			ctx,
 			lockSession,
 		); err != nil {
-			return nil, huma.Error423Locked(
-				"snapshot is a draft and your editing session is not valid",
-			)
+			return nil, handleServiceError(err)
 		}
 	}
 
