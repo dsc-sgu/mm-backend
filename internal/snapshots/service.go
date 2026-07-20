@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 )
 
 type Service struct {
@@ -62,14 +61,6 @@ func (s *Service) SwitchSnapshotContent(
 		draftSnapshotID,
 		targetSnapshotID,
 	)
-}
-
-func (s *Service) DeleteAllSnapshotsByCourseID(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	courseID uuid.UUID,
-) error {
-	return s.repo.DeleteAllSnapshotsByCourseID(ctx, tx, courseID)
 }
 
 func (s *Service) DiscardDraft(
