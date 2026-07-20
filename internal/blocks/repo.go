@@ -81,14 +81,10 @@ type Repo interface {
 		model *UpdateBlock,
 		userID, sessionID uuid.UUID,
 	) (*Block, error)
-	UpdateBlockPosition(
-		ctx context.Context,
-		id uuid.UUID,
-		newPosition string,
-	) error
 	DeleteBlockByID(
 		ctx context.Context,
 		id, snapshotID uuid.UUID,
 		userID, sessionID uuid.UUID,
 	) error
+	RebalanceBlockPositions(ctx context.Context, snapshotID uuid.UUID) error
 }
