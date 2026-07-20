@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -378,7 +379,9 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		req, err := http.NewRequest(http.MethodGet, detailsURL, nil)
 		require.NoError(t, err)
 
-		resp, err := studentTestUser.Client.Do(req) // Any authenticated user can get invite details
+		resp, err := studentTestUser.Client.Do(
+			req,
+		) // Any authenticated user can get invite details
 		require.NoError(t, err)
 		defer func() {
 			if err := resp.Body.Close(); err != nil {
@@ -420,7 +423,12 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Verify new role
-		studentRole := GetRoleInCourse(t, &backendPort, &studentTestUser, courseID)
+		studentRole := GetRoleInCourse(
+			t,
+			&backendPort,
+			&studentTestUser,
+			courseID,
+		)
 		require.NotNil(
 			t,
 			studentRole,
@@ -454,4 +462,126 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		require.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
+}
+
+// TestDeleteCourse verifies that deleting a course cascades: the course
+// itself, all of its snapshots (the initial published one and any drafts),
+// and all blocks belonging to those snapshots must all be soft-deleted.
+func TestDeleteCourse(t *testing.T) {
+	clearDatabases(t)
+
+	teacher := CreateAndLoginUser(
+		t,
+		&backendPort,
+		"Teacher",
+		"User",
+		"teacher",
+		"teacher@test.com",
+		"password",
+	)
+
+	disciplineID := CreateTestDiscipline(
+		t,
+		&backendPort,
+		&teacher,
+		"Test Discipline",
+	)
+	courseID := CreateTestCourse(
+		t,
+		&backendPort,
+		&teacher,
+		disciplineID,
+		"Test Course",
+	)
+
+	// Lock the course to create a second (draft) snapshot, and add blocks
+	// to it, so deletion has more than just the initial empty snapshot to
+	// cascade over.
+	draftSnapshotID := LockCourse(
+		t,
+		&backendPort,
+		&teacher,
+		courseID,
+	).DraftSnapshotID
+	require.NotZero(t, draftSnapshotID)
+
+	block1ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
+	block2ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
+
+	deleteURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s",
+		backendPort.Port(),
+		courseID,
+	)
+	deleteReq, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	require.NoError(t, err)
+
+	deleteResp, err := teacher.Client.Do(deleteReq)
+	require.NoError(t, err)
+	defer func() {
+		err := deleteResp.Body.Close()
+		require.NoError(t, err)
+	}()
+	require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
+
+	// The course should no longer be retrievable through the API.
+	getURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s",
+		backendPort.Port(),
+		courseID,
+	)
+	getReq, err := http.NewRequest(http.MethodGet, getURL, nil)
+	require.NoError(t, err)
+
+	getResp, err := teacher.Client.Do(getReq)
+	require.NoError(t, err)
+	defer func() {
+		err := getResp.Body.Close()
+		require.NoError(t, err)
+	}()
+	require.Equal(t, http.StatusNotFound, getResp.StatusCode)
+
+	// The course row itself should be soft-deleted.
+	var courseDeletedAt sql.NullTime
+	require.NoError(t, testPostgres.QueryRow(
+		`SELECT deleted_at FROM courses WHERE id = $1`,
+		courseID,
+	).Scan(&courseDeletedAt))
+	require.True(t, courseDeletedAt.Valid, "course should be soft-deleted")
+
+	// Every snapshot of the course (the initial published one and the
+	// draft) should have been marked stale.
+	rows, err := testPostgres.Query(
+		`SELECT status FROM course_snapshots WHERE course_id = $1`,
+		courseID,
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rows.Close())
+	}()
+
+	snapshotCount := 0
+	for rows.Next() {
+		var status string
+		require.NoError(t, rows.Scan(&status))
+		require.Equal(t, "stale", status)
+		snapshotCount++
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(
+		t,
+		2,
+		snapshotCount,
+		"expected the initial published snapshot and the draft",
+	)
+
+	// Every block created in the draft snapshot should be soft-deleted too.
+	for _, blockID := range []uuid.UUID{block1ID, block2ID} {
+		var blockDeletedAt sql.NullTime
+		require.NoError(t, testPostgres.QueryRow(
+			`SELECT deleted_at FROM blocks WHERE id = $1`,
+			blockID,
+		).Scan(&blockDeletedAt))
+		require.True(t, blockDeletedAt.Valid, "block should be soft-deleted")
+	}
 }
