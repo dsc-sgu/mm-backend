@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
@@ -18,17 +19,20 @@ type Service struct {
 	repo             Repo
 	snapshotsService *snapshots.Service
 	locksService     *locks.Service
+	blockService     *blocks.Service
 }
 
 func NewService(
 	repo Repo,
 	snapshotsService *snapshots.Service,
 	locksService *locks.Service,
+	blockService *blocks.Service,
 ) *Service {
 	return &Service{
 		repo:             repo,
 		snapshotsService: snapshotsService,
 		locksService:     locksService,
+		blockService:     blockService,
 	}
 }
 
@@ -390,6 +394,46 @@ func (s *Service) GetCourseByID(
 	return s.repo.GetCourseByID(ctx, id)
 }
 
+// GetCourseContent returns a course together with its active snapshot's
+// ordered blocks (nil if the course has no active snapshot yet).
+func (s *Service) GetCourseContent(
+	ctx context.Context,
+	courseID, userID uuid.UUID,
+) (*CourseContentResponse, error) {
+	if _, err := s.CheckCourseMember(ctx, userID, courseID); err != nil {
+		return nil, err
+	}
+
+	course, err := s.repo.GetCourseByID(ctx, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("get course content: get course: %w", err)
+	}
+	if course == nil {
+		return nil, ErrCourseNotFound
+	}
+
+	var linkedBlocks []*blocks.Block
+	if course.ActiveSnapshotID != nil {
+		linkedBlocks, err = s.blockService.GetAllBlocksBySnapshotID(
+			ctx,
+			*course.ActiveSnapshotID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("get course content: get blocks: %w", err)
+		}
+	}
+
+	return &CourseContentResponse{
+		ID:               course.ID,
+		DisciplineID:     course.DisciplineID,
+		ActiveSnapshotID: course.ActiveSnapshotID,
+		OwnerID:          course.OwnerID,
+		Name:             course.Name,
+		CreatedAt:        course.CreatedAt,
+		Blocks:           linkedBlocks,
+	}, nil
+}
+
 func (s *Service) UpdateCourseByID(
 	ctx context.Context,
 	id, userID uuid.UUID,
@@ -440,6 +484,37 @@ func (s *Service) GetSnapshotByID(
 	}
 
 	return snapshot, nil
+}
+
+// GetSnapshotBlocks returns all blocks belonging to a snapshot. A draft
+// snapshot is only visible to whoever currently holds its course's edit
+// lock as the same session that is editing it.
+func (s *Service) GetSnapshotBlocks(
+	ctx context.Context,
+	snapshotID, userID, sessionID uuid.UUID,
+) ([]*blocks.Block, error) {
+	snapshot, err := s.GetSnapshotByID(ctx, snapshotID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if snapshot.Status == snapshots.DraftStatus {
+		lockSession := &locks.LockSession{
+			CourseID:  snapshot.CourseID,
+			UserID:    userID,
+			SessionID: sessionID,
+		}
+		if err := s.locksService.ValidateLock(ctx, lockSession); err != nil {
+			return nil, err
+		}
+	}
+
+	linkedBlocks, err := s.blockService.GetAllBlocksBySnapshotID(ctx, snapshot.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get snapshot blocks: %w", err)
+	}
+
+	return linkedBlocks, nil
 }
 
 func (s *Service) GetPublishedSnapshots(
