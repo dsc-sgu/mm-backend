@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 )
 
 type Status string
@@ -51,11 +50,6 @@ type Repo interface {
 		ctx context.Context,
 		draftSnapshotID uuid.UUID,
 		targetSnapshotID uuid.UUID,
-	) error
-	DeleteAllSnapshotsByCourseID(
-		ctx context.Context,
-		tx *sqlx.Tx,
-		courseID uuid.UUID,
 	) error
 	// DiscardDraft atomically marks the draft snapshot as stale and deletes
 	// all its blocks.
