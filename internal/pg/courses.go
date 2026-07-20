@@ -323,6 +323,7 @@ func (r *PGRepo) PublishDraft(
 	ctx context.Context,
 	courseID, draftSnapshotID uuid.UUID,
 	expectedVersion int,
+	userID, sessionID uuid.UUID,
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		if err := r.publishSnapshotToCourseTx(
@@ -335,12 +336,28 @@ func (r *PGRepo) PublishDraft(
 			return err
 		}
 
-		return r.UpdateSnapshotStatus(
+		if err := r.UpdateSnapshotStatus(
 			ctx,
 			tx,
 			draftSnapshotID,
 			snapshots.PublishedStatus,
-		)
+		); err != nil {
+			return err
+		}
+
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", deleteCourseLockSQL))
+		if _, err := tx.ExecContext(
+			ctx,
+			deleteCourseLockSQL,
+			courseID,
+			userID,
+			sessionID,
+		); err != nil {
+			return fmt.Errorf("tx delete course lock: %w", err)
+		}
+
+		return nil
 	})
 }
 
