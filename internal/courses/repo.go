@@ -114,12 +114,11 @@ type Repo interface {
 		update *UpdateCourse,
 	) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
-	// PublishDraft atomically links the draft snapshot as the course's active
-	// snapshot (checking the optimistic lock) and marks it published.
 	PublishDraft(
 		ctx context.Context,
 		courseID, draftSnapshotID uuid.UUID,
 		expectedVersion int,
+		userID, sessionID uuid.UUID,
 	) error
 	CreateInvite(
 		ctx context.Context,
