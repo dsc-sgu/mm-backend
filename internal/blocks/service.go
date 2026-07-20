@@ -155,12 +155,8 @@ func (s *Service) rebalanceSnapshotPositions(
 	}
 
 	for i, block := range blocksList {
-		// Calculate weight from 0.0 to 1.0
 		// Add 1 to the value of totalBlocks to leave a gap at the end of the alphabet
-		weight := float64(i+1) / float64(totalBlocks+1)
-
-		// Convert weight to position in alphabet
-		newPos := weightToPosition(weight, alphabet)
+		newPos := indexToPosition(i+1, totalBlocks+1, alphabet)
 
 		if block.Position != newPos {
 			err = s.repo.UpdateBlockPosition(ctx, block.ID, newPos)
@@ -174,19 +170,23 @@ func (s *Service) rebalanceSnapshotPositions(
 		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
 }
 
-// weightToPosition converts weight from 0.0 to 1.0 to position in 62-char alphabet
-func weightToPosition(weight float64, alphabet string) string {
+// indexToPosition converts the integer index
+// to 4-char position in 62-char alphabet
+func indexToPosition(num, denom int, alphabet string) string {
 	var result []byte
-	base := float64(len(alphabet))
+	base := len(alphabet)
 
 	for range 4 {
-		weight *= base
-		idx := int(weight)
+		num *= base
+		idx := num / denom
+		if idx >= base { // defensive, num < denom*base should make this unreachable
+			idx = base - 1
+		}
 
 		result = append(result, alphabet[idx])
 
-		weight -= float64(idx)
-		if weight < 1e-9 { // If the remainder is negligible, round and exit
+		num %= denom
+		if num == 0 {
 			break
 		}
 	}
