@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 const (
@@ -21,6 +23,12 @@ const (
 
 	getBlockByIDSQL = `
 		SELECT id, snapshot_id, block_type, data, position, deleted_at
+		FROM blocks
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	getBlockSnapshotIDSQL = `
+		SELECT snapshot_id
 		FROM blocks
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -64,18 +72,18 @@ const (
 	`
 
 	getNextBlockPositionSQL = `
-		SELECT position 
-		FROM blocks 
-		WHERE snapshot_id = $1 
-		  AND position > $2 
+		SELECT position
+		FROM blocks
+		WHERE snapshot_id = $1
+		  AND position > $2
 		  AND deleted_at IS NULL
 		ORDER BY position ASC
 		LIMIT 1
 	`
 
 	getFirstBlockPositionSQL = `
-		SELECT position 
-		FROM blocks 
+		SELECT position
+		FROM blocks
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
 		ORDER BY position ASC
 		LIMIT 1
@@ -87,36 +95,208 @@ const (
 		FROM blocks
 		WHERE snapshot_id = $2 AND deleted_at IS NULL
 	`
+
+	lockSnapshotSQL = `
+		SELECT course_id, status
+		FROM course_snapshots
+		WHERE id = $1
+		FOR UPDATE
+	`
+
+	lockCourseLockSQL = `
+		SELECT user_id, session_id, (expires_at > NOW()) AS is_valid
+		FROM course_locks
+		WHERE course_id = $1
+		FOR UPDATE
+	`
 )
+
+// validateEditableSnapshot locks the snapshot row and the course's lock row
+// within tx and verifies the snapshot is a draft
+// currently locked by user/session
+func validateEditableSnapshot(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	snapshotID uuid.UUID,
+	userID, sessionID uuid.UUID,
+) error {
+	var snapshot snapshots.Snapshot
+	err := tx.GetContext(ctx, &snapshot, lockSnapshotSQL, snapshotID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return blocks.ErrSnapshotNotFound
+		}
+		return fmt.Errorf("lock snapshot: %w", err)
+	}
+	if snapshot.Status != snapshots.DraftStatus {
+		return blocks.ErrSnapshotNotDraft
+	}
+
+	var lock locks.Lock
+	err = tx.GetContext(ctx, &lock, lockCourseLockSQL, snapshot.CourseID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return locks.ErrLockNotFound
+		}
+		return fmt.Errorf("lock course lock: %w", err)
+	}
+	if lock.UserID != userID || lock.SessionID != sessionID {
+		return locks.ErrLockHeldByAnother
+	}
+	if !lock.IsValid {
+		return locks.ErrLockExpired
+	}
+
+	return nil
+}
+
+// blockBelongsToSnapshot verifies blockID is a valid block
+// of the snapshot with snapshotID within tx
+func blockBelongsToSnapshot(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	blockID, snapshotID uuid.UUID,
+) error {
+	var actualSnapshotID uuid.UUID
+	err := tx.GetContext(ctx, &actualSnapshotID, getBlockSnapshotIDSQL, blockID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return blocks.ErrBlockNotFound
+		}
+		return fmt.Errorf("get block: %w", err)
+	}
+	if actualSnapshotID != snapshotID {
+		return blocks.ErrBlockNotFound
+	}
+	return nil
+}
+
+// getPositionsForMoveTx returns prev and next block positions to calculate a
+// new position between them
+func getPositionsForMoveTx(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	snapshotID uuid.UUID,
+	afterBlockID *uuid.UUID,
+) (blocks.AdjacentPositions, error) {
+	// If after_block_id is null, get first block position
+	if afterBlockID == nil {
+		var rightPos string
+		err := tx.GetContext(
+			ctx,
+			&rightPos,
+			getFirstBlockPositionSQL,
+			snapshotID,
+		)
+		if err != nil && err != sql.ErrNoRows {
+			return blocks.AdjacentPositions{}, fmt.Errorf(
+				"get first block position: %w",
+				err,
+			)
+		}
+		return blocks.AdjacentPositions{Next: rightPos}, nil
+	}
+
+	// Else get prev and next block positions
+	var leftPos string
+	err := tx.GetContext(
+		ctx,
+		&leftPos,
+		getBlockPositionSQL,
+		*afterBlockID,
+		snapshotID,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return blocks.AdjacentPositions{}, fmt.Errorf(
+				"%w: %s",
+				blocks.ErrAfterBlockNotFound,
+				*afterBlockID,
+			)
+		}
+		return blocks.AdjacentPositions{}, fmt.Errorf(
+			"get prev block position: %w",
+			err,
+		)
+	}
+
+	var rightPos string
+	err = tx.GetContext(
+		ctx,
+		&rightPos,
+		getNextBlockPositionSQL,
+		snapshotID,
+		leftPos,
+	)
+	if err != nil && err != sql.ErrNoRows {
+		return blocks.AdjacentPositions{}, fmt.Errorf(
+			"get next block position: %w",
+			err,
+		)
+	}
+
+	return blocks.AdjacentPositions{Prev: leftPos, Next: rightPos}, nil
+}
 
 func (r *PGRepo) CreateBlock(
 	ctx context.Context,
 	model *blocks.CreateBlock,
-	position string,
+	userID, sessionID uuid.UUID,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", createBlockSQL))
+	var newBlock blocks.Block
 
-	newBlock := blocks.Block{
-		SnapshotID: model.SnapshotID,
-		BlockType:  model.BlockType,
-		Data:       model.Data,
-		Position:   position,
-	}
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := validateEditableSnapshot(
+			ctx,
+			tx,
+			model.SnapshotID,
+			userID,
+			sessionID,
+		); err != nil {
+			return err
+		}
 
-	rows, err := r.db.NamedQueryContext(ctx, createBlockSQL, newBlock)
+		positions, err := getPositionsForMoveTx(
+			ctx,
+			tx,
+			model.SnapshotID,
+			model.AfterBlockID,
+		)
+		if err != nil {
+			return fmt.Errorf("resolve positions: %w", err)
+		}
+
+		newBlock = blocks.Block{
+			SnapshotID: model.SnapshotID,
+			BlockType:  model.BlockType,
+			Data:       model.Data,
+			Position: blocks.CalculateMiddlePosition(
+				positions.Prev,
+				positions.Next,
+			),
+		}
+
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", createBlockSQL))
+
+		stmt, err := tx.PrepareNamedContext(ctx, createBlockSQL)
+		if err != nil {
+			return fmt.Errorf("tx prepare named statement for block: %w", err)
+		}
+		defer func() {
+			if err := stmt.Close(); err != nil {
+				zap.L().Error("failed to close statement", zap.Error(err))
+			}
+		}()
+
+		if err := stmt.GetContext(ctx, &newBlock.ID, newBlock); err != nil {
+			return fmt.Errorf("tx create block: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("create block: insert in db: %w", err)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			zap.L().Error(err.Error())
-		}
-	}()
-
-	if rows.Next() {
-		if err := rows.Scan(&newBlock.ID); err != nil {
-			return nil, fmt.Errorf("create block: scan block id: %w", err)
-		}
+		return nil, err
 	}
 
 	return &newBlock, nil
@@ -174,106 +354,130 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 	return blockList, nil
 }
 
-// GetPositionsForMove returns prev and next block positions to calculate new position between them
-func (r *PGRepo) GetPositionsForMove(
+func (r *PGRepo) MoveBlock(
 	ctx context.Context,
-	snapshotID uuid.UUID,
+	blockID, snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
-) (blocks.AdjacentPositions, error) {
-	// If after_block_id is null, get first block position
-	if afterBlockID == nil {
-		zap.L().
-			Debug("Executing query", zap.String("query", getFirstBlockPositionSQL))
-		var rightPos string
-		err := r.db.GetContext(
+	userID, sessionID uuid.UUID,
+) (string, error) {
+	var newPosition string
+
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := validateEditableSnapshot(
 			ctx,
-			&rightPos,
-			getFirstBlockPositionSQL,
+			tx,
 			snapshotID,
-		)
-		if err != nil && err != sql.ErrNoRows {
-			return blocks.AdjacentPositions{}, fmt.Errorf(
-				"get first block position: %w",
-				err,
-			)
+			userID,
+			sessionID,
+		); err != nil {
+			return err
 		}
-		return blocks.AdjacentPositions{Next: rightPos}, nil
-	}
+		if err := blockBelongsToSnapshot(
+			ctx,
+			tx,
+			blockID,
+			snapshotID,
+		); err != nil {
+			return err
+		}
 
-	// Else get prev and next block positions
-	zap.L().Debug("Executing query", zap.String("query", getBlockPositionSQL))
-	var leftPos string
-	err := r.db.GetContext(
-		ctx,
-		&leftPos,
-		getBlockPositionSQL,
-		*afterBlockID,
-		snapshotID,
-	)
+		positions, err := getPositionsForMoveTx(
+			ctx,
+			tx,
+			snapshotID,
+			afterBlockID,
+		)
+		if err != nil {
+			return fmt.Errorf("resolve positions: %w", err)
+		}
+		newPosition = blocks.CalculateMiddlePosition(
+			positions.Prev,
+			positions.Next,
+		)
+
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", updateBlockPositionSQL))
+
+		res, err := tx.ExecContext(
+			ctx,
+			updateBlockPositionSQL,
+			newPosition,
+			blockID,
+		)
+		if err != nil {
+			return fmt.Errorf("tx update block position: %w", err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("tx update block position rows affected: %w", err)
+		}
+		if affected == 0 {
+			return blocks.ErrBlockNotFound
+		}
+
+		return nil
+	})
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return blocks.AdjacentPositions{}, fmt.Errorf(
-				"%w: %s",
-				blocks.ErrAfterBlockNotFound,
-				*afterBlockID,
-			)
-		}
-		return blocks.AdjacentPositions{}, fmt.Errorf(
-			"get prev block position: %w",
-			err,
-		)
+		return "", err
 	}
 
-	zap.L().
-		Debug("Executing query", zap.String("query", getNextBlockPositionSQL))
-	var rightPos string
-	err = r.db.GetContext(
-		ctx,
-		&rightPos,
-		getNextBlockPositionSQL,
-		snapshotID,
-		leftPos,
-	)
-	if err != nil && err != sql.ErrNoRows {
-		return blocks.AdjacentPositions{}, fmt.Errorf(
-			"get next block position: %w",
-			err,
-		)
-	}
-
-	return blocks.AdjacentPositions{Prev: leftPos, Next: rightPos}, nil
+	return newPosition, nil
 }
 
 func (r *PGRepo) UpdateBlockContent(
 	ctx context.Context,
-	id uuid.UUID,
+	id, snapshotID uuid.UUID,
 	model *blocks.UpdateBlock,
+	userID, sessionID uuid.UUID,
 ) (*blocks.Block, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateBlockContentSQL))
-
-	// nil Data must reach the driver as SQL NULL (not an empty string), so
-	// that COALESCE leaves the existing column value untouched.
-	var data any
-	if len(model.Data) > 0 {
-		data = string(model.Data)
-	}
-
 	var block blocks.Block
-	err := r.db.QueryRowxContext(
-		ctx,
-		updateBlockContentSQL,
-		model.BlockType,
-		data,
-		id,
-	).
-		StructScan(&block)
+
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := validateEditableSnapshot(
+			ctx,
+			tx,
+			snapshotID,
+			userID,
+			sessionID,
+		); err != nil {
+			return err
+		}
+		if err := blockBelongsToSnapshot(ctx, tx, id, snapshotID); err != nil {
+			return err
+		}
+
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", updateBlockContentSQL))
+
+		// nil Data must reach the driver as SQL NULL (not an empty string),
+		// so that COALESCE leaves the existing column value untouched
+		var data any
+		if len(model.Data) > 0 {
+			data = string(model.Data)
+		}
+
+		err := tx.QueryRowxContext(
+			ctx,
+			updateBlockContentSQL,
+			model.BlockType,
+			data,
+			id,
+		).StructScan(&block)
+		if err != nil {
+			return fmt.Errorf("tx update block content: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("update block content: %w", err)
+		return nil, err
 	}
 
 	return &block, nil
 }
 
+// UpdateBlockPosition is only used for background rebalancing (server-initiated
+// maintenance, not a user edit), so it does not validate an edit lock
 func (r *PGRepo) UpdateBlockPosition(
 	ctx context.Context,
 	id uuid.UUID,
@@ -294,18 +498,35 @@ func (r *PGRepo) UpdateBlockPosition(
 	return nil
 }
 
-func (r *PGRepo) DeleteBlockByID(ctx context.Context, id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteBlockByIDSQL))
+func (r *PGRepo) DeleteBlockByID(
+	ctx context.Context,
+	id, snapshotID uuid.UUID,
+	userID, sessionID uuid.UUID,
+) error {
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := validateEditableSnapshot(
+			ctx,
+			tx,
+			snapshotID,
+			userID,
+			sessionID,
+		); err != nil {
+			return err
+		}
+		if err := blockBelongsToSnapshot(ctx, tx, id, snapshotID); err != nil {
+			return err
+		}
 
-	res, err := r.db.ExecContext(ctx, deleteBlockByIDSQL, id)
-	if err != nil {
-		return err
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", deleteBlockByIDSQL))
+
+		_, err := tx.ExecContext(ctx, deleteBlockByIDSQL, id)
+		if err != nil {
+			return fmt.Errorf("tx delete block: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func (r *PGRepo) DeleteAllBlocksBySnapshotID(
