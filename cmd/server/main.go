@@ -165,6 +165,13 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
 	// Initialize services (the order is important)
 	lockService := locks.NewService(pgRepo, config.CourseLockTTLSeconds)
 	snapshotService := snapshots.NewService(pgRepo)
@@ -172,7 +179,10 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	gitService := git.NewService(pgRepo)
 
-	blockService := blocks.NewService(pgRepo, config.LexoRankThreshold)
+	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
+	go rebalanceWorker.Run(ctx)
+
+	blockService := blocks.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold)
 	courseService := courses.NewService(pgRepo, snapshotService, lockService)
 
 	userHandler := users.NewHandler(userService)
@@ -201,13 +211,6 @@ func main() {
 		Addr:    addr,
 		Handler: handler,
 	}
-
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		syscall.SIGINT,
-		syscall.SIGTERM,
-	)
-	defer stop()
 
 	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
