@@ -419,18 +419,35 @@ func (r *PGRepo) publishSnapshotToCourseTx(
 	return nil
 }
 
+// DeleteCourseByID soft-deletes a course together with all of its snapshots
+// and blocks, in one transaction.
 func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIDSQL))
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		zap.L().
+			Debug("Executing query within transaction", zap.String("query", deleteCourseByIDSQL))
 
-	res, err := r.db.ExecContext(ctx, deleteCourseByIDSQL, id)
-	if err != nil {
-		return err
-	}
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+		res, err := tx.ExecContext(ctx, deleteCourseByIDSQL, id)
+		if err != nil {
+			return fmt.Errorf("tx soft delete course: %w", err)
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("tx soft delete course rows affected: %w", err)
+		}
+		if affected == 0 {
+			return sql.ErrNoRows
+		}
+
+		if err := r.DeleteAllSnapshotsByCourseID(ctx, tx, id); err != nil {
+			return fmt.Errorf("cascade delete snapshots: %w", err)
+		}
+
+		if err := r.DeleteAllBlocksByCourseID(ctx, tx, id); err != nil {
+			return fmt.Errorf("cascade delete blocks: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func (r *PGRepo) CreateInvite(

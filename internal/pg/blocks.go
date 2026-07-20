@@ -65,6 +65,13 @@ const (
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
 	`
 
+	deleteAllBlocksByCourseIDSQL = `
+		UPDATE blocks
+		SET deleted_at = NOW()
+		WHERE snapshot_id IN (SELECT id FROM course_snapshots WHERE course_id = $1)
+		  AND deleted_at IS NULL
+	`
+
 	getBlockPositionSQL = `
 		SELECT position
 		FROM blocks
@@ -584,6 +591,25 @@ func (r *PGRepo) DeleteAllBlocksBySnapshotID(
 	_, err := tx.ExecContext(ctx, deleteAllBlocksBySnapshotIDSQL, snapshotID)
 	if err != nil {
 		return fmt.Errorf("tx soft delete blocks by snapshot: %w", err)
+	}
+	return nil
+}
+
+func (r *PGRepo) DeleteAllBlocksByCourseID(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	courseID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing blocks delete within transaction", zap.String("query", deleteAllBlocksByCourseIDSQL))
+
+	if courseID == uuid.Nil {
+		return fmt.Errorf("blocks delete: course id is nil")
+	}
+
+	_, err := tx.ExecContext(ctx, deleteAllBlocksByCourseIDSQL, courseID)
+	if err != nil {
+		return fmt.Errorf("tx soft delete blocks by course: %w", err)
 	}
 	return nil
 }
