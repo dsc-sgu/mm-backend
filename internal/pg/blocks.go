@@ -103,6 +103,13 @@ const (
 		FOR UPDATE
 	`
 
+	lockSnapshotForRebalanceSQL = `
+		SELECT 1
+		FROM course_snapshots
+		WHERE id = $1
+		FOR UPDATE
+	`
+
 	lockCourseLockSQL = `
 		SELECT user_id, session_id, (expires_at > NOW()) AS is_valid
 		FROM course_locks
@@ -476,26 +483,59 @@ func (r *PGRepo) UpdateBlockContent(
 	return &block, nil
 }
 
-// UpdateBlockPosition is only used for background rebalancing (server-initiated
-// maintenance, not a user edit), so it does not validate an edit lock
-func (r *PGRepo) UpdateBlockPosition(
+// RebalanceBlockPositions recomputes and updates every block's position
+// for a specific snapshot to distribute the blocks evenly across the alphabet
+func (r *PGRepo) RebalanceBlockPositions(
 	ctx context.Context,
-	id uuid.UUID,
-	newPosition string,
+	snapshotID uuid.UUID,
 ) error {
-	zap.L().
-		Debug("Executing query", zap.String("query", updateBlockPositionSQL))
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		var dummy int
+		err := tx.GetContext(
+			ctx,
+			&dummy,
+			lockSnapshotForRebalanceSQL,
+			snapshotID,
+		)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil
+			}
+			return fmt.Errorf("lock snapshot: %w", err)
+		}
 
-	res, err := r.db.ExecContext(ctx, updateBlockPositionSQL, newPosition, id)
-	if err != nil {
-		return fmt.Errorf("update block position: %w", err)
-	}
+		var blocksList []*blocks.Block
+		if err := tx.SelectContext(
+			ctx,
+			&blocksList,
+			getAllBlocksBySnapshotIDSQL,
+			snapshotID,
+		); err != nil {
+			return fmt.Errorf("get blocks: %w", err)
+		}
 
-	affected, _ := res.RowsAffected()
-	if affected == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+		// Redistribute positions: block i gets the position at fraction
+		// (i+1)/(totalBlocks+1) of the alphabet range, leaving a gap at both
+		// ends for future inserts.
+		totalBlocks := len(blocksList)
+		for i, block := range blocksList {
+			// Add 1 to the value of totalBlocks to leave a gap at the end of the alphabet
+			newPos := blocks.IndexToPosition(i+1, totalBlocks+1)
+			if block.Position == newPos {
+				continue
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				updateBlockPositionSQL,
+				newPos,
+				block.ID,
+			); err != nil {
+				return fmt.Errorf("update block position: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *PGRepo) DeleteBlockByID(

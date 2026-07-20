@@ -212,3 +212,26 @@ func CalculateMiddlePosition(prev, next string) string {
 
 	return result.String()
 }
+
+// IndexToPosition is used by the rebalance worker to convert
+// the integer index to a 4-char position in a 62-char alphabet
+func IndexToPosition(num, denom int) string {
+	var result []byte
+	base := len(alphabet)
+
+	for range 4 {
+		num *= base
+		idx := num / denom
+		if idx >= base { // defensive, num < denom*base should make this unreachable
+			idx = base - 1
+		}
+
+		result = append(result, alphabet[idx])
+
+		num %= denom
+		if num == 0 {
+			break
+		}
+	}
+	return string(result)
+}
