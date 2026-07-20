@@ -167,6 +167,13 @@ func main() {
 
 	pgRepo := pg.NewPGRepo(dbConn)
 
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
 	// Initialize services (the order is important)
 	lockService := locks.NewService(pgRepo, config.CourseLockTTLSeconds)
 	snapshotService := snapshots.NewService(pgRepo)
@@ -178,7 +185,9 @@ func main() {
 
 	attemptHandler := attempt.NewHandler(attemptService, taskService)
 	taskHandler := tasks.NewHandler(taskService, blockService)
-	blockService := blocks.NewService(pgRepo, config.LexoRankThreshold)
+	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
+	go rebalanceWorker.Run(ctx)
+	blockService := blocks.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold)
 	courseService := courses.NewService(pgRepo, snapshotService, lockService)
 
 	userHandler := users.NewHandler(userService)
@@ -209,13 +218,6 @@ func main() {
 		Addr:    addr,
 		Handler: handler,
 	}
-
-	ctx, stop := signal.NotifyContext(
-		context.Background(),
-		syscall.SIGINT,
-		syscall.SIGTERM,
-	)
-	defer stop()
 
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 )
 
 var (
@@ -25,15 +24,18 @@ var (
 
 type Service struct {
 	repo              Repo
+	rebalanceWorker   *RebalanceWorker
 	lexoRankThreshold int
 }
 
 func NewService(
 	repo Repo,
+	rebalanceWorker *RebalanceWorker,
 	lexoRankThreshold int,
 ) *Service {
 	return &Service{
 		repo:              repo,
+		rebalanceWorker:   rebalanceWorker,
 		lexoRankThreshold: lexoRankThreshold,
 	}
 }
@@ -51,7 +53,7 @@ func (s *Service) CreateBlock(
 
 	// Check if rebalance is needed
 	if len(block.Position) > s.lexoRankThreshold {
-		go s.rebalanceSnapshotPositions(context.Background(), model.SnapshotID)
+		s.rebalanceWorker.Enqueue(model.SnapshotID)
 	}
 
 	return block, nil
@@ -81,7 +83,7 @@ func (s *Service) MoveBlock(
 
 	// Check if rebalance is needed
 	if len(newPosition) > s.lexoRankThreshold {
-		go s.rebalanceSnapshotPositions(context.Background(), snapshotID)
+		s.rebalanceWorker.Enqueue(snapshotID)
 	}
 
 	return nil
@@ -129,69 +131,6 @@ const (
 	minChar  = '0'
 	midChar  = 'V'
 )
-
-// rebalanceSnapshotPositions shrinks overgrown position lines,
-// distributing them evenly across the available alphabet
-func (s *Service) rebalanceSnapshotPositions(
-	ctx context.Context,
-	snapshotID uuid.UUID,
-) {
-	zap.L().
-		Info("Starting lazy position rebalancing for snapshot", zap.String("snapshot_id", snapshotID.String()))
-
-	blocksList, err := s.repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
-	if err != nil {
-		zap.L().
-			Error("rebalance positions: failed to fetch blocks", zap.Error(err))
-		return
-	}
-
-	// Redistribute positions:
-	// first block gets the middle position of the range,
-	// every next block gets the position between previous and the end of the range ("~" character)
-	totalBlocks := len(blocksList)
-	if totalBlocks == 0 {
-		return
-	}
-
-	for i, block := range blocksList {
-		// Add 1 to the value of totalBlocks to leave a gap at the end of the alphabet
-		newPos := indexToPosition(i+1, totalBlocks+1, alphabet)
-
-		if block.Position != newPos {
-			err = s.repo.UpdateBlockPosition(ctx, block.ID, newPos)
-			if err != nil {
-				zap.L().
-					Error("rebalance positions: failed to update block position", zap.Error(err))
-			}
-		}
-	}
-	zap.L().
-		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
-}
-
-// indexToPosition converts the integer index
-// to 4-char position in 62-char alphabet
-func indexToPosition(num, denom int, alphabet string) string {
-	var result []byte
-	base := len(alphabet)
-
-	for range 4 {
-		num *= base
-		idx := num / denom
-		if idx >= base { // defensive, num < denom*base should make this unreachable
-			idx = base - 1
-		}
-
-		result = append(result, alphabet[idx])
-
-		num %= denom
-		if num == 0 {
-			break
-		}
-	}
-	return string(result)
-}
 
 // CalculateMiddlePosition calculates a string that falls lexicographically
 // between two other strings
