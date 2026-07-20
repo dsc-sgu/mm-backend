@@ -3,14 +3,10 @@ package blocks
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-
-	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
-	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 var (
@@ -29,132 +25,58 @@ var (
 
 type Service struct {
 	repo              Repo
-	snapshotsService  *snapshots.Service
-	locksService      *locks.Service
 	lexoRankThreshold int
 }
 
 func NewService(
 	repo Repo,
-	snapshotsService *snapshots.Service,
-	locksService *locks.Service,
 	lexoRankThreshold int,
 ) *Service {
 	return &Service{
 		repo:              repo,
-		snapshotsService:  snapshotsService,
-		locksService:      locksService,
 		lexoRankThreshold: lexoRankThreshold,
 	}
 }
 
-// validateLock checks if the user has a valid lock on the course
-func (s *Service) validateLock(
-	ctx context.Context,
-	snapshotID, userID, sessionID uuid.UUID,
-) error {
-	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
-	if err != nil {
-		return err
-	}
-	if snapshot == nil {
-		return ErrSnapshotNotFound
-	}
-	if snapshot.Status != snapshots.DraftStatus {
-		return ErrSnapshotNotDraft
-	}
-
-	lockSession := &locks.LockSession{
-		CourseID:  snapshot.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	if err := s.locksService.ValidateLock(ctx, lockSession); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// CreateBlock calculates position based on AfterBlockID and initiates block creation
+// CreateBlock inserts a new block after model.AfterBlockID
 func (s *Service) CreateBlock(
 	ctx context.Context,
 	model *CreateBlock,
 	userID, sessionID uuid.UUID,
 ) (*Block, error) {
-	if err := s.validateLock(
-		ctx,
-		model.SnapshotID,
-		userID,
-		sessionID,
-	); err != nil {
-		return nil, err
-	}
-
-	positions, err := s.repo.GetPositionsForMove(
-		ctx,
-		model.SnapshotID,
-		model.AfterBlockID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"create block: resolve positions: %w",
-			err,
-		)
-	}
-
-	calculatedPos := calculateMiddlePosition(positions.Prev, positions.Next)
-
-	block, err := s.repo.CreateBlock(ctx, model, calculatedPos)
+	block, err := s.repo.CreateBlock(ctx, model, userID, sessionID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check if rebalance is needed
-	if len(calculatedPos) > s.lexoRankThreshold {
+	if len(block.Position) > s.lexoRankThreshold {
 		go s.rebalanceSnapshotPositions(context.Background(), model.SnapshotID)
 	}
 
 	return block, nil
 }
 
-// MoveBlock calculates new block position and updates it in DB
+// MoveBlock changes block's position so that it comes after afterBlockID
 func (s *Service) MoveBlock(
 	ctx context.Context,
 	blockID, snapshotID, userID, sessionID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) error {
-	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
-		return err
-	}
-
 	if afterBlockID != nil && *afterBlockID == blockID {
 		return ErrInvalidBlockForMoveAfter
 	}
 
-	block, err := s.repo.GetBlockByID(ctx, blockID)
-	if err != nil {
-		return fmt.Errorf("move block: get block: %w", err)
-	}
-	if block == nil || block.SnapshotID != snapshotID {
-		return ErrBlockNotFound
-	}
-
-	positions, err := s.repo.GetPositionsForMove(
+	newPosition, err := s.repo.MoveBlock(
 		ctx,
+		blockID,
 		snapshotID,
 		afterBlockID,
+		userID,
+		sessionID,
 	)
 	if err != nil {
-		return fmt.Errorf("move block: get positions: %w", err)
-	}
-
-	newPosition := calculateMiddlePosition(positions.Prev, positions.Next)
-
-	err = s.repo.UpdateBlockPosition(ctx, blockID, newPosition)
-	if err != nil {
-		return fmt.Errorf("move block: save position: %w", err)
+		return err
 	}
 
 	// Check if rebalance is needed
@@ -170,38 +92,21 @@ func (s *Service) UpdateBlockContent(
 	blockID, snapshotID, userID, sessionID uuid.UUID,
 	model *UpdateBlock,
 ) (*Block, error) {
-	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
-		return nil, err
-	}
-
-	block, err := s.repo.GetBlockByID(ctx, blockID)
-	if err != nil {
-		return nil, fmt.Errorf("update block: get block: %w", err)
-	}
-	if block == nil || block.SnapshotID != snapshotID {
-		return nil, ErrBlockNotFound
-	}
-
-	return s.repo.UpdateBlockContent(ctx, blockID, model)
+	return s.repo.UpdateBlockContent(
+		ctx,
+		blockID,
+		snapshotID,
+		model,
+		userID,
+		sessionID,
+	)
 }
 
 func (s *Service) DeleteBlockByID(
 	ctx context.Context,
 	blockID, snapshotID, userID, sessionID uuid.UUID,
 ) error {
-	if err := s.validateLock(ctx, snapshotID, userID, sessionID); err != nil {
-		return err
-	}
-
-	block, err := s.repo.GetBlockByID(ctx, blockID)
-	if err != nil {
-		return fmt.Errorf("delete block: get block: %w", err)
-	}
-	if block == nil || block.SnapshotID != snapshotID {
-		return ErrBlockNotFound
-	}
-
-	return s.repo.DeleteBlockByID(ctx, blockID)
+	return s.repo.DeleteBlockByID(ctx, blockID, snapshotID, userID, sessionID)
 }
 
 func (s *Service) GetBlockByID(
@@ -288,8 +193,9 @@ func weightToPosition(weight float64, alphabet string) string {
 	return string(result)
 }
 
-// calculateMiddlePosition calculates a string that falls lexicographically between two other strings
-func calculateMiddlePosition(prev, next string) string {
+// CalculateMiddlePosition calculates a string that falls lexicographically
+// between two other strings
+func CalculateMiddlePosition(prev, next string) string {
 	// Case 1: both values are empty (blocks table is empty)
 	if prev == "" && next == "" {
 		return string(midChar)

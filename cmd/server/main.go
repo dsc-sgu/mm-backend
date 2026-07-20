@@ -178,7 +178,7 @@ func main() {
 
 	attemptHandler := attempt.NewHandler(attemptService, taskService)
 	taskHandler := tasks.NewHandler(taskService, blockService)
-	blockService := blocks.NewService(pgRepo, snapshotService, lockService, config.LexoRankThreshold)
+	blockService := blocks.NewService(pgRepo, config.LexoRankThreshold)
 	courseService := courses.NewService(pgRepo, snapshotService, lockService)
 
 	userHandler := users.NewHandler(userService)
