@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
@@ -332,19 +331,13 @@ func (s *Service) PublishDraft(
 		session.CourseID,
 		draftSnapshotID,
 		draft.Version-1,
+		session.UserID,
+		session.SessionID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrSnapshotConflict
 	}
-	if err != nil {
-		return err
-	}
-
-	if err := s.locksService.Unlock(ctx, session); err != nil {
-		zap.L().Error("failed to remove course lock", zap.Error(err))
-	}
-
-	return nil
+	return err
 }
 
 // CancelEdit resets the draft and deletes pessimistic lock
