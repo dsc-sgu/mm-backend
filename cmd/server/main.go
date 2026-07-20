@@ -172,7 +172,7 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	gitService := git.NewService(pgRepo)
 
-	blockService := blocks.NewService(pgRepo, snapshotService, lockService, config.LexoRankThreshold)
+	blockService := blocks.NewService(pgRepo, config.LexoRankThreshold)
 	courseService := courses.NewService(pgRepo, snapshotService, lockService)
 
 	userHandler := users.NewHandler(userService)

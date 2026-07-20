@@ -62,27 +62,33 @@ type Repo interface {
 	CreateBlock(
 		ctx context.Context,
 		model *CreateBlock,
-		position string,
+		userID, sessionID uuid.UUID,
 	) (*Block, error)
 	GetBlockByID(ctx context.Context, id uuid.UUID) (*Block, error)
 	GetAllBlocksBySnapshotID(
 		ctx context.Context,
 		snapshotID uuid.UUID,
 	) ([]*Block, error)
-	GetPositionsForMove(
+	MoveBlock(
 		ctx context.Context,
-		snapshotID uuid.UUID,
+		blockID, snapshotID uuid.UUID,
 		afterBlockID *uuid.UUID,
-	) (AdjacentPositions, error)
+		userID, sessionID uuid.UUID,
+	) (string, error)
 	UpdateBlockContent(
 		ctx context.Context,
-		id uuid.UUID,
+		id, snapshotID uuid.UUID,
 		model *UpdateBlock,
+		userID, sessionID uuid.UUID,
 	) (*Block, error)
 	UpdateBlockPosition(
 		ctx context.Context,
 		id uuid.UUID,
 		newPosition string,
 	) error
-	DeleteBlockByID(ctx context.Context, id uuid.UUID) error
+	DeleteBlockByID(
+		ctx context.Context,
+		id, snapshotID uuid.UUID,
+		userID, sessionID uuid.UUID,
+	) error
 }
