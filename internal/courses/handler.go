@@ -234,7 +234,11 @@ func (h *Handler) GetCourseContent(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	content, err := h.courseService.GetCourseContent(ctx, input.CourseID, userID)
+	content, err := h.courseService.GetCourseContent(
+		ctx,
+		input.CourseID,
+		userID,
+	)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}

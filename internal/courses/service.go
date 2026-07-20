@@ -509,7 +509,10 @@ func (s *Service) GetSnapshotBlocks(
 		}
 	}
 
-	linkedBlocks, err := s.blockService.GetAllBlocksBySnapshotID(ctx, snapshot.ID)
+	linkedBlocks, err := s.blockService.GetAllBlocksBySnapshotID(
+		ctx,
+		snapshot.ID,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("get snapshot blocks: %w", err)
 	}
