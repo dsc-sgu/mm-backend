@@ -18,26 +18,20 @@ import (
 )
 
 type Handler struct {
-	courseService   *Service
-	blockService    *blocks.Service
-	lockService     *locks.Service
-	snapshotService *snapshots.Service
-	usersService    *users.Service
+	courseService *Service
+	lockService   *locks.Service
+	usersService  *users.Service
 }
 
 func NewHandler(
 	courseService *Service,
-	blockService *blocks.Service,
 	lockService *locks.Service,
-	snapshotService *snapshots.Service,
 	usersService *users.Service,
 ) *Handler {
 	return &Handler{
-		courseService:   courseService,
-		blockService:    blockService,
-		lockService:     lockService,
-		snapshotService: snapshotService,
-		usersService:    usersService,
+		courseService: courseService,
+		lockService:   lockService,
+		usersService:  usersService,
 	}
 }
 
@@ -244,43 +238,12 @@ func (h *Handler) GetCourseContent(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	_, err := h.courseService.CheckCourseMember(ctx, userID, input.CourseID)
+	content, err := h.courseService.GetCourseContent(ctx, input.CourseID, userID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
-	course, err := h.courseService.GetCourseByID(ctx, input.CourseID)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-	if course == nil {
-		return nil, huma.Error404NotFound("")
-	}
-
-	var linkedBlocks []*blocks.Block
-	if course.ActiveSnapshotID != nil {
-		linkedBlocks, err = h.blockService.GetAllBlocksBySnapshotID(
-			ctx,
-			*course.ActiveSnapshotID,
-		)
-		if err != nil {
-			return nil, huma.Error500InternalServerError(
-				"failed to fetch course blocks",
-			)
-		}
-	}
-
-	return &GetCourseContentOutput{
-		Body: &CourseContentResponse{
-			ID:               course.ID,
-			DisciplineID:     course.DisciplineID,
-			ActiveSnapshotID: course.ActiveSnapshotID,
-			OwnerID:          course.OwnerID,
-			Name:             course.Name,
-			CreatedAt:        course.CreatedAt,
-			Blocks:           linkedBlocks,
-		},
-	}, nil
+	return &GetCourseContentOutput{Body: content}, nil
 }
 
 type GetSnapshotBlocksInput struct {
@@ -302,38 +265,14 @@ func (h *Handler) GetSnapshotBlocks(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	snapshot, err := h.courseService.GetSnapshotByID(
+	linkedBlocks, err := h.courseService.GetSnapshotBlocks(
 		ctx,
 		input.SnapshotID,
 		userID,
+		sessionID,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
-	}
-
-	// Draft snapshot can be seen only by it's creator
-	if snapshot.Status == snapshots.DraftStatus {
-		lockSession := &locks.LockSession{
-			CourseID:  snapshot.CourseID,
-			UserID:    userID,
-			SessionID: sessionID,
-		}
-		if err := h.lockService.ValidateLock(
-			ctx,
-			lockSession,
-		); err != nil {
-			return nil, handleServiceError(err)
-		}
-	}
-
-	linkedBlocks, err := h.blockService.GetAllBlocksBySnapshotID(
-		ctx,
-		snapshot.ID,
-	)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(
-			"failed to fetch snapshot blocks",
-		)
 	}
 
 	return &GetSnapshotBlocksOutput{Body: linkedBlocks}, nil
