@@ -165,7 +165,10 @@ func (r *PGRepo) UpdateSnapshotStatus(
 		return fmt.Errorf("tx update snapshot status: %w", err)
 	}
 
-	affected, _ := res.RowsAffected()
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("tx update snapshot status rows affected: %w", err)
+	}
 	if affected == 0 {
 		return sql.ErrNoRows
 	}

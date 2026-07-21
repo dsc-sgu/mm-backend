@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
@@ -188,68 +189,66 @@ func (r *PGRepo) EnrollUserByInvite(
 	userID uuid.UUID,
 	invite *membership.Invite,
 ) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("enroll user: begin transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	courseMember := membership.Member{
-		UserID:   userID,
-		CourseID: invite.CourseID,
-		Role:     invite.ProvidedRole,
-		InvitedBy: uuid.NullUUID{
-			UUID:  invite.ID,
-			Valid: true,
-		},
-		IsActive: true,
-	}
-
-	if _, err := tx.NamedExecContext(
-		ctx,
-		createCourseMemberSQL,
-		courseMember,
-	); err != nil {
-		return fmt.Errorf("enroll user: insert course member in db: %w", err)
-	}
-
-	switch invite.ProvidedRole {
-	case membership.StudentRole:
-		student := membership.Student{
-			UserID:        userID,
-			CourseID:      invite.CourseID,
-			AdmissionDate: time.Now(),
-			IsActive:      true,
+	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		courseMember := membership.Member{
+			UserID:   userID,
+			CourseID: invite.CourseID,
+			Role:     invite.ProvidedRole,
+			InvitedBy: uuid.NullUUID{
+				UUID:  invite.ID,
+				Valid: true,
+			},
+			IsActive: true,
 		}
+
 		if _, err := tx.NamedExecContext(
 			ctx,
-			createStudentSQL,
-			student,
+			createCourseMemberSQL,
+			courseMember,
 		); err != nil {
-			return fmt.Errorf("enroll user: insert student in db: %w", err)
+			return fmt.Errorf(
+				"enroll user: insert course member in db: %w",
+				err,
+			)
 		}
-	case membership.TeacherRole:
-		teacher := membership.Teacher{
-			UserID:     userID,
-			CourseID:   invite.CourseID,
-			PromotedBy: invite.CreatedBy,
-			PromotedAt: time.Now(),
-			IsActive:   true,
-		}
-		if _, err := tx.NamedExecContext(
-			ctx,
-			createTeacherSQL,
-			teacher,
-		); err != nil {
-			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
-		}
-	default:
-		return fmt.Errorf("enroll user: unknown role %s", invite.ProvidedRole)
-	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("enroll user: commit transaction: %w", err)
-	}
+		switch invite.ProvidedRole {
+		case membership.StudentRole:
+			student := membership.Student{
+				UserID:        userID,
+				CourseID:      invite.CourseID,
+				AdmissionDate: time.Now(),
+				IsActive:      true,
+			}
+			if _, err := tx.NamedExecContext(
+				ctx,
+				createStudentSQL,
+				student,
+			); err != nil {
+				return fmt.Errorf("enroll user: insert student in db: %w", err)
+			}
+		case membership.TeacherRole:
+			teacher := membership.Teacher{
+				UserID:     userID,
+				CourseID:   invite.CourseID,
+				PromotedBy: invite.CreatedBy,
+				PromotedAt: time.Now(),
+				IsActive:   true,
+			}
+			if _, err := tx.NamedExecContext(
+				ctx,
+				createTeacherSQL,
+				teacher,
+			); err != nil {
+				return fmt.Errorf("enroll user: insert teacher in db: %w", err)
+			}
+		default:
+			return fmt.Errorf(
+				"enroll user: unknown role %s",
+				invite.ProvidedRole,
+			)
+		}
 
-	return nil
+		return nil
+	})
 }
