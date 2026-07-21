@@ -25,6 +25,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	mmgit "github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
@@ -448,23 +449,24 @@ func CreateTestBlock(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
-	snapshotID uuid.UUID,
+	courseID, snapshotID uuid.UUID,
 ) uuid.UUID {
-	return CreateTestBlockAfter(t, port, testUser, snapshotID, nil)
+	return CreateTestBlockAfter(t, port, testUser, courseID, snapshotID, nil)
 }
 
 func CreateTestBlockAfter(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
-	snapshotID uuid.UUID,
+	courseID, snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) uuid.UUID {
 	t.Helper()
 
 	blockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks",
 		port.Port(),
+		courseID,
 		snapshotID,
 	)
 
@@ -686,14 +688,15 @@ func MoveBlockAfter(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
-	snapshotID, blockToMoveID uuid.UUID,
+	courseID, snapshotID, blockToMoveID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) {
 	t.Helper()
 
 	moveURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks/%s/move",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s/move",
 		port.Port(),
+		courseID,
 		snapshotID,
 		blockToMoveID,
 	)
@@ -725,13 +728,15 @@ func GetBlockByID(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
-	blockID uuid.UUID,
+	courseID, snapshotID, blockID uuid.UUID,
 ) blocks.Block {
 	t.Helper()
 
 	getBlockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/blocks/%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
 		port.Port(),
+		courseID,
+		snapshotID,
 		blockID,
 	)
 
@@ -768,11 +773,11 @@ func GetRoleInCourse(
 	port *nat.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
-) *courses.CourseMemberRole {
+) *membership.Role {
 	t.Helper()
 
 	roleURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/course-roles/%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s/role",
 		port.Port(),
 		courseID,
 	)

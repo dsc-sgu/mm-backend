@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
 
 // Tests for courses
@@ -421,24 +422,24 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	require.NotNil(t, role, "Course creator should have a role")
 	require.Equal(
 		t,
-		courses.TeacherRole,
+		membership.TeacherRole,
 		*role,
 		"Course creator should be a teacher",
 	)
 
 	var inviteID uuid.UUID
-	var invite courses.Invite
+	var invite courses.InviteResponse
 
 	// Run sub-tests for the invite workflow
 	t.Run("Fail to create invite as non-teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites",
+			"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 			backendPort.Port(),
+			courseID,
 		)
 		expiresAt := time.Now().Add(24 * time.Hour)
-		inviteBody, _ := json.Marshal(courses.CreateInvite{
-			CourseID:     courseID,
-			ProvidedRole: courses.StudentRole,
+		inviteBody, _ := json.Marshal(membership.CreateInvite{
+			ProvidedRole: membership.StudentRole,
 			ExpiresAt:    &expiresAt,
 		})
 
@@ -463,13 +464,13 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 	t.Run("Successfully create invite as teacher", func(t *testing.T) {
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites",
+			"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 			backendPort.Port(),
+			courseID,
 		)
 		expiresAt := time.Now().Add(24 * time.Hour)
-		inviteBody, _ := json.Marshal(courses.CreateInvite{
-			CourseID:     courseID,
-			ProvidedRole: courses.StudentRole,
+		inviteBody, _ := json.Marshal(membership.CreateInvite{
+			ProvidedRole: membership.StudentRole,
 			ExpiresAt:    &expiresAt,
 		})
 
@@ -502,7 +503,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		detailsURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites/%s",
+			"http://127.0.0.1:%s/api/v1/invites/%s",
 			backendPort.Port(),
 			inviteID,
 		)
@@ -522,10 +523,10 @@ func TestCourseInviteWorkflow(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var details courses.InviteDetails
+		var details courses.InviteDetailsResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&details))
 		require.Equal(t, "Test Course", details.CourseName)
-		require.Equal(t, courses.StudentRole, details.ProvidedRole)
+		require.Equal(t, membership.StudentRole, details.ProvidedRole)
 	})
 
 	t.Run("Join course with invite", func(t *testing.T) {
@@ -535,7 +536,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites/%s",
+			"http://127.0.0.1:%s/api/v1/invites/%s/join",
 			backendPort.Port(),
 			inviteID,
 		)
@@ -565,7 +566,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			studentRole,
 			"Student should now have a role in the course",
 		)
-		require.Equal(t, courses.StudentRole, *studentRole)
+		require.Equal(t, membership.StudentRole, *studentRole)
 	})
 
 	t.Run("Fail to join course again", func(t *testing.T) {
@@ -575,7 +576,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 			"inviteID should be set from previous test",
 		)
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites/%s",
+			"http://127.0.0.1:%s/api/v1/invites/%s/join",
 			backendPort.Port(),
 			inviteID,
 		)
@@ -636,8 +637,20 @@ func TestDeleteCourse(t *testing.T) {
 	).DraftSnapshotID
 	require.NotZero(t, draftSnapshotID)
 
-	block1ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
-	block2ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
+	block1ID := CreateTestBlock(
+		t,
+		&backendPort,
+		&teacher,
+		courseID,
+		draftSnapshotID,
+	)
+	block2ID := CreateTestBlock(
+		t,
+		&backendPort,
+		&teacher,
+		courseID,
+		draftSnapshotID,
+	)
 
 	deleteURL := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s",

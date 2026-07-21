@@ -19,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/network"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
 
 func TestOptimisticLockingConflictScenario(t *testing.T) {
@@ -144,7 +145,7 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 			backendPort,
 			&userA,
 			courseID,
-			courses.TeacherRole,
+			membership.TeacherRole,
 		)
 		require.NoError(t, err)
 		err = joinCourse(t, backendPort, &userB, inviteRes.ID)
@@ -168,7 +169,7 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 	require.NotEqual(t, userADraftID, userBDraftID)
 
 	// 6. User B makes a change and publishes successfully.
-	CreateTestBlock(t, backendPort, &userB, userBDraftID)
+	CreateTestBlock(t, backendPort, &userB, courseID, userBDraftID)
 	publishStatusCode := PublishDraft(
 		t,
 		backendPort,
@@ -206,16 +207,16 @@ func createInvite(
 	port *nat.Port,
 	user *TestUser,
 	courseID uuid.UUID,
-	role courses.CourseMemberRole,
-) (courses.Invite, error) {
+	role membership.Role,
+) (courses.InviteResponse, error) {
 	inviteURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/course-invites",
+		"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 		port.Port(),
+		courseID,
 	)
 	expiresAt := time.Now().Add(24 * time.Hour)
 	inviteBody, _ := json.Marshal(
-		courses.CreateInvite{
-			CourseID:     courseID,
+		membership.CreateInvite{
 			ProvidedRole: role,
 			ExpiresAt:    &expiresAt,
 		},
@@ -226,12 +227,12 @@ func createInvite(
 		bytes.NewBuffer(inviteBody),
 	)
 	if err != nil {
-		return courses.Invite{}, err
+		return courses.InviteResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := user.Client.Do(req)
 	if err != nil {
-		return courses.Invite{}, err
+		return courses.InviteResponse{}, err
 	}
 	defer func() {
 		err := resp.Body.Close()
@@ -239,13 +240,13 @@ func createInvite(
 	}()
 
 	if resp.StatusCode != http.StatusCreated {
-		return courses.Invite{}, fmt.Errorf(
+		return courses.InviteResponse{}, fmt.Errorf(
 			"unexpected status code: %d",
 			resp.StatusCode,
 		)
 	}
 
-	var invite courses.Invite
+	var invite courses.InviteResponse
 	err = json.NewDecoder(resp.Body).Decode(&invite)
 	return invite, err
 }
@@ -257,7 +258,7 @@ func joinCourse(
 	inviteID uuid.UUID,
 ) error {
 	joinURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/course-invites/%s",
+		"http://127.0.0.1:%s/api/v1/invites/%s/join",
 		port.Port(),
 		inviteID,
 	)

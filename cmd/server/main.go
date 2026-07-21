@@ -31,6 +31,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/config"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/git"
@@ -177,6 +178,7 @@ func main() {
 	// Initialize services (the order is important)
 	lockService := locks.NewService(pgRepo, config.CourseLockTTLSeconds)
 	snapshotService := snapshots.NewService(pgRepo)
+	membershipService := membership.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	disciplineService := disciplines.NewService(pgRepo)
 	gitService := git.NewService(pgRepo)
@@ -188,11 +190,11 @@ func main() {
 	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
 	go rebalanceWorker.Run(ctx)
 	blockService := blocks.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold)
-	courseService := courses.NewService(pgRepo, snapshotService, lockService, blockService)
+	courseService := courses.NewService(pgRepo, snapshotService, lockService, blockService, membershipService, userService)
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
-	courseHandler := courses.NewHandler(courseService, lockService, userService)
+	courseHandler := courses.NewHandler(courseService, lockService, membershipService, userService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
 	gitHandler := git.NewHandler(gitService)
 

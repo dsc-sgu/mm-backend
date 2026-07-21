@@ -52,6 +52,7 @@ func TestCreateBlock(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 	)
 	require.NotZero(t, blockID)
@@ -100,10 +101,18 @@ func TestGetBlockByID(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 	)
 
-	returnedBlock := GetBlockByID(t, &backendPort, &testUser, blockID)
+	returnedBlock := GetBlockByID(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		draftSnapshotID,
+		blockID,
+	)
 
 	require.Equal(t, draftSnapshotID, returnedBlock.SnapshotID)
 }
@@ -148,8 +157,20 @@ func TestDeleteBlock(t *testing.T) {
 	require.NotZero(t, draftSnapshotID)
 
 	// Create two blocks
-	block1ID := CreateTestBlock(t, &backendPort, &testUser, draftSnapshotID)
-	block2ID := CreateTestBlock(t, &backendPort, &testUser, draftSnapshotID)
+	block1ID := CreateTestBlock(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		draftSnapshotID,
+	)
+	block2ID := CreateTestBlock(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		draftSnapshotID,
+	)
 	require.NotZero(t, block1ID)
 	require.NotZero(t, block2ID)
 
@@ -158,14 +179,16 @@ func TestDeleteBlock(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 	)
 	require.Len(t, snapshotBlocks, 2)
 
 	// Delete one block
 	deleteBlockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks/%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
 		backendPort.Port(),
+		courseID,
 		draftSnapshotID,
 		block1ID,
 	)
@@ -194,6 +217,7 @@ func TestDeleteBlock(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 	)
 	require.Len(t, snapshotBlocks, 1)
@@ -241,6 +265,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 		nil,
 	)
@@ -253,6 +278,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			t,
 			&backendPort,
 			&testUser,
+			courseID,
 			draftSnapshotID,
 			nil,
 		)
@@ -269,6 +295,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			t,
 			&backendPort,
 			&testUser,
+			courseID,
 			draftSnapshotID,
 			&lastBlockID,
 		)
@@ -283,6 +310,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			t,
 			&backendPort,
 			&testUser,
+			courseID,
 			draftSnapshotID,
 			&middleAnchorID,
 		)
@@ -300,6 +328,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 		t,
 		&backendPort,
 		&testUser,
+		courseID,
 		draftSnapshotID,
 	)
 	require.Len(t, finalBlocks, 16)
@@ -327,6 +356,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			t,
 			&backendPort,
 			&testUser,
+			courseID,
 			draftSnapshotID,
 			blockToMove,
 			&afterBlock,
@@ -341,6 +371,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			t,
 			&backendPort,
 			&testUser,
+			courseID,
 			draftSnapshotID,
 		)
 		var idsAfterMove []uuid.UUID

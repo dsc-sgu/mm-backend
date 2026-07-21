@@ -14,29 +14,33 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 type Handler struct {
-	courseService *Service
-	lockService   *locks.Service
-	usersService  *users.Service
+	courseService     *Service
+	lockService       *locks.Service
+	membershipService *membership.Service
+	userService       *users.Service
 }
 
 func NewHandler(
 	courseService *Service,
 	lockService *locks.Service,
-	usersService *users.Service,
+	membershipService *membership.Service,
+	userService *users.Service,
 ) *Handler {
 	return &Handler{
-		courseService: courseService,
-		lockService:   lockService,
-		usersService:  usersService,
+		courseService:     courseService,
+		lockService:       lockService,
+		membershipService: membershipService,
+		userService:       userService,
 	}
 }
 
-// LockHolderInfo identifies the user who currently holds a course's edit lock.
-type LockHolderInfo struct {
+// UserSummary identifies a user for response enrichment
+type UserSummary struct {
 	ID         uuid.UUID `json:"id"`
 	FirstName  string    `json:"firstName"`
 	LastName   string    `json:"lastName"`
@@ -44,10 +48,56 @@ type LockHolderInfo struct {
 	Username   string    `json:"username"`
 }
 
+// resolveUserSummary looks up a user's identity for response enrichment
+func resolveUserSummary(
+	ctx context.Context,
+	usersService *users.Service,
+	userID uuid.UUID,
+) *UserSummary {
+	user, err := usersService.GetUserByID(ctx, userID)
+	if err != nil || user == nil {
+		return nil
+	}
+	return &UserSummary{
+		ID:         user.ID,
+		FirstName:  user.FirstName,
+		LastName:   user.LastName,
+		Patronymic: user.Patronymic,
+		Username:   user.Username,
+	}
+}
+
+// userSummaryResolver memoizes user lookups within a single request so the
+// same person (e.g. a teacher who created several snapshots or invites) is
+// only fetched once even if they appear multiple times in a list response.
+type userSummaryResolver struct {
+	usersService *users.Service
+	cache        map[uuid.UUID]*UserSummary
+}
+
+func newUserSummaryResolver(usersService *users.Service) *userSummaryResolver {
+	return &userSummaryResolver{
+		usersService: usersService,
+		cache:        make(map[uuid.UUID]*UserSummary),
+	}
+}
+
+func (r *userSummaryResolver) resolve(
+	ctx context.Context,
+	userID uuid.UUID,
+) *UserSummary {
+	if summary, ok := r.cache[userID]; ok {
+		return summary
+	}
+	summary := resolveUserSummary(ctx, r.usersService, userID)
+	r.cache[userID] = summary
+	return summary
+}
+
 type LockConflictBody struct {
 	status int
-	Detail string          `json:"detail"`
-	Holder *LockHolderInfo `json:"holder"`
+	Detail string       `json:"detail"`
+	Holder *UserSummary `json:"holder"`
 }
 
 func (e *LockConflictBody) Error() string { return e.Detail }
@@ -61,21 +111,15 @@ func (h *Handler) lockConflictError(
 	holderID uuid.UUID,
 	baseErr error,
 ) error {
-	holder, err := h.usersService.GetUserByID(ctx, holderID)
-	if err != nil || holder == nil {
+	holder := resolveUserSummary(ctx, h.userService, holderID)
+	if holder == nil {
 		return huma.Error423Locked(baseErr.Error())
 	}
 
 	return &LockConflictBody{
 		status: http.StatusLocked,
 		Detail: baseErr.Error(),
-		Holder: &LockHolderInfo{
-			ID:         holder.ID,
-			FirstName:  holder.FirstName,
-			LastName:   holder.LastName,
-			Patronymic: holder.Patronymic,
-			Username:   holder.Username,
-		},
+		Holder: holder,
 	}
 }
 
@@ -86,7 +130,7 @@ type CourseIDResponse struct {
 
 // UserRoleResponse is the handler-level response for user role in a course.
 type UserRoleResponse struct {
-	Role CourseMemberRole `json:"role"`
+	Role membership.Role `json:"role"`
 }
 
 // CourseContentResponse is the handler-level response for course with ordered blocks
@@ -94,8 +138,8 @@ type CourseContentResponse struct {
 	ID               uuid.UUID       `json:"id"`
 	DisciplineID     uuid.UUID       `json:"disciplineId"`
 	ActiveSnapshotID *uuid.UUID      `json:"activeSnapshotId"`
-	OwnerID          uuid.UUID       `json:"ownerId"`
 	Name             string          `json:"name"`
+	Owner            *UserSummary    `json:"owner"`
 	CreatedAt        time.Time       `json:"createdAt"`
 	Blocks           []*blocks.Block `json:"blocks"`
 }
@@ -106,8 +150,33 @@ type SnapshotMetadataResponse struct {
 	CourseID  uuid.UUID        `json:"courseId"`
 	Version   int              `json:"version"`
 	Status    snapshots.Status `json:"status"`
-	CreatedBy uuid.UUID        `json:"createdBy"`
+	CreatedBy *UserSummary     `json:"createdBy"`
 	CreatedAt time.Time        `json:"createdAt"`
+}
+
+// InviteResponse is the handler-level response for an invite, with the
+// creator's identity resolved.
+type InviteResponse struct {
+	ID           uuid.UUID       `json:"id"`
+	CourseID     uuid.UUID       `json:"courseId"`
+	ProvidedRole membership.Role `json:"providedRole"`
+	CreatedBy    *UserSummary    `json:"createdBy"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	ExpiresAt    *time.Time      `json:"expiresAt"`
+	IsRevoked    bool            `json:"isRevoked"`
+}
+
+// InviteDetailsResponse is the handler-level response for an invite's
+// details, with the creator's identity resolved.
+type InviteDetailsResponse struct {
+	ID           uuid.UUID       `json:"id"`
+	CourseID     uuid.UUID       `json:"courseId"`
+	CourseName   string          `json:"courseName"`
+	ProvidedRole membership.Role `json:"providedRole"`
+	CreatedBy    *UserSummary    `json:"createdBy"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	ExpiresAt    *time.Time      `json:"expiresAt"`
+	IsRevoked    bool            `json:"isRevoked"`
 }
 
 func handleServiceError(err error) error {
@@ -116,21 +185,25 @@ func handleServiceError(err error) error {
 	}
 	switch {
 	case errors.Is(err, ErrPermissionDenied),
-		errors.Is(err, ErrCourseMemberNotFound):
+		errors.Is(err, ErrCourseMemberNotFound),
+		errors.Is(err, membership.ErrPermissionDenied),
+		errors.Is(err, membership.ErrNotFound):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrCourseNotFound),
-		errors.Is(err, ErrInviteNotFound),
+		errors.Is(err, membership.ErrInviteNotFound),
 		errors.Is(err, ErrSnapshotNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, locks.ErrLockHeldByAnother),
 		errors.Is(err, locks.ErrLockNotFound),
 		errors.Is(err, locks.ErrLockExpired):
 		return huma.Error423Locked(err.Error())
-	case errors.Is(err, ErrSnapshotConflict), errors.Is(err, ErrAlreadyMember):
+	case errors.Is(err, ErrSnapshotConflict),
+		errors.Is(err, membership.ErrAlreadyMember):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, ErrInvalidTarget):
 		return huma.Error400BadRequest(err.Error())
-	case errors.Is(err, ErrInviteRevoked), errors.Is(err, ErrInviteExpired):
+	case errors.Is(err, membership.ErrInviteRevoked),
+		errors.Is(err, membership.ErrInviteExpired):
 		return huma.Error410Gone(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
@@ -251,6 +324,7 @@ func (h *Handler) GetCourseContent(
 }
 
 type GetSnapshotBlocksInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`
 }
 
@@ -272,6 +346,7 @@ func (h *Handler) GetSnapshotBlocks(
 	linkedBlocks, err := h.courseService.GetSnapshotBlocks(
 		ctx,
 		input.SnapshotID,
+		input.CourseID,
 		userID,
 		sessionID,
 	)
@@ -308,6 +383,7 @@ func (h *Handler) GetCourseSnapshots(
 		return nil, handleServiceError(err)
 	}
 
+	resolver := newUserSummaryResolver(h.userService)
 	result := make([]SnapshotMetadataResponse, len(list))
 	for i, s := range list {
 		result[i] = SnapshotMetadataResponse{
@@ -315,12 +391,54 @@ func (h *Handler) GetCourseSnapshots(
 			CourseID:  s.CourseID,
 			Version:   s.Version,
 			Status:    s.Status,
-			CreatedBy: s.CreatedBy,
+			CreatedBy: resolver.resolve(ctx, s.CreatedBy),
 			CreatedAt: s.CreatedAt,
 		}
 	}
 
 	return &GetCourseSnapshotsOutput{Body: result}, nil
+}
+
+type GetCourseSnapshotInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
+	SnapshotID uuid.UUID `path:"snapshot_id"`
+}
+
+type GetCourseSnapshotOutput struct {
+	Body *SnapshotMetadataResponse
+}
+
+func (h *Handler) GetCourseSnapshot(
+	ctx context.Context,
+	input *GetCourseSnapshotInput,
+) (*GetCourseSnapshotOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	s, err := h.courseService.GetCourseSnapshot(
+		ctx,
+		input.SnapshotID,
+		input.CourseID,
+		userID,
+		sessionID,
+	)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	return &GetCourseSnapshotOutput{
+		Body: &SnapshotMetadataResponse{
+			ID:        s.ID,
+			CourseID:  s.CourseID,
+			Version:   s.Version,
+			Status:    s.Status,
+			CreatedBy: resolveUserSummary(ctx, h.userService, s.CreatedBy),
+			CreatedAt: s.CreatedAt,
+		},
+	}, nil
 }
 
 type PatchCourseInput struct {
@@ -539,11 +657,12 @@ func (h *Handler) CancelEdit(
 }
 
 type CreateInviteInput struct {
-	Body CreateInvite
+	CourseID uuid.UUID `path:"course_id"`
+	Body     membership.CreateInvite
 }
 
 type CreateInviteOutput struct {
-	Body *Invite
+	Body *InviteResponse
 }
 
 func (h *Handler) CreateInvite(
@@ -555,12 +674,65 @@ func (h *Handler) CreateInvite(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	invite, err := h.courseService.CreateInvite(ctx, &input.Body, userID)
+	input.Body.CourseID = input.CourseID
+
+	invite, err := h.membershipService.CreateInvite(ctx, &input.Body, userID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
-	return &CreateInviteOutput{Body: invite}, nil
+	return &CreateInviteOutput{Body: &InviteResponse{
+		ID:           invite.ID,
+		CourseID:     invite.CourseID,
+		ProvidedRole: invite.ProvidedRole,
+		CreatedBy:    resolveUserSummary(ctx, h.userService, invite.CreatedBy),
+		CreatedAt:    invite.CreatedAt,
+		ExpiresAt:    invite.ExpiresAt,
+		IsRevoked:    invite.IsRevoked,
+	}}, nil
+}
+
+type GetCourseInvitesInput struct {
+	CourseID uuid.UUID `path:"course_id"`
+}
+
+type GetCourseInvitesOutput struct {
+	Body []InviteResponse
+}
+
+func (h *Handler) GetCourseInvites(
+	ctx context.Context,
+	input *GetCourseInvitesInput,
+) (*GetCourseInvitesOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	inviteList, err := h.membershipService.GetInvitesByCourseID(
+		ctx,
+		input.CourseID,
+		userID,
+	)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	resolver := newUserSummaryResolver(h.userService)
+	result := make([]InviteResponse, len(inviteList))
+	for i, invite := range inviteList {
+		result[i] = InviteResponse{
+			ID:           invite.ID,
+			CourseID:     invite.CourseID,
+			ProvidedRole: invite.ProvidedRole,
+			CreatedBy:    resolver.resolve(ctx, invite.CreatedBy),
+			CreatedAt:    invite.CreatedAt,
+			ExpiresAt:    invite.ExpiresAt,
+			IsRevoked:    invite.IsRevoked,
+		}
+	}
+
+	return &GetCourseInvitesOutput{Body: result}, nil
 }
 
 type GetInviteDetailsInput struct {
@@ -568,18 +740,32 @@ type GetInviteDetailsInput struct {
 }
 
 type GetInviteDetailsOutput struct {
-	Body *InviteDetails
+	Body *InviteDetailsResponse
 }
 
 func (h *Handler) GetInviteDetails(
 	ctx context.Context,
 	input *GetInviteDetailsInput,
 ) (*GetInviteDetailsOutput, error) {
-	details, err := h.courseService.GetInviteDetails(ctx, input.InviteID)
+	details, err := h.membershipService.GetInviteDetails(ctx, input.InviteID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
-	return &GetInviteDetailsOutput{Body: details}, nil
+
+	return &GetInviteDetailsOutput{Body: &InviteDetailsResponse{
+		ID:           details.ID,
+		CourseID:     details.CourseID,
+		CourseName:   details.CourseName,
+		ProvidedRole: details.ProvidedRole,
+		CreatedBy: resolveUserSummary(
+			ctx,
+			h.userService,
+			details.CreatedBy,
+		),
+		CreatedAt: details.CreatedAt,
+		ExpiresAt: details.ExpiresAt,
+		IsRevoked: details.IsRevoked,
+	}}, nil
 }
 
 type JoinCourseByInviteInput struct {
@@ -599,7 +785,7 @@ func (h *Handler) JoinCourseByInvite(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	courseID, err := h.courseService.JoinCourseByInvite(
+	courseID, err := h.membershipService.JoinCourseByInvite(
 		ctx,
 		input.InviteID,
 		userID,

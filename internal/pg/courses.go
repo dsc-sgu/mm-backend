@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
@@ -18,27 +19,6 @@ const (
 	createCourseSQL = `
 		INSERT INTO courses (discipline_id, owner_id, name, display_name, created_at)
 		VALUES (:discipline_id, :owner_id, :name, :display_name, :created_at)
-		RETURNING id
-	`
-
-	createCourseMemberSQL = `
-		INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
-		VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
-	`
-
-	createStudentSQL = `
-		INSERT INTO students (user_id, course_id, admission_date, is_active)
-		VALUES (:user_id, :course_id, :admission_date, :is_active)
-	`
-
-	createTeacherSQL = `
-		INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
-		VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
-	`
-
-	createInviteSQL = `
-		INSERT INTO invites (course_id, provided_role, created_by, created_at, expires_at, is_revoked)
-		VALUES (:course_id, :provided_role, :created_by, :created_at, :expires_at, :is_revoked)
 		RETURNING id
 	`
 
@@ -59,18 +39,6 @@ const (
 		WHERE id > $2 AND deleted_at IS NULL
 		ORDER BY id
 		LIMIT $1
-	`
-
-	getCourseMemberSQL = `
-		SELECT user_id, course_id, role, invited_by, is_active
-		FROM course_members
-		WHERE user_id = $1 AND course_id = $2
-	`
-
-	getInviteByIDSQL = `
-		SELECT id, course_id, provided_role, created_by, created_at, expires_at, is_revoked
-		FROM invites
-		WHERE id = $1
 	`
 
 	updateCourseByIDSQL = `
@@ -199,10 +167,10 @@ func (r *PGRepo) createCourseTx(
 	}
 	newCourse.ID = newID
 
-	courseMember := courses.CourseMember{
+	courseMember := membership.Member{
 		UserID:   ownerID,
 		CourseID: newCourse.ID,
-		Role:     courses.TeacherRole,
+		Role:     membership.TeacherRole,
 		IsActive: true,
 	}
 
@@ -214,7 +182,7 @@ func (r *PGRepo) createCourseTx(
 		return nil, fmt.Errorf("insert course member: %w", err)
 	}
 
-	teacher := courses.Teacher{
+	teacher := membership.Teacher{
 		UserID:     ownerID,
 		CourseID:   newCourse.ID,
 		PromotedBy: ownerID,
@@ -448,158 +416,4 @@ func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
 
 		return nil
 	})
-}
-
-func (r *PGRepo) CreateInvite(
-	ctx context.Context,
-	model *courses.CreateInvite,
-	createdBy uuid.UUID,
-) (*courses.Invite, error) {
-	zap.L().Debug("Executing query", zap.String("query", createInviteSQL))
-
-	newInvite := courses.Invite{
-		CourseID:     model.CourseID,
-		ProvidedRole: model.ProvidedRole,
-		CreatedBy:    createdBy,
-		CreatedAt:    time.Now(),
-		ExpiresAt:    model.ExpiresAt,
-		IsRevoked:    false,
-	}
-
-	rows, err := r.db.NamedQueryContext(ctx, createInviteSQL, newInvite)
-	if err != nil {
-		return nil, fmt.Errorf("create invite: insert in db: %w", err)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			zap.L().Error(err.Error())
-		}
-	}()
-
-	if rows.Next() {
-		if err := rows.Scan(&newInvite.ID); err != nil {
-			return nil, fmt.Errorf("create invite: scan invite id: %w", err)
-		}
-	}
-
-	return &newInvite, nil
-}
-
-func (r *PGRepo) GetInviteByID(
-	ctx context.Context,
-	inviteID uuid.UUID,
-) (*courses.Invite, error) {
-	zap.L().Debug("Executing query", zap.String("query", getInviteByIDSQL))
-
-	var invite courses.Invite
-	err := r.db.GetContext(ctx, &invite, getInviteByIDSQL, inviteID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &invite, nil
-}
-
-func (r *PGRepo) EnrollUserByInvite(
-	ctx context.Context,
-	userID uuid.UUID,
-	invite *courses.Invite,
-) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("enroll user: begin transaction: %w", err)
-	}
-	defer rollback(tx)
-
-	courseMember := courses.CourseMember{
-		UserID:   userID,
-		CourseID: invite.CourseID,
-		Role:     invite.ProvidedRole,
-		InvitedBy: uuid.NullUUID{
-			UUID:  invite.ID,
-			Valid: true,
-		},
-		IsActive: true,
-	}
-
-	if _, err := tx.NamedExecContext(
-		ctx,
-		createCourseMemberSQL,
-		courseMember,
-	); err != nil {
-		return fmt.Errorf("enroll user: insert course member in db: %w", err)
-	}
-
-	switch invite.ProvidedRole {
-	case courses.StudentRole:
-		student := courses.Student{
-			UserID:        userID,
-			CourseID:      invite.CourseID,
-			AdmissionDate: time.Now(),
-			IsActive:      true,
-		}
-		if _, err := tx.NamedExecContext(
-			ctx,
-			createStudentSQL,
-			student,
-		); err != nil {
-			return fmt.Errorf("enroll user: insert student in db: %w", err)
-		}
-	case courses.TeacherRole:
-		teacher := courses.Teacher{
-			UserID:     userID,
-			CourseID:   invite.CourseID,
-			PromotedBy: invite.CreatedBy,
-			PromotedAt: time.Now(),
-			IsActive:   true,
-		}
-		if _, err := tx.NamedExecContext(
-			ctx,
-			createTeacherSQL,
-			teacher,
-		); err != nil {
-			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
-		}
-	default:
-		return fmt.Errorf("enroll user: unknown role %s", invite.ProvidedRole)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("enroll user: commit transaction: %w", err)
-	}
-
-	return nil
-}
-
-func (r *PGRepo) GetCourseMember(
-	ctx context.Context,
-	userID, courseID uuid.UUID,
-) (*courses.CourseMember, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseMemberSQL))
-
-	if userID == uuid.Nil {
-		return nil, fmt.Errorf("user id is nil")
-	}
-	if courseID == uuid.Nil {
-		return nil, fmt.Errorf("course id is nil")
-	}
-
-	var courseMember courses.CourseMember
-	err := r.db.GetContext(
-		ctx,
-		&courseMember,
-		getCourseMemberSQL,
-		userID,
-		courseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &courseMember, nil
 }

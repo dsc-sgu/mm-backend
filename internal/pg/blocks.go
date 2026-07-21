@@ -11,6 +11,7 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
@@ -126,12 +127,12 @@ const (
 )
 
 // validateEditableSnapshot locks the snapshot row and the course's lock row
-// within tx and verifies the snapshot is a draft
-// currently locked by user/session
+// within tx and verifies the snapshot belongs to courseID, is a draft, and
+// is currently locked by user/session
 func validateEditableSnapshot(
 	ctx context.Context,
 	tx *sqlx.Tx,
-	snapshotID uuid.UUID,
+	courseID, snapshotID uuid.UUID,
 	userID, sessionID uuid.UUID,
 ) error {
 	var snapshot snapshots.Snapshot
@@ -141,6 +142,9 @@ func validateEditableSnapshot(
 			return blocks.ErrSnapshotNotFound
 		}
 		return fmt.Errorf("lock snapshot: %w", err)
+	}
+	if snapshot.CourseID != courseID {
+		return blocks.ErrSnapshotNotFound
 	}
 	if snapshot.Status != snapshots.DraftStatus {
 		return blocks.ErrSnapshotNotDraft
@@ -162,6 +166,49 @@ func validateEditableSnapshot(
 	}
 
 	return nil
+}
+
+// validateViewableSnapshot verifies snapshotID belongs to courseID and that
+// userID may view it, and, if the snapshot is a draft, that userID/sessionID
+// currently hold its course's edit lock
+func (r *PGRepo) validateViewableSnapshot(
+	ctx context.Context,
+	courseID, snapshotID, userID, sessionID uuid.UUID,
+) (*snapshots.Snapshot, error) {
+	snapshot, err := r.GetSnapshotByID(ctx, snapshotID)
+	if err != nil {
+		return nil, fmt.Errorf("get snapshot: %w", err)
+	}
+	if snapshot == nil || snapshot.CourseID != courseID {
+		return nil, blocks.ErrSnapshotNotFound
+	}
+
+	member, err := r.GetMember(ctx, userID, courseID)
+	if err != nil {
+		return nil, fmt.Errorf("get member: %w", err)
+	}
+	if member == nil || !member.IsActive ||
+		member.Role != membership.TeacherRole {
+		return nil, blocks.ErrPermissionDenied
+	}
+
+	if snapshot.Status == snapshots.DraftStatus {
+		lock, err := r.GetLock(ctx, courseID)
+		if err != nil {
+			return nil, fmt.Errorf("get lock: %w", err)
+		}
+		if lock == nil {
+			return nil, locks.ErrLockNotFound
+		}
+		if lock.UserID != userID || lock.SessionID != sessionID {
+			return nil, locks.ErrLockHeldByAnother
+		}
+		if !lock.IsValid {
+			return nil, locks.ErrLockExpired
+		}
+	}
+
+	return snapshot, nil
 }
 
 // blockBelongsToSnapshot verifies blockID is a valid block
@@ -263,6 +310,7 @@ func (r *PGRepo) CreateBlock(
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
+			model.CourseID,
 			model.SnapshotID,
 			userID,
 			sessionID,
@@ -318,17 +366,31 @@ func (r *PGRepo) CreateBlock(
 
 func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
-	id uuid.UUID,
+	id, courseID, snapshotID uuid.UUID,
+	userID, sessionID uuid.UUID,
 ) (*blocks.Block, error) {
+	if _, err := r.validateViewableSnapshot(
+		ctx,
+		courseID,
+		snapshotID,
+		userID,
+		sessionID,
+	); err != nil {
+		return nil, err
+	}
+
 	zap.L().Debug("Executing query", zap.String("query", getBlockByIDSQL))
 
 	var block blocks.Block
 	err := r.db.GetContext(ctx, &block, getBlockByIDSQL, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, blocks.ErrBlockNotFound
 		}
 		return nil, err
+	}
+	if block.SnapshotID != snapshotID {
+		return nil, blocks.ErrBlockNotFound
 	}
 	return &block, nil
 }
@@ -370,7 +432,7 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 
 func (r *PGRepo) MoveBlock(
 	ctx context.Context,
-	blockID, snapshotID uuid.UUID,
+	id, courseID, snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
 	userID, sessionID uuid.UUID,
 ) (string, error) {
@@ -380,6 +442,7 @@ func (r *PGRepo) MoveBlock(
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
+			courseID,
 			snapshotID,
 			userID,
 			sessionID,
@@ -389,7 +452,7 @@ func (r *PGRepo) MoveBlock(
 		if err := blockBelongsToSnapshot(
 			ctx,
 			tx,
-			blockID,
+			id,
 			snapshotID,
 		); err != nil {
 			return err
@@ -416,7 +479,7 @@ func (r *PGRepo) MoveBlock(
 			ctx,
 			updateBlockPositionSQL,
 			newPosition,
-			blockID,
+			id,
 		)
 		if err != nil {
 			return fmt.Errorf("tx update block position: %w", err)
@@ -440,7 +503,7 @@ func (r *PGRepo) MoveBlock(
 
 func (r *PGRepo) UpdateBlockContent(
 	ctx context.Context,
-	id, snapshotID uuid.UUID,
+	id, courseID, snapshotID uuid.UUID,
 	model *blocks.UpdateBlock,
 	userID, sessionID uuid.UUID,
 ) (*blocks.Block, error) {
@@ -450,6 +513,7 @@ func (r *PGRepo) UpdateBlockContent(
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
+			courseID,
 			snapshotID,
 			userID,
 			sessionID,
@@ -547,13 +611,14 @@ func (r *PGRepo) RebalanceBlockPositions(
 
 func (r *PGRepo) DeleteBlockByID(
 	ctx context.Context,
-	id, snapshotID uuid.UUID,
+	id, courseID, snapshotID uuid.UUID,
 	userID, sessionID uuid.UUID,
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
+			courseID,
 			snapshotID,
 			userID,
 			sessionID,
