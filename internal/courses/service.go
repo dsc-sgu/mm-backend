@@ -17,28 +17,28 @@ import (
 
 type Service struct {
 	repo              Repo
-	snapshotsService  *snapshots.Service
-	locksService      *locks.Service
+	snapshotService   *snapshots.Service
+	lockService       *locks.Service
 	blockService      *blocks.Service
 	membershipService *membership.Service
-	usersService      *users.Service
+	userService       *users.Service
 }
 
 func NewService(
 	repo Repo,
-	snapshotsService *snapshots.Service,
-	locksService *locks.Service,
+	snapshotService *snapshots.Service,
+	lockService *locks.Service,
 	blockService *blocks.Service,
 	membershipService *membership.Service,
-	usersService *users.Service,
+	userService *users.Service,
 ) *Service {
 	return &Service{
 		repo:              repo,
-		snapshotsService:  snapshotsService,
-		locksService:      locksService,
+		snapshotService:   snapshotService,
+		lockService:       lockService,
 		blockService:      blockService,
 		membershipService: membershipService,
-		usersService:      usersService,
+		userService:       userService,
 	}
 }
 
@@ -56,12 +56,11 @@ type InitLockResult struct {
 }
 
 var (
-	ErrCourseNotFound       = errors.New("course not found")
-	ErrSnapshotNotFound     = errors.New("snapshot not found")
-	ErrDraftNotFound        = errors.New("user draft not found")
-	ErrPermissionDenied     = errors.New("permission denied")
-	ErrCourseMemberNotFound = errors.New("user is not a course member")
-	ErrSnapshotConflict     = errors.New(
+	ErrCourseNotFound   = errors.New("course not found")
+	ErrSnapshotNotFound = errors.New("snapshot not found")
+	ErrDraftNotFound    = errors.New("user draft not found")
+	ErrPermissionDenied = errors.New("permission denied")
+	ErrSnapshotConflict = errors.New(
 		"course version mismatch or modified by another user",
 	)
 	ErrInvalidTarget = errors.New(
@@ -69,18 +68,14 @@ var (
 	)
 )
 
+// CheckCourseMember is a course-domain-flavored alias for
+// membershipService.CheckMember, returning membership.ErrNotFound as-is
+// when userID is not an active member of courseID.
 func (s *Service) CheckCourseMember(
 	ctx context.Context,
 	userID, courseID uuid.UUID,
 ) (*membership.Member, error) {
-	member, err := s.membershipService.CheckMember(ctx, userID, courseID)
-	if errors.Is(err, membership.ErrNotFound) {
-		return nil, ErrCourseMemberNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("checking permissions: %w", err)
-	}
-	return member, nil
+	return s.membershipService.CheckMember(ctx, userID, courseID)
 }
 
 func (s *Service) CreateCourse(
@@ -113,12 +108,12 @@ func (s *Service) LockAndInitDraft(
 	}
 
 	// Try to set pessimistic lock for the course
-	_, holderID, err := s.locksService.SetLock(ctx, session)
+	_, holderID, err := s.lockService.SetLock(ctx, session)
 	if err != nil {
 		return nil, holderID, err
 	}
 
-	draft, err := s.snapshotsService.FindUserDraft(
+	draft, err := s.snapshotService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -153,7 +148,7 @@ func (s *Service) LockAndInitDraft(
 
 	// Case 3: Draft does not exist, create a new one
 	targetVersion := course.Version + 1
-	newDraft, err := s.snapshotsService.CreateDraftFromActual(
+	newDraft, err := s.snapshotService.CreateDraftFromActual(
 		ctx,
 		session.CourseID,
 		targetVersion,
@@ -177,13 +172,13 @@ func (s *Service) SwitchSnapshot(
 	targetSnapshotID uuid.UUID,
 ) error {
 	// Check active lock
-	err := s.locksService.ValidateLock(ctx, session)
+	err := s.lockService.ValidateLock(ctx, session)
 	if err != nil {
 		return err
 	}
 
 	// Check that the target snapshot exists and is published
-	targetSnapshot, err := s.snapshotsService.GetSnapshotByID(
+	targetSnapshot, err := s.snapshotService.GetSnapshotByID(
 		ctx,
 		targetSnapshotID,
 	)
@@ -196,7 +191,7 @@ func (s *Service) SwitchSnapshot(
 	}
 
 	// Find current user's draft
-	draft, err := s.snapshotsService.FindUserDraft(
+	draft, err := s.snapshotService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -212,7 +207,7 @@ func (s *Service) SwitchSnapshot(
 	}
 
 	// Replace draft blocks with target
-	return s.snapshotsService.SwitchSnapshotContent(
+	return s.snapshotService.SwitchSnapshotContent(
 		ctx,
 		draft.ID,
 		targetSnapshotID,
@@ -227,12 +222,12 @@ func (s *Service) PublishDraft(
 	draftSnapshotID uuid.UUID,
 ) error {
 	// Check active lock
-	err := s.locksService.ValidateLock(ctx, session)
+	err := s.lockService.ValidateLock(ctx, session)
 	if err != nil {
 		return err
 	}
 
-	draft, err := s.snapshotsService.GetSnapshotByID(ctx, draftSnapshotID)
+	draft, err := s.snapshotService.GetSnapshotByID(ctx, draftSnapshotID)
 	if err != nil {
 		return fmt.Errorf("publish draft: get draft: %w", err)
 	}
@@ -260,7 +255,7 @@ func (s *Service) CancelEdit(
 	ctx context.Context,
 	session *locks.LockSession,
 ) error {
-	draft, err := s.snapshotsService.FindUserDraft(
+	draft, err := s.snapshotService.FindUserDraft(
 		ctx,
 		session.CourseID,
 		session.UserID,
@@ -270,14 +265,14 @@ func (s *Service) CancelEdit(
 	}
 
 	if draft == nil {
-		return s.locksService.Unlock(ctx, session)
+		return s.lockService.Unlock(ctx, session)
 	}
 
-	if err := s.snapshotsService.DiscardDraft(ctx, draft.ID); err != nil {
+	if err := s.snapshotService.DiscardDraft(ctx, draft.ID); err != nil {
 		return fmt.Errorf("cancel edit: discard draft: %w", err)
 	}
 
-	return s.locksService.Unlock(ctx, session)
+	return s.lockService.Unlock(ctx, session)
 }
 
 func (s *Service) GetPaginatedCourses(
@@ -331,7 +326,7 @@ func (s *Service) GetCourseContent(
 		Name:             course.Name,
 		Owner: resolveUserSummary(
 			ctx,
-			s.usersService,
+			s.userService,
 			course.OwnerID,
 		),
 		CreatedAt: course.CreatedAt,
@@ -375,7 +370,7 @@ func (s *Service) getSnapshotForCourse(
 	ctx context.Context,
 	snapshotID, courseID, userID, sessionID uuid.UUID,
 ) (*snapshots.Snapshot, error) {
-	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
+	snapshot, err := s.snapshotService.GetSnapshotByID(ctx, snapshotID)
 	if err != nil {
 		return nil, fmt.Errorf("get snapshot: %w", err)
 	}
@@ -397,7 +392,7 @@ func (s *Service) getSnapshotForCourse(
 			UserID:    userID,
 			SessionID: sessionID,
 		}
-		if err := s.locksService.ValidateLock(ctx, lockSession); err != nil {
+		if err := s.lockService.ValidateLock(ctx, lockSession); err != nil {
 			return nil, err
 		}
 	}
@@ -451,5 +446,5 @@ func (s *Service) GetPublishedSnapshots(
 	if courseMember.Role != membership.TeacherRole {
 		return nil, ErrPermissionDenied
 	}
-	return s.snapshotsService.GetPublishedSnapshotsByCourseID(ctx, courseID)
+	return s.snapshotService.GetPublishedSnapshotsByCourseID(ctx, courseID)
 }

@@ -366,15 +366,14 @@ func (r *PGRepo) CreateBlock(
 
 func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
-	id, courseID, snapshotID uuid.UUID,
-	userID, sessionID uuid.UUID,
+	ref blocks.BlockRef,
 ) (*blocks.Block, error) {
 	if _, err := r.validateViewableSnapshot(
 		ctx,
-		courseID,
-		snapshotID,
-		userID,
-		sessionID,
+		ref.CourseID,
+		ref.SnapshotID,
+		ref.UserID,
+		ref.SessionID,
 	); err != nil {
 		return nil, err
 	}
@@ -382,14 +381,14 @@ func (r *PGRepo) GetBlockByID(
 	zap.L().Debug("Executing query", zap.String("query", getBlockByIDSQL))
 
 	var block blocks.Block
-	err := r.db.GetContext(ctx, &block, getBlockByIDSQL, id)
+	err := r.db.GetContext(ctx, &block, getBlockByIDSQL, ref.BlockID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, blocks.ErrBlockNotFound
 		}
 		return nil, err
 	}
-	if block.SnapshotID != snapshotID {
+	if block.SnapshotID != ref.SnapshotID {
 		return nil, blocks.ErrBlockNotFound
 	}
 	return &block, nil
@@ -432,9 +431,8 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 
 func (r *PGRepo) MoveBlock(
 	ctx context.Context,
-	id, courseID, snapshotID uuid.UUID,
+	ref blocks.BlockRef,
 	afterBlockID *uuid.UUID,
-	userID, sessionID uuid.UUID,
 ) (string, error) {
 	var newPosition string
 
@@ -442,18 +440,18 @@ func (r *PGRepo) MoveBlock(
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
-			courseID,
-			snapshotID,
-			userID,
-			sessionID,
+			ref.CourseID,
+			ref.SnapshotID,
+			ref.UserID,
+			ref.SessionID,
 		); err != nil {
 			return err
 		}
 		if err := blockBelongsToSnapshot(
 			ctx,
 			tx,
-			id,
-			snapshotID,
+			ref.BlockID,
+			ref.SnapshotID,
 		); err != nil {
 			return err
 		}
@@ -461,7 +459,7 @@ func (r *PGRepo) MoveBlock(
 		positions, err := getPositionsForMoveTx(
 			ctx,
 			tx,
-			snapshotID,
+			ref.SnapshotID,
 			afterBlockID,
 		)
 		if err != nil {
@@ -479,7 +477,7 @@ func (r *PGRepo) MoveBlock(
 			ctx,
 			updateBlockPositionSQL,
 			newPosition,
-			id,
+			ref.BlockID,
 		)
 		if err != nil {
 			return fmt.Errorf("tx update block position: %w", err)
@@ -503,9 +501,8 @@ func (r *PGRepo) MoveBlock(
 
 func (r *PGRepo) UpdateBlockContent(
 	ctx context.Context,
-	id, courseID, snapshotID uuid.UUID,
+	ref blocks.BlockRef,
 	model *blocks.UpdateBlock,
-	userID, sessionID uuid.UUID,
 ) (*blocks.Block, error) {
 	var block blocks.Block
 
@@ -513,14 +510,19 @@ func (r *PGRepo) UpdateBlockContent(
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
-			courseID,
-			snapshotID,
-			userID,
-			sessionID,
+			ref.CourseID,
+			ref.SnapshotID,
+			ref.UserID,
+			ref.SessionID,
 		); err != nil {
 			return err
 		}
-		if err := blockBelongsToSnapshot(ctx, tx, id, snapshotID); err != nil {
+		if err := blockBelongsToSnapshot(
+			ctx,
+			tx,
+			ref.BlockID,
+			ref.SnapshotID,
+		); err != nil {
 			return err
 		}
 
@@ -539,7 +541,7 @@ func (r *PGRepo) UpdateBlockContent(
 			updateBlockContentSQL,
 			model.BlockType,
 			data,
-			id,
+			ref.BlockID,
 		).StructScan(&block)
 		if err != nil {
 			return fmt.Errorf("tx update block content: %w", err)
@@ -611,28 +613,32 @@ func (r *PGRepo) RebalanceBlockPositions(
 
 func (r *PGRepo) DeleteBlockByID(
 	ctx context.Context,
-	id, courseID, snapshotID uuid.UUID,
-	userID, sessionID uuid.UUID,
+	ref blocks.BlockRef,
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		if err := validateEditableSnapshot(
 			ctx,
 			tx,
-			courseID,
-			snapshotID,
-			userID,
-			sessionID,
+			ref.CourseID,
+			ref.SnapshotID,
+			ref.UserID,
+			ref.SessionID,
 		); err != nil {
 			return err
 		}
-		if err := blockBelongsToSnapshot(ctx, tx, id, snapshotID); err != nil {
+		if err := blockBelongsToSnapshot(
+			ctx,
+			tx,
+			ref.BlockID,
+			ref.SnapshotID,
+		); err != nil {
 			return err
 		}
 
 		zap.L().
 			Debug("Executing query within transaction", zap.String("query", deleteBlockByIDSQL))
 
-		_, err := tx.ExecContext(ctx, deleteBlockByIDSQL, id)
+		_, err := tx.ExecContext(ctx, deleteBlockByIDSQL, ref.BlockID)
 		if err != nil {
 			return fmt.Errorf("tx delete block: %w", err)
 		}
