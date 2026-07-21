@@ -20,6 +20,7 @@ var (
 	ErrAfterBlockNotFound = errors.New(
 		"after_block_id does not exist in this snapshot",
 	)
+	ErrPermissionDenied = errors.New("permission denied")
 )
 
 type Service struct {
@@ -62,7 +63,7 @@ func (s *Service) CreateBlock(
 // MoveBlock changes block's position so that it comes after afterBlockID
 func (s *Service) MoveBlock(
 	ctx context.Context,
-	blockID, snapshotID, userID, sessionID uuid.UUID,
+	blockID, courseID, snapshotID, userID, sessionID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) error {
 	if afterBlockID != nil && *afterBlockID == blockID {
@@ -72,6 +73,7 @@ func (s *Service) MoveBlock(
 	newPosition, err := s.repo.MoveBlock(
 		ctx,
 		blockID,
+		courseID,
 		snapshotID,
 		afterBlockID,
 		userID,
@@ -91,12 +93,13 @@ func (s *Service) MoveBlock(
 
 func (s *Service) UpdateBlockContent(
 	ctx context.Context,
-	blockID, snapshotID, userID, sessionID uuid.UUID,
+	blockID, courseID, snapshotID, userID, sessionID uuid.UUID,
 	model *UpdateBlock,
 ) (*Block, error) {
 	return s.repo.UpdateBlockContent(
 		ctx,
 		blockID,
+		courseID,
 		snapshotID,
 		model,
 		userID,
@@ -106,16 +109,30 @@ func (s *Service) UpdateBlockContent(
 
 func (s *Service) DeleteBlockByID(
 	ctx context.Context,
-	blockID, snapshotID, userID, sessionID uuid.UUID,
+	blockID, courseID, snapshotID, userID, sessionID uuid.UUID,
 ) error {
-	return s.repo.DeleteBlockByID(ctx, blockID, snapshotID, userID, sessionID)
+	return s.repo.DeleteBlockByID(
+		ctx,
+		blockID,
+		courseID,
+		snapshotID,
+		userID,
+		sessionID,
+	)
 }
 
 func (s *Service) GetBlockByID(
 	ctx context.Context,
-	blockID uuid.UUID,
+	blockID, courseID, snapshotID, userID, sessionID uuid.UUID,
 ) (*Block, error) {
-	return s.repo.GetBlockByID(ctx, blockID)
+	return s.repo.GetBlockByID(
+		ctx,
+		blockID,
+		courseID,
+		snapshotID,
+		userID,
+		sessionID,
+	)
 }
 
 func (s *Service) GetAllBlocksBySnapshotID(

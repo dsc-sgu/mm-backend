@@ -33,6 +33,7 @@ type Block struct {
 
 // CreateBlock is the input for creating a block, used by both the service and repository layers.
 type CreateBlock struct {
+	CourseID     uuid.UUID       `json:"-"`
 	SnapshotID   uuid.UUID       `json:"-"                      db:"snapshot_id" binding:"required"`
 	BlockType    string          `json:"blockType"              db:"block_type"  binding:"required"`
 	Data         json.RawMessage `json:"data"                   db:"data"        binding:"required" swaggertype:"object"`
@@ -64,26 +65,30 @@ type Repo interface {
 		model *CreateBlock,
 		userID, sessionID uuid.UUID,
 	) (*Block, error)
-	GetBlockByID(ctx context.Context, id uuid.UUID) (*Block, error)
+	GetBlockByID(
+		ctx context.Context,
+		id, courseID, snapshotID uuid.UUID,
+		userID, sessionID uuid.UUID,
+	) (*Block, error)
 	GetAllBlocksBySnapshotID(
 		ctx context.Context,
 		snapshotID uuid.UUID,
 	) ([]*Block, error)
 	MoveBlock(
 		ctx context.Context,
-		blockID, snapshotID uuid.UUID,
+		id, courseID, snapshotID uuid.UUID,
 		afterBlockID *uuid.UUID,
 		userID, sessionID uuid.UUID,
 	) (string, error)
 	UpdateBlockContent(
 		ctx context.Context,
-		id, snapshotID uuid.UUID,
+		id, courseID, snapshotID uuid.UUID,
 		model *UpdateBlock,
 		userID, sessionID uuid.UUID,
 	) (*Block, error)
 	DeleteBlockByID(
 		ctx context.Context,
-		id, snapshotID uuid.UUID,
+		id, courseID, snapshotID uuid.UUID,
 		userID, sessionID uuid.UUID,
 	) error
 	RebalanceBlockPositions(ctx context.Context, snapshotID uuid.UUID) error

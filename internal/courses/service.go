@@ -5,20 +5,23 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 type Service struct {
-	repo             Repo
-	snapshotsService *snapshots.Service
-	locksService     *locks.Service
-	blockService     *blocks.Service
+	repo              Repo
+	snapshotsService  *snapshots.Service
+	locksService      *locks.Service
+	blockService      *blocks.Service
+	membershipService *membership.Service
+	usersService      *users.Service
 }
 
 func NewService(
@@ -26,12 +29,16 @@ func NewService(
 	snapshotsService *snapshots.Service,
 	locksService *locks.Service,
 	blockService *blocks.Service,
+	membershipService *membership.Service,
+	usersService *users.Service,
 ) *Service {
 	return &Service{
-		repo:             repo,
-		snapshotsService: snapshotsService,
-		locksService:     locksService,
-		blockService:     blockService,
+		repo:              repo,
+		snapshotsService:  snapshotsService,
+		locksService:      locksService,
+		blockService:      blockService,
+		membershipService: membershipService,
+		usersService:      usersService,
 	}
 }
 
@@ -54,13 +61,7 @@ var (
 	ErrDraftNotFound        = errors.New("user draft not found")
 	ErrPermissionDenied     = errors.New("permission denied")
 	ErrCourseMemberNotFound = errors.New("user is not a course member")
-	ErrInviteNotFound       = errors.New("invite not found")
-	ErrInviteRevoked        = errors.New("invite is revoked")
-	ErrInviteExpired        = errors.New("invite is expired")
-	ErrAlreadyMember        = errors.New(
-		"user is already a member of this course",
-	)
-	ErrSnapshotConflict = errors.New(
+	ErrSnapshotConflict     = errors.New(
 		"course version mismatch or modified by another user",
 	)
 	ErrInvalidTarget = errors.New(
@@ -71,13 +72,13 @@ var (
 func (s *Service) CheckCourseMember(
 	ctx context.Context,
 	userID, courseID uuid.UUID,
-) (*CourseMember, error) {
-	member, err := s.repo.GetCourseMember(ctx, userID, courseID)
+) (*membership.Member, error) {
+	member, err := s.membershipService.CheckMember(ctx, userID, courseID)
+	if errors.Is(err, membership.ErrNotFound) {
+		return nil, ErrCourseMemberNotFound
+	}
 	if err != nil {
 		return nil, fmt.Errorf("checking permissions: %w", err)
-	}
-	if member == nil || !member.IsActive {
-		return nil, ErrCourseMemberNotFound
 	}
 	return member, nil
 }
@@ -88,92 +89,6 @@ func (s *Service) CreateCourse(
 	ownerID uuid.UUID,
 ) (*Course, error) {
 	return s.repo.CreateCourseWithInitialSnapshot(ctx, model, ownerID)
-}
-
-func (s *Service) CreateInvite(
-	ctx context.Context,
-	model *CreateInvite,
-	createdBy uuid.UUID,
-) (*Invite, error) {
-	courseMember, err := s.CheckCourseMember(ctx, createdBy, model.CourseID)
-	if err != nil {
-		return nil, err
-	}
-	if courseMember.Role != TeacherRole {
-		return nil, ErrPermissionDenied
-	}
-
-	return s.repo.CreateInvite(ctx, model, createdBy)
-}
-
-func (s *Service) GetInviteDetails(
-	ctx context.Context,
-	inviteID uuid.UUID,
-) (*InviteDetails, error) {
-	invite, err := s.repo.GetInviteByID(ctx, inviteID)
-	if err != nil {
-		return nil, fmt.Errorf("get invite details: get invite: %w", err)
-	}
-	if invite == nil {
-		return nil, ErrInviteNotFound
-	}
-
-	course, err := s.repo.GetCourseByID(ctx, invite.CourseID)
-	if err != nil {
-		return nil, fmt.Errorf("get invite details: get course: %w", err)
-	}
-	if course == nil {
-		return nil, ErrCourseNotFound
-	}
-
-	details := InviteDetails{
-		ID:           invite.ID,
-		CourseID:     invite.CourseID,
-		CourseName:   course.Name,
-		ProvidedRole: invite.ProvidedRole,
-		CreatedBy:    invite.CreatedBy,
-		CreatedAt:    invite.CreatedAt,
-		ExpiresAt:    invite.ExpiresAt,
-		IsRevoked:    invite.IsRevoked,
-	}
-
-	return &details, nil
-}
-
-func (s *Service) JoinCourseByInvite(
-	ctx context.Context,
-	inviteID, userID uuid.UUID,
-) (uuid.UUID, error) {
-	invite, err := s.repo.GetInviteByID(ctx, inviteID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("join by invite: get invite: %w", err)
-	}
-	if invite == nil {
-		return uuid.Nil, ErrInviteNotFound
-	}
-	if invite.IsRevoked {
-		return uuid.Nil, ErrInviteRevoked
-	}
-	if invite.ExpiresAt != nil && time.Now().After(*invite.ExpiresAt) {
-		return uuid.Nil, ErrInviteExpired
-	}
-
-	courseMember, err := s.repo.GetCourseMember(ctx, userID, invite.CourseID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf(
-			"join by invite: check existing role: %w",
-			err,
-		)
-	}
-	if courseMember != nil && courseMember.IsActive {
-		return uuid.Nil, ErrAlreadyMember
-	}
-
-	if err := s.repo.EnrollUserByInvite(ctx, userID, invite); err != nil {
-		return uuid.Nil, fmt.Errorf("join by invite: enroll user: %w", err)
-	}
-
-	return invite.CourseID, nil
 }
 
 // LockAndInitDraft initializes draft and sets pessimistic lock for the
@@ -193,7 +108,7 @@ func (s *Service) LockAndInitDraft(
 	if err != nil {
 		return nil, nil, err
 	}
-	if courseMember.Role != TeacherRole {
+	if courseMember.Role != membership.TeacherRole {
 		return nil, nil, ErrPermissionDenied
 	}
 
@@ -365,13 +280,6 @@ func (s *Service) CancelEdit(
 	return s.locksService.Unlock(ctx, session)
 }
 
-func (s *Service) GetCourseMember(
-	ctx context.Context,
-	userID, courseID uuid.UUID,
-) (*CourseMember, error) {
-	return s.repo.GetCourseMember(ctx, userID, courseID)
-}
-
 func (s *Service) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
@@ -420,10 +328,14 @@ func (s *Service) GetCourseContent(
 		ID:               course.ID,
 		DisciplineID:     course.DisciplineID,
 		ActiveSnapshotID: course.ActiveSnapshotID,
-		OwnerID:          course.OwnerID,
 		Name:             course.Name,
-		CreatedAt:        course.CreatedAt,
-		Blocks:           linkedBlocks,
+		Owner: resolveUserSummary(
+			ctx,
+			s.usersService,
+			course.OwnerID,
+		),
+		CreatedAt: course.CreatedAt,
+		Blocks:    linkedBlocks,
 	}, nil
 }
 
@@ -436,7 +348,7 @@ func (s *Service) UpdateCourseByID(
 	if err != nil {
 		return nil, err
 	}
-	if courseMember.Role != TeacherRole {
+	if courseMember.Role != membership.TeacherRole {
 		return nil, ErrPermissionDenied
 	}
 	return s.repo.UpdateCourseByID(ctx, id, update)
@@ -450,45 +362,33 @@ func (s *Service) DeleteCourseByID(
 	if err != nil {
 		return err
 	}
-	if courseMember.Role != TeacherRole {
+	if courseMember.Role != membership.TeacherRole {
 		return ErrPermissionDenied
 	}
 	return s.repo.DeleteCourseByID(ctx, id)
 }
 
-func (s *Service) GetSnapshotByID(
+// getSnapshotForCourse fetches a snapshot, verifying it belongs to courseID
+// and that userID may view it. A draft snapshot is additionally only visible
+// to whoever currently holds its course's edit lock
+func (s *Service) getSnapshotForCourse(
 	ctx context.Context,
-	snapshotID, userID uuid.UUID,
+	snapshotID, courseID, userID, sessionID uuid.UUID,
 ) (*snapshots.Snapshot, error) {
 	snapshot, err := s.snapshotsService.GetSnapshotByID(ctx, snapshotID)
 	if err != nil {
 		return nil, fmt.Errorf("get snapshot: %w", err)
 	}
-	if snapshot == nil {
+	if snapshot == nil || snapshot.CourseID != courseID {
 		return nil, ErrSnapshotNotFound
 	}
 
-	courseMember, err := s.CheckCourseMember(ctx, userID, snapshot.CourseID)
+	courseMember, err := s.CheckCourseMember(ctx, userID, courseID)
 	if err != nil {
 		return nil, err
 	}
-	if courseMember.Role != TeacherRole {
+	if courseMember.Role != membership.TeacherRole {
 		return nil, ErrPermissionDenied
-	}
-
-	return snapshot, nil
-}
-
-// GetSnapshotBlocks returns all blocks belonging to a snapshot. A draft
-// snapshot is only visible to whoever currently holds its course's edit
-// lock as the same session that is editing it.
-func (s *Service) GetSnapshotBlocks(
-	ctx context.Context,
-	snapshotID, userID, sessionID uuid.UUID,
-) ([]*blocks.Block, error) {
-	snapshot, err := s.GetSnapshotByID(ctx, snapshotID, userID)
-	if err != nil {
-		return nil, err
 	}
 
 	if snapshot.Status == snapshots.DraftStatus {
@@ -500,6 +400,33 @@ func (s *Service) GetSnapshotBlocks(
 		if err := s.locksService.ValidateLock(ctx, lockSession); err != nil {
 			return nil, err
 		}
+	}
+
+	return snapshot, nil
+}
+
+// GetCourseSnapshot returns metadata for a single snapshot of a course.
+func (s *Service) GetCourseSnapshot(
+	ctx context.Context,
+	snapshotID, courseID, userID, sessionID uuid.UUID,
+) (*snapshots.Snapshot, error) {
+	return s.getSnapshotForCourse(ctx, snapshotID, courseID, userID, sessionID)
+}
+
+// GetSnapshotBlocks returns all blocks belonging to a snapshot.
+func (s *Service) GetSnapshotBlocks(
+	ctx context.Context,
+	snapshotID, courseID, userID, sessionID uuid.UUID,
+) ([]*blocks.Block, error) {
+	snapshot, err := s.getSnapshotForCourse(
+		ctx,
+		snapshotID,
+		courseID,
+		userID,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	linkedBlocks, err := s.blockService.GetAllBlocksBySnapshotID(
@@ -521,7 +448,7 @@ func (s *Service) GetPublishedSnapshots(
 	if err != nil {
 		return nil, err
 	}
-	if courseMember.Role != TeacherRole {
+	if courseMember.Role != membership.TeacherRole {
 		return nil, ErrPermissionDenied
 	}
 	return s.snapshotsService.GetPublishedSnapshotsByCourseID(ctx, courseID)
