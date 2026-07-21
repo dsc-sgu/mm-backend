@@ -14,6 +14,7 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
 
 // Helper to get course content from the active snapshot
@@ -52,13 +53,14 @@ func GetSnapshotBlocks(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
-	snapshotID uuid.UUID,
+	courseID, snapshotID uuid.UUID,
 ) []*blocks.Block {
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks",
 		port.Port(),
+		courseID,
 		snapshotID,
 	)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -150,7 +152,7 @@ func CancelEdit(
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/cancel_edit",
+		"http://127.0.0.1:%s/api/v1/courses/%s/cancel-edit",
 		port.Port(),
 		courseID,
 	)
@@ -178,7 +180,7 @@ func SwitchSnapshot(
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/switch_snapshot",
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/switch",
 		port.Port(),
 		courseID,
 	)
@@ -252,14 +254,14 @@ func TestCourseEditingWorkflow(t *testing.T) {
 	// Enroll Student in the course
 	{
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites",
+			"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 			backendPort.Port(),
+			courseID,
 		)
 		expiresAt := time.Now().Add(24 * time.Hour)
 		inviteBody, _ := json.Marshal(
-			courses.CreateInvite{
-				CourseID:     courseID,
-				ProvidedRole: courses.StudentRole,
+			membership.CreateInvite{
+				ProvidedRole: membership.StudentRole,
 				ExpiresAt:    &expiresAt,
 			},
 		)
@@ -277,11 +279,11 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			require.NoError(t, err)
 		}()
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
-		var invite courses.Invite
+		var invite courses.InviteResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&invite))
 
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites/%s",
+			"http://127.0.0.1:%s/api/v1/invites/%s/join",
 			backendPort.Port(),
 			invite.ID,
 		)
@@ -314,6 +316,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			t,
 			&backendPort,
 			&teacher,
+			courseID,
 			draftSnapshotID,
 		)
 		require.Len(t, draftBlocks, 0)
@@ -323,14 +326,14 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		// First, make the other user a teacher for the course.
 		// As the original teacher, create an invite.
 		inviteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites",
+			"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 			backendPort.Port(),
+			courseID,
 		)
 		expiresAt := time.Now().Add(24 * time.Hour)
 		inviteBody, _ := json.Marshal(
-			courses.CreateInvite{
-				CourseID:     courseID,
-				ProvidedRole: courses.TeacherRole,
+			membership.CreateInvite{
+				ProvidedRole: membership.TeacherRole,
 				ExpiresAt:    &expiresAt,
 			},
 		)
@@ -348,12 +351,12 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			require.NoError(t, err)
 		}()
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
-		var invite courses.Invite
+		var invite courses.InviteResponse
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&invite))
 
 		// As the other teacher, join the course.
 		joinURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/course-invites/%s",
+			"http://127.0.0.1:%s/api/v1/invites/%s/join",
 			backendPort.Port(),
 			invite.ID,
 		)
@@ -401,22 +404,36 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		)
 
 		// Add blocks to the draft.
-		block1ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
-		block2ID := CreateTestBlock(t, &backendPort, &teacher, draftSnapshotID)
+		block1ID := CreateTestBlock(
+			t,
+			&backendPort,
+			&teacher,
+			courseID,
+			draftSnapshotID,
+		)
+		block2ID := CreateTestBlock(
+			t,
+			&backendPort,
+			&teacher,
+			courseID,
+			draftSnapshotID,
+		)
 
 		// Verify blocks exist in the draft.
 		draftBlocks := GetSnapshotBlocks(
 			t,
 			&backendPort,
 			&teacher,
+			courseID,
 			draftSnapshotID,
 		)
 		require.Len(t, draftBlocks, 2)
 
 		// Update a block in the draft.
 		updateURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks/%s",
+			"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
 			backendPort.Port(),
+			courseID,
 			draftSnapshotID,
 			block1ID,
 		)
@@ -439,13 +456,21 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		}()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		updatedBlock := GetBlockByID(t, &backendPort, &teacher, block1ID)
+		updatedBlock := GetBlockByID(
+			t,
+			&backendPort,
+			&teacher,
+			courseID,
+			draftSnapshotID,
+			block1ID,
+		)
 		require.Equal(t, json.RawMessage(newBlockData), updatedBlock.Data)
 
 		// Delete a block in the draft.
 		deleteURL := fmt.Sprintf(
-			"http://127.0.0.1:%s/api/v1/snapshots/%s/blocks/%s",
+			"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
 			backendPort.Port(),
+			courseID,
 			draftSnapshotID,
 			block2ID,
 		)
@@ -464,6 +489,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			t,
 			&backendPort,
 			&teacher,
+			courseID,
 			draftSnapshotID,
 		)
 		require.Len(t, draftBlocks, 1)
@@ -534,6 +560,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			t,
 			&backendPort,
 			&teacher,
+			courseID,
 			draftToCancel,
 		) // Add a block to it.
 
@@ -572,7 +599,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			&teacher,
 			courseID,
 		).DraftSnapshotID
-		CreateTestBlock(t, &backendPort, &teacher, draftV2)
+		CreateTestBlock(t, &backendPort, &teacher, courseID, draftV2)
 		PublishDraft(t, &backendPort, &teacher, courseID, draftV2)
 
 		// Get snapshot history.
@@ -619,6 +646,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			t,
 			&backendPort,
 			&teacher,
+			courseID,
 			currentDraft,
 		)
 		require.Len(t, draftBlocks, 0) // The very first snapshot was empty.
@@ -645,20 +673,21 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			t,
 			&backendPort,
 			&teacher,
+			conflictCourseID,
 			userADraft,
 		) // User A makes a change.
 
 		// 3. User B (otherTeacher) also needs to be a teacher on this new course.
 		{
 			inviteURL := fmt.Sprintf(
-				"http://127.0.0.1:%s/api/v1/course-invites",
+				"http://127.0.0.1:%s/api/v1/courses/%s/invites",
 				backendPort.Port(),
+				conflictCourseID,
 			)
 			expiresAt := time.Now().Add(24 * time.Hour)
 			inviteBody, _ := json.Marshal(
-				courses.CreateInvite{
-					CourseID:     conflictCourseID,
-					ProvidedRole: courses.TeacherRole,
+				membership.CreateInvite{
+					ProvidedRole: membership.TeacherRole,
 					ExpiresAt:    &expiresAt,
 				},
 			)
@@ -676,11 +705,11 @@ func TestCourseEditingWorkflow(t *testing.T) {
 				require.NoError(t, err)
 			}()
 			require.Equal(t, http.StatusCreated, resp.StatusCode)
-			var invite courses.Invite
+			var invite courses.InviteResponse
 			require.NoError(t, json.NewDecoder(resp.Body).Decode(&invite))
 
 			joinURL := fmt.Sprintf(
-				"http://127.0.0.1:%s/api/v1/course-invites/%s",
+				"http://127.0.0.1:%s/api/v1/invites/%s/join",
 				backendPort.Port(),
 				invite.ID,
 			)
@@ -705,7 +734,13 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			&otherTeacher,
 			conflictCourseID,
 		).DraftSnapshotID
-		CreateTestBlock(t, &backendPort, &otherTeacher, userBDraft)
+		CreateTestBlock(
+			t,
+			&backendPort,
+			&otherTeacher,
+			conflictCourseID,
+			userBDraft,
+		)
 		publishStatusCode := PublishDraft(
 			t,
 			&backendPort,

@@ -32,6 +32,8 @@ func handleServiceError(err error) error {
 	case errors.Is(err, ErrSnapshotNotFound),
 		errors.Is(err, ErrBlockNotFound):
 		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, ErrPermissionDenied):
+		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrSnapshotNotDraft),
 		errors.Is(err, ErrAfterBlockNotFound),
 		errors.Is(err, ErrInvalidBlockForMoveAfter):
@@ -45,7 +47,9 @@ func handleServiceError(err error) error {
 }
 
 type GetBlockInput struct {
-	BlockID uuid.UUID `path:"block_id"`
+	CourseID   uuid.UUID `path:"course_id"`
+	SnapshotID uuid.UUID `path:"snapshot_id"`
+	BlockID    uuid.UUID `path:"block_id"`
 }
 
 type GetBlockOutput struct {
@@ -56,17 +60,29 @@ func (h *Handler) GetBlock(
 	ctx context.Context,
 	input *GetBlockInput,
 ) (*GetBlockOutput, error) {
-	block, err := h.svc.GetBlockByID(ctx, input.BlockID)
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	block, err := h.svc.GetBlockByID(
+		ctx,
+		input.BlockID,
+		input.CourseID,
+		input.SnapshotID,
+		userID,
+		sessionID,
+	)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
-	if block == nil {
-		return nil, huma.Error404NotFound("")
-	}
+
 	return &GetBlockOutput{Body: block}, nil
 }
 
 type CreateBlockInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`
 	Body       CreateBlock
 }
@@ -85,6 +101,7 @@ func (h *Handler) CreateBlock(
 		return nil, huma.Error401Unauthorized("")
 	}
 
+	input.Body.CourseID = input.CourseID
 	input.Body.SnapshotID = input.SnapshotID
 
 	block, err := h.svc.CreateBlock(ctx, &input.Body, userID, sessionID)
@@ -96,6 +113,7 @@ func (h *Handler) CreateBlock(
 }
 
 type MoveBlockInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`
 	BlockID    uuid.UUID `path:"block_id"`
 	Body       MoveBlock `json:"body"`
@@ -114,6 +132,7 @@ func (h *Handler) MoveBlock(
 	err := h.svc.MoveBlock(
 		ctx,
 		input.BlockID,
+		input.CourseID,
 		input.SnapshotID,
 		userID,
 		sessionID,
@@ -127,6 +146,7 @@ func (h *Handler) MoveBlock(
 }
 
 type PatchBlockInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`
 	BlockID    uuid.UUID `path:"block_id"`
 	Body       UpdateBlock
@@ -149,6 +169,7 @@ func (h *Handler) PatchBlock(
 	block, err := h.svc.UpdateBlockContent(
 		ctx,
 		input.BlockID,
+		input.CourseID,
 		input.SnapshotID,
 		userID,
 		sessionID,
@@ -162,6 +183,7 @@ func (h *Handler) PatchBlock(
 }
 
 type DeleteBlockInput struct {
+	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`
 	BlockID    uuid.UUID `path:"block_id"`
 }
@@ -179,6 +201,7 @@ func (h *Handler) DeleteBlock(
 	err := h.svc.DeleteBlockByID(
 		ctx,
 		input.BlockID,
+		input.CourseID,
 		input.SnapshotID,
 		userID,
 		sessionID,
