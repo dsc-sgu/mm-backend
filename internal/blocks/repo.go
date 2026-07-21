@@ -59,37 +59,37 @@ type AdjacentPositions struct {
 	Next string
 }
 
+// BlockRef identifies a specific block within its course and snapshot,
+// together with the editing session performing the operation.
+type BlockRef struct {
+	BlockID    uuid.UUID
+	CourseID   uuid.UUID
+	SnapshotID uuid.UUID
+	UserID     uuid.UUID
+	SessionID  uuid.UUID
+}
+
 type Repo interface {
 	CreateBlock(
 		ctx context.Context,
 		model *CreateBlock,
 		userID, sessionID uuid.UUID,
 	) (*Block, error)
-	GetBlockByID(
-		ctx context.Context,
-		id, courseID, snapshotID uuid.UUID,
-		userID, sessionID uuid.UUID,
-	) (*Block, error)
+	GetBlockByID(ctx context.Context, ref BlockRef) (*Block, error)
 	GetAllBlocksBySnapshotID(
 		ctx context.Context,
 		snapshotID uuid.UUID,
 	) ([]*Block, error)
 	MoveBlock(
 		ctx context.Context,
-		id, courseID, snapshotID uuid.UUID,
+		ref BlockRef,
 		afterBlockID *uuid.UUID,
-		userID, sessionID uuid.UUID,
 	) (string, error)
 	UpdateBlockContent(
 		ctx context.Context,
-		id, courseID, snapshotID uuid.UUID,
+		ref BlockRef,
 		model *UpdateBlock,
-		userID, sessionID uuid.UUID,
 	) (*Block, error)
-	DeleteBlockByID(
-		ctx context.Context,
-		id, courseID, snapshotID uuid.UUID,
-		userID, sessionID uuid.UUID,
-	) error
+	DeleteBlockByID(ctx context.Context, ref BlockRef) error
 	RebalanceBlockPositions(ctx context.Context, snapshotID uuid.UUID) error
 }

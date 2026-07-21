@@ -66,14 +66,13 @@ func (h *Handler) GetBlock(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	block, err := h.svc.GetBlockByID(
-		ctx,
-		input.BlockID,
-		input.CourseID,
-		input.SnapshotID,
-		userID,
-		sessionID,
-	)
+	block, err := h.svc.GetBlockByID(ctx, BlockRef{
+		BlockID:    input.BlockID,
+		CourseID:   input.CourseID,
+		SnapshotID: input.SnapshotID,
+		UserID:     userID,
+		SessionID:  sessionID,
+	})
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -129,15 +128,13 @@ func (h *Handler) MoveBlock(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	err := h.svc.MoveBlock(
-		ctx,
-		input.BlockID,
-		input.CourseID,
-		input.SnapshotID,
-		userID,
-		sessionID,
-		input.Body.AfterBlockID,
-	)
+	err := h.svc.MoveBlock(ctx, BlockRef{
+		BlockID:    input.BlockID,
+		CourseID:   input.CourseID,
+		SnapshotID: input.SnapshotID,
+		UserID:     userID,
+		SessionID:  sessionID,
+	}, input.Body.AfterBlockID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -166,15 +163,13 @@ func (h *Handler) PatchBlock(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	block, err := h.svc.UpdateBlockContent(
-		ctx,
-		input.BlockID,
-		input.CourseID,
-		input.SnapshotID,
-		userID,
-		sessionID,
-		&input.Body,
-	)
+	block, err := h.svc.UpdateBlockContent(ctx, BlockRef{
+		BlockID:    input.BlockID,
+		CourseID:   input.CourseID,
+		SnapshotID: input.SnapshotID,
+		UserID:     userID,
+		SessionID:  sessionID,
+	}, &input.Body)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -198,14 +193,13 @@ func (h *Handler) DeleteBlock(
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	err := h.svc.DeleteBlockByID(
-		ctx,
-		input.BlockID,
-		input.CourseID,
-		input.SnapshotID,
-		userID,
-		sessionID,
-	)
+	err := h.svc.DeleteBlockByID(ctx, BlockRef{
+		BlockID:    input.BlockID,
+		CourseID:   input.CourseID,
+		SnapshotID: input.SnapshotID,
+		UserID:     userID,
+		SessionID:  sessionID,
+	})
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
