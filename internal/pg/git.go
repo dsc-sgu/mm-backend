@@ -50,6 +50,13 @@ const (
 		ORDER BY att.transition_at DESC
 		LIMIT 1
 	`
+
+	isCourseMemberSQL = `
+		SELECT EXISTS(
+			SELECT 1 FROM course_members
+			WHERE user_id = $1 AND course_id = $2 AND is_active
+		)
+	`
 )
 
 func (r *PGRepo) AddSSHKey(model *git.SSHKey) error {
@@ -147,4 +154,15 @@ func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
 	}
 
 	return course.ID, nil
+}
+
+func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
+	zap.L().Debug("Executing query", zap.String("query", isCourseMemberSQL))
+
+	var exists bool
+	err := r.db.GetContext(ctx, &exists, isCourseMemberSQL, userID, courseID)
+	if err != nil {
+		return false, fmt.Errorf("check course membership: %w", err)
+	}
+	return exists, nil
 }

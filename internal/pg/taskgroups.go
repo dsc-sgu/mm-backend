@@ -185,10 +185,15 @@ func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
 func (r *PGRepo) CreateTask(ctx context.Context, model *tasks.CreateTask) (*tasks.Task, error) {
 	zap.L().Debug("Executing query", zap.String("query", createTaskSQL))
 
+	patterns := model.Patterns
+	if patterns == nil {
+		patterns = []string{}
+	}
+
 	var task tasks.Task
 	err := r.db.QueryRowContext(
 		ctx, createTaskSQL,
-		model.BlockID, model.TaskGroupID, model.Name, pq.StringArray(model.Patterns),
+		model.BlockID, model.TaskGroupID, model.Name, pq.StringArray(patterns),
 		model.MaxGrade, model.MaxAttempts, model.AvailableAt, model.DeadlineAt,
 	).Scan(&task.ID, &task.TaskGroupID, &task.Name, &task.Patterns,
 		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt)
