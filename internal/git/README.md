@@ -20,9 +20,9 @@ sequenceDiagram
     MW->>DB: looks for course and task group IDs
     DB-->>MW: return course and task group IDs
     MW->>MW: RepoRename makes repo name from course ID, task group ID and fingerprint
-    MW->>MW: AuthRepo checks acces via fingerprint
-    MW->>DB: gives fingerprint     
-    DB-->>MW: access level
+    MW->>MW: AuthRepo resolves the repo ID from the original path + fingerprint
+    MW->>DB: check course_members for (participant, course)
+    DB-->>MW: active membership? → access level
     alt ReadWrite or Admin access
         MW->>Git: git-receive-pack runs system git
         Git->>Git: pre-receive hook checks tag files against .mm-patterns (by task name)
@@ -59,9 +59,9 @@ sequenceDiagram
     MW->>DB: looks for course and task group IDs
     DB-->>MW: return course and task group IDs
     MW->>MW: RepoRename makes repo name from course ID, task group ID and fingerprint
-    MW->>MW: AuthRepo checks acces via fingerprint
-    MW->>DB: gives fingerprint     
-    DB-->>MW: access level
+    MW->>MW: AuthRepo resolves the repo ID from the original path + fingerprint
+    MW->>DB: check course_members for (participant, course)
+    DB-->>MW: active membership? → access level
     alt ReadOnly or ReadWrite or Admin
         MW->>Git: user uses `git clone` that transforms to `git-upload-pack`        
         Git-->>MW: git packfile exchange done
