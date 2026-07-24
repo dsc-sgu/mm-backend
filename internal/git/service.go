@@ -226,11 +226,25 @@ func (s *Service) CheckPasswordAuth(ctx ssh.Context, password string) bool {
 	return s.db.CheckPasswordAuth(ctx, password)
 }
 
-func (s *Service) AuthRepo(repo string, pk ssh.PublicKey) pkggit.AccessLevel {
-	if s.db.CheckPublicKeyAuth(nil, pk) {
-		return pkggit.ReadWriteAccess
+func (s *Service) AuthRepo(originalPath string, repo string, pk ssh.PublicKey) pkggit.AccessLevel {
+	fingerprint := gossh.FingerprintSHA256(pk)
+
+	repoID, err := s.GetRepoID(originalPath, fingerprint)
+	if err != nil {
+		zap.L().Warn("AuthRepo: resolve repo id", zap.Error(err))
+		return pkggit.NoAccess
 	}
-	return pkggit.NoAccess
+
+	member, err := s.db.IsCourseMember(context.Background(), repoID.ParticipantID, repoID.CourseID)
+	if err != nil {
+		zap.L().Error("AuthRepo: check course membership", zap.Error(err))
+		return pkggit.NoAccess
+	}
+	if !member {
+		return pkggit.NoAccess
+	}
+
+	return pkggit.ReadWriteAccess
 }
 
 func (s *Service) OnPush(originalPath string, repo string, pk ssh.PublicKey) {
