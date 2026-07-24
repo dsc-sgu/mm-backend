@@ -87,10 +87,11 @@ type GitHooks = Hooks // nolint: revive
 
 // Hooks is an interface that allows for custom authorization
 // implementations and post push/fetch notifications. Prior to git access,
-// AuthRepo will be called with the ssh.Session public key and the repo name.
+// AuthRepo will be called with the original (pre-rename) repo path, the
+// renamed repo name and the ssh.Session public key, mirroring OnPush/OnFetch.
 // Implementers return the appropriate AccessLevel.
 type Hooks interface {
-	AuthRepo(string, ssh.PublicKey) AccessLevel
+	AuthRepo(originalRepo, repo string, pk ssh.PublicKey) AccessLevel
 	OnPush(string, string, ssh.PublicKey)
 	OnFetch(string, string, ssh.PublicKey)
 }
@@ -118,7 +119,7 @@ func Middleware(
 					Fatal(s, err)
 					return
 				}
-				access := gh.AuthRepo(repo, pk)
+				access := gh.AuthRepo(rawRepo, repo, pk)
 				switch GitCmd(gc) {
 				case GitReceivePack:
 					switch access {

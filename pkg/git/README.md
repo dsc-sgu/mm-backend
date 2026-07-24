@@ -22,7 +22,7 @@ sequenceDiagram
 
     Student->>Middleware: git push ssh://server/course/group
     Middleware->>Hooks: RepoRename("/course/group", pubkey) → "abc123.git"
-    Middleware->>Hooks: AuthRepo("abc123.git", pubkey) → ReadWriteAccess
+    Middleware->>Hooks: AuthRepo("/course/group", "abc123.git", pubkey) → ReadWriteAccess
     Middleware->>Student: git protocol (packfile exchange)
     Middleware->>Hooks: OnPush("/course/group", "abc123.git", pubkey)
 ```
@@ -37,7 +37,7 @@ sequenceDiagram
 
     Teacher->>Middleware: git fetch ssh://server/course/group
     Middleware->>Hooks: RepoRename("/course/group", pubkey) → "abc123.git"
-    Middleware->>Hooks: AuthRepo("abc123.git", pubkey) → ReadOnlyAccess
+    Middleware->>Hooks: AuthRepo("/course/group", "abc123.git", pubkey) → ReadOnlyAccess
     Middleware->>Teacher: git protocol (packfile exchange)
     Middleware->>Hooks: OnFetch("/course/group", "abc123.git", pubkey)
 ```

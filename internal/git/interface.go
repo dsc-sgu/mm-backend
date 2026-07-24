@@ -19,6 +19,7 @@ type DBRepo interface {
 	CheckPasswordAuth(ctx ssh.Context, password string) bool
 	SaveAttempt(repoID RepoID, taskID uuid.UUID, commitHash string) error
 	GetAttemptCommitInfo(attemptID uuid.UUID) (AttemptCommitInfo, error)
+	IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error)
 
 	GetTaskGroupIDByName(ctx context.Context, name string, courseID uuid.UUID) (uuid.UUID, error)
 	GetCourseIDByTaskGroup(ctx context.Context, taskGroupID uuid.UUID) (uuid.UUID, error)
@@ -32,7 +33,7 @@ type DBRepo interface {
 type Repo interface {
 	GetDiff(attemptID1, attemptID2 uuid.UUID) ([]string, error)
 	InitRepo(repoID RepoID) error
-	AuthRepo(repo string, pk ssh.PublicKey) git.AccessLevel
+	AuthRepo(originalRepo, repo string, pk ssh.PublicKey) git.AccessLevel
 	RemoveRepo(repoID RepoID) error
 	RepoRename(original string, pk gossh.PublicKey) (string, error)
 	GetRepoID(path string, fingerprint string) (RepoID, error)
