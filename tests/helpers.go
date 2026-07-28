@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -23,6 +24,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type TestUser struct {
@@ -573,6 +575,110 @@ func GetBlockByID(
 	)
 
 	return returnedBlock
+}
+
+func CreateTestTaskGroup(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	courseID uuid.UUID,
+	name string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks?fake_user_id=%s",
+		port.Port(),
+		userID,
+	)
+
+	body, err := json.Marshal(tasks.CreateTaskGroup{
+		CourseID: courseID,
+		Name:     name,
+		Data:     []byte("true"),
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created tasks.CreateTaskGroupResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+func CreateTestTask(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	groupID uuid.UUID,
+	name string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		port.Port(),
+		groupID,
+		userID,
+	)
+
+	body, err := json.Marshal(tasks.CreateTask{
+		Name:        name,
+		Data:        []byte("true"),
+		MaxGrade:    100,
+		MaxAttempts: 5,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created tasks.CreateTaskResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+func buildTestZip(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	for name, content := range files {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, w.Close())
+
+	return buf.Bytes()
 }
 
 func GetRoleInCourse(
