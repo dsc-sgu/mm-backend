@@ -56,8 +56,12 @@ type Config struct {
 	SessionCookieDomain string   `env:"SESSION_COOKIE_DOMAIN, default=127.0.0.1"`
 	AllowOrigins        []string `env:"ALLOW_ORIGINS"`
 
-	GinMode  string `env:"GIN_MODE,              default=debug"`
-	Host     string `env:"HOST,                  default=127.0.0.1"`
+	GinMode string `env:"GIN_MODE,              default=debug"`
+	// Host is the bind address for the HTTP and SSH servers (not a connection
+	// target, unlike PostgresConfig/RedisConfig.Host) — it must default to
+	// 0.0.0.0 so the servers are reachable from outside the container/host;
+	// 127.0.0.1 would silently accept no external connections at all.
+	Host     string `env:"HOST,                  default=0.0.0.0"`
 	HTTPPort int    `env:"HTTP_PORT,             default=8034"`
 	SSHPort  int    `env:"PORT,                  default=2222"`
 
