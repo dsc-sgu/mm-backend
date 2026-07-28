@@ -38,9 +38,9 @@ type CreateBlock struct {
 
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
 type UpdateBlock struct {
-	CourseID uuid.UUID       `json:"courseID" db:"course_id" binding:"required"`
-	Data     json.RawMessage `json:"data"                                       swaggertype:"object"`
-	Position int             `json:"position"`
+	CourseID uuid.UUID       `json:"courseID"           db:"course_id" binding:"required"`
+	Data     json.RawMessage `json:"data,omitempty"                                       swaggertype:"object"`
+	Position *int            `json:"position,omitempty"`
 }
 
 // DeleteBlockFromCourse is the input for unlinking a block from a course, used by both the service and repository layers.

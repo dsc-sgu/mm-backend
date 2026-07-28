@@ -17,31 +17,31 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc}
 }
 
-type AddSshKeyInput struct {
-	Body AddSshKey
+type AddSSHKeyInput struct {
+	Body AddSSHKey
 }
 
-func (h *Handler) AddSshKey(ctx context.Context, input *AddSshKeyInput) (*struct{}, error) {
+func (h *Handler) AddSSHKey(ctx context.Context, input *AddSSHKeyInput) (*struct{}, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
-	if err := h.svc.AddSshKey(userID, &input.Body); err != nil {
+	if err := h.svc.AddSSHKey(userID, &input.Body); err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
 	return nil, nil
 }
 
-type DeleteSshKeyInput struct {
-	Body DeleteSshKey
+type DeleteSSHKeyInput struct {
+	Body DeleteSSHKey
 }
 
-func (h *Handler) DeleteSshKey(ctx context.Context, input *DeleteSshKeyInput) (*struct{}, error) {
+func (h *Handler) DeleteSSHKey(ctx context.Context, input *DeleteSSHKeyInput) (*struct{}, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
-	if err := h.svc.DeleteSshKey(userID, &input.Body); err != nil {
+	if err := h.svc.DeleteSSHKey(userID, &input.Body); err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
 	return nil, nil

@@ -3,6 +3,7 @@ package courses
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -53,8 +54,11 @@ func (h *Handler) CreateCourse(ctx context.Context, input *CreateCourseInput) (*
 }
 
 type GetPaginatedCoursesInput struct {
-	Limit  int    `query:"limit"`
-	LastID string `query:"last_id"`
+	Limit        int    `query:"limit"`
+	LastID       string `query:"last_id"`
+	DisciplineID string `query:"discipline_id"`
+	IsTeacher    string `query:"is_teacher"`
+	IsStudent    string `query:"is_student"`
 }
 
 type GetPaginatedCoursesOutput struct {
@@ -65,16 +69,53 @@ func (h *Handler) GetPaginatedCourses(
 	ctx context.Context,
 	input *GetPaginatedCoursesInput,
 ) (*GetPaginatedCoursesOutput, error) {
-	var lastID uuid.UUID
-	if input.LastID != "" {
-		var err error
-		lastID, err = uuid.Parse(input.LastID)
+	var err error
+	teacherBool := false
+	if input.IsTeacher != "" {
+		teacherBool, err = strconv.ParseBool(input.IsTeacher)
 		if err != nil {
-			return nil, huma.Error400BadRequest("")
+			return nil, huma.Error400BadRequest("invalid is_teacher")
 		}
 	}
 
-	courseList, err := h.courseService.GetPaginatedCourses(ctx, input.Limit, lastID)
+	studentBool := false
+	if input.IsStudent != "" {
+		studentBool, err = strconv.ParseBool(input.IsStudent)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid is_student")
+		}
+	}
+
+	userID := uuid.Nil
+	if teacherBool || studentBool {
+		userID = session.UserIDFromContext(ctx)
+	}
+
+	var lastID uuid.UUID
+	if input.LastID != "" {
+		lastID, err = uuid.Parse(input.LastID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid last_id")
+		}
+	}
+
+	var disciplineID uuid.UUID
+	if input.DisciplineID != "" {
+		disciplineID, err = uuid.Parse(input.DisciplineID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid discipline_id")
+		}
+	}
+
+	courseList, err := h.courseService.GetPaginatedCourses(
+		ctx,
+		input.Limit,
+		lastID,
+		disciplineID,
+		userID,
+		teacherBool,
+		studentBool,
+	)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("")
 	}
@@ -129,10 +170,11 @@ func (h *Handler) DeleteCourse(ctx context.Context, input *DeleteCourseInput) (*
 	}
 
 	for _, block := range linkedBlocks {
+		pos := block.Position
 		updatedBlock := blocks.UpdateBlock{
 			CourseID: uuid.Nil,
 			Data:     block.Data,
-			Position: block.Position,
+			Position: &pos,
 		}
 		_, err := h.blockService.UpdateBlockByID(ctx, block.ID, &updatedBlock)
 		if err != nil {

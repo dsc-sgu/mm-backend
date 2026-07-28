@@ -20,6 +20,7 @@ type Course struct {
 	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
 	OwnerID      uuid.UUID `json:"ownerID"      db:"owner_id"      binding:"required"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
 	CreatedAt    time.Time `json:"createdAt"    db:"created_at"    binding:"required"`
 }
 
@@ -27,12 +28,19 @@ type Course struct {
 type CreateCourse struct {
 	DisciplineID uuid.UUID `json:"disciplineID" db:"discipline_id"`
 	Name         string    `json:"name"         db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"  db:"display_name"  binding:"required"`
 }
 
 // UpdateCourse is the input for updating a course, used by both the service and repository layers.
 type UpdateCourse struct {
-	OwnerID uuid.UUID `json:"ownerID" db:"owner_id"`
-	Name    string    `json:"name"    db:"name"`
+	OwnerID     uuid.UUID `json:"ownerID"     db:"owner_id"`
+	Name        string    `json:"name"        db:"name"`
+	DisplayName string    `json:"displayName" db:"display_name" binding:"required"`
+}
+
+type CoursePagination struct {
+	Limit  int       `query:"limit"`
+	LastID uuid.UUID `query:"last_id"`
 }
 
 // CourseMember is the database representation of a course member.
@@ -98,10 +106,15 @@ type Repo interface {
 		ownerID uuid.UUID,
 	) (*Course, error)
 	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
+	GetCourseByName(ctx context.Context, name string) (*Course, error)
 	GetPaginatedCourses(
 		ctx context.Context,
 		limit int,
 		lastID uuid.UUID,
+		discipline uuid.UUID,
+		userID uuid.UUID,
+		isTeacher bool,
+		isStudent bool,
 	) ([]Course, error)
 	UpdateCourseByID(
 		ctx context.Context,

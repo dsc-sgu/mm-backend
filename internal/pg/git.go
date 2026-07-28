@@ -1,38 +1,78 @@
 package pg
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
 
-	"github.com/dsc-sgu/mm-backend/internal/git"
+	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	gossh "golang.org/x/crypto/ssh"
+
+	"github.com/dsc-sgu/mm-backend/internal/git"
 )
 
 const (
-	addSshKeySQL = `
+	addSSHKeySQL = `
 		INSERT INTO ssh_keys (owner_id, name, key, fingerprint, created_at)
 		VALUES (:owner_id, :name, :key, :fingerprint, :created_at)
 	`
-	deleteSshKeySQL = `
+
+	deleteSSHKeySQL = `
 		DELETE FROM ssh_keys
 		WHERE owner_id = $1 AND fingerprint = $2
 	`
+
+	getParticipantIDSQL = `
+		SELECT owner_id FROM ssh_keys
+		WHERE fingerprint = $1
+	`
+
+	saveAttemptSQL = `
+		WITH new_attempt AS (
+			INSERT INTO attempts (user_id, task_id)
+			VALUES ($1, $2)
+			RETURNING id )
+		INSERT INTO attempt_transitions (attempt_id, state, transition_at, transition_data)
+		VALUES ((SELECT id FROM new_attempt), 'submitted', $3, $4::jsonb)
+	`
+
+	getAttemptCommitInfoSQL = `
+		SELECT a.user_id, a.task_id, att.transition_data, t.task_group_id, tg.course_id
+		FROM attempts a
+		JOIN attempt_transitions att ON att.attempt_id = a.id
+		JOIN tasks t ON a.task_id = t.block_id
+		JOIN task_groups tg ON t.task_group_id = tg.id
+		WHERE a.id = $1 AND att.state = 'submitted'
+		ORDER BY att.transition_at DESC
+		LIMIT 1
+	`
+
+	isCourseMemberSQL = `
+		SELECT EXISTS(
+			SELECT 1 FROM course_members
+			WHERE user_id = $1 AND course_id = $2 AND is_active
+		)
+	`
 )
 
-func (r *PGRepo) AddSshKey(model *git.SshKey) error {
-	zap.L().Debug("Executing query", zap.String("query", addSshKeySQL))
+func (r *PGRepo) AddSSHKey(model *git.SSHKey) error {
+	zap.L().Debug("Executing query", zap.String("query", addSSHKeySQL))
 
-	if _, err := r.db.NamedExec(addSshKeySQL, model); err != nil {
+	if _, err := r.db.NamedExec(addSSHKeySQL, model); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *PGRepo) DeleteSshKey(ownerId uuid.UUID, fingerprint string) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteSshKeySQL))
+func (r *PGRepo) DeleteSSHKey(ownerID uuid.UUID, fingerprint string) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteSSHKeySQL))
 
-	res, err := r.db.Exec(deleteSshKeySQL, ownerId, fingerprint)
+	res, err := r.db.Exec(deleteSSHKeySQL, ownerID, fingerprint)
 	if err != nil {
 		return err
 	}
@@ -42,4 +82,87 @@ func (r *PGRepo) DeleteSshKey(ownerId uuid.UUID, fingerprint string) error {
 	}
 
 	return nil
+}
+
+func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", getParticipantIDSQL))
+
+	var ownerID uuid.UUID
+
+	err := r.db.QueryRow(getParticipantIDSQL, fingerprint).Scan(&ownerID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, fmt.Errorf("ssh key %q not found", fingerprint)
+		}
+		return uuid.Nil, err
+	}
+
+	return ownerID, nil
+}
+
+func (r *PGRepo) CheckPublicKeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
+	fingerprint := gossh.FingerprintSHA256(pk)
+	_, err := r.GetParticipant(fingerprint)
+	return err == nil
+}
+
+func (r *PGRepo) CheckPasswordAuth(ctx ssh.Context, password string) bool {
+	return false
+}
+
+func (r *PGRepo) SaveAttempt(repoID git.RepoID, taskID uuid.UUID, commitHash string) error {
+	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
+	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, taskID, time.Now(), transitionData)
+	if err != nil {
+		return fmt.Errorf("save attempt: %w", err)
+	}
+	return nil
+}
+
+func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (git.AttemptCommitInfo, error) {
+	var (
+		info           git.AttemptCommitInfo
+		transitionData json.RawMessage
+	)
+
+	err := r.db.QueryRow(getAttemptCommitInfoSQL, attemptID).Scan(
+		&info.UserID, &info.TaskID, &transitionData, &info.TaskGroupID, &info.CourseID,
+	)
+	if err != nil {
+		return info, fmt.Errorf("get attempt %s commit info: %w", attemptID, err)
+	}
+
+	var data struct {
+		CommitHash string `json:"commit_hash"`
+	}
+	if err := json.Unmarshal(transitionData, &data); err != nil {
+		return info, fmt.Errorf("parse transition_data: %w", err)
+	}
+	if data.CommitHash == "" {
+		return info, fmt.Errorf("attempt %s has no commit_hash in transition_data", attemptID)
+	}
+
+	info.CommitHash = data.CommitHash
+	return info, nil
+}
+
+func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
+	ctx := context.Background()
+	course, err := r.GetCourseByName(ctx, name)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("course %q: %w", name, err)
+	}
+
+	return course.ID, nil
+}
+
+func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
+	zap.L().Debug("Executing query", zap.String("query", isCourseMemberSQL))
+
+	var exists bool
+	err := r.db.GetContext(ctx, &exists, isCourseMemberSQL, userID, courseID)
+	if err != nil {
+		return false, fmt.Errorf("check course membership: %w", err)
+	}
+	return exists, nil
 }

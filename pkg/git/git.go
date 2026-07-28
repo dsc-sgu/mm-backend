@@ -21,11 +21,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Package git provides custom SSH server which allows to inject reaction on push/fetch events.
+// You can write implementation of `Hooks` interface and inject it into `Middleware` to get any custom logic you want.
 package git
 
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,6 +68,16 @@ const (
 	AdminAccess
 )
 
+type GitCmd string
+
+const (
+	GitUploadPack    GitCmd = "git-upload-pack"
+	GitUploadArchive GitCmd = "git-upload-archive"
+	GitReceivePack   GitCmd = "git-receive-pack"
+)
+
+const defaultWorkDir = ""
+
 // GitHooks is an interface that allows for custom authorization
 // implementations and post push/fetch notifications. Prior to git access,
 // AuthRepo will be called with the ssh.Session public key and the repo name.
@@ -75,12 +88,13 @@ type GitHooks = Hooks // nolint: revive
 
 // Hooks is an interface that allows for custom authorization
 // implementations and post push/fetch notifications. Prior to git access,
-// AuthRepo will be called with the ssh.Session public key and the repo name.
+// AuthRepo will be called with the original (pre-rename) repo path, the
+// renamed repo name and the ssh.Session public key, mirroring OnPush/OnFetch.
 // Implementers return the appropriate AccessLevel.
 type Hooks interface {
-	AuthRepo(string, ssh.PublicKey) AccessLevel
-	Push(string, ssh.PublicKey)
-	Fetch(string, ssh.PublicKey)
+	AuthRepo(originalRepo, repo string, pk ssh.PublicKey) AccessLevel
+	OnPush(string, string, ssh.PublicKey)
+	OnFetch(string, string, ssh.PublicKey)
 }
 
 // Middleware adds Git server functionality to the ssh.Server. Repos are stored
@@ -90,7 +104,7 @@ type Hooks interface {
 // their commands.
 func Middleware(
 	repoDir string,
-	repoRename func(string, gossh.PublicKey) (string, error),
+	RepoRename func(string, gossh.PublicKey) (string, error),
 	gh Hooks,
 ) wish.Middleware {
 	return func(sh ssh.Handler) ssh.Handler {
@@ -99,37 +113,41 @@ func Middleware(
 			if len(cmd) == 2 {
 				gc := cmd[0]
 				pk := s.PublicKey()
-				repo, err := repoRename(cmd[1], pk)
+				rawRepo := cmd[1]
+				repo, err := RepoRename(rawRepo, pk)
 				if err != nil {
+					log.Error("repo rename failed", "error", err, "repo", rawRepo)
 					Fatal(s, err)
+					return
 				}
-				access := gh.AuthRepo(repo, pk)
-				switch gc {
-				case "git-receive-pack":
+				access := gh.AuthRepo(rawRepo, repo, pk)
+				switch GitCmd(gc) {
+				case GitReceivePack:
 					switch access {
 					case ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
-						if err != nil {
+						if err := GitPack(s, gc, repoDir, repo); err != nil {
+							log.Error("git push failed", "error", err, "repo", rawRepo)
 							Fatal(s, ErrSystemMalfunction)
 						} else {
-							gh.Push(repo, pk)
+							gh.OnPush(rawRepo, repo, pk)
 						}
 					default:
 						Fatal(s, ErrNotAuthed)
 					}
 					return
-				case "git-upload-archive", "git-upload-pack":
+				case GitUploadPack, GitUploadArchive:
 					switch access {
 					case ReadOnlyAccess, ReadWriteAccess, AdminAccess:
-						err := gitPack(s, gc, repoDir, repo)
-						switch err {
-						case ErrInvalidRepo:
-							Fatal(s, ErrInvalidRepo)
-						case nil:
-							gh.Fetch(repo, pk)
-						default:
-							log.Error("unknown git error", "error", err)
-							Fatal(s, ErrSystemMalfunction)
+						if err := GitPack(s, gc, repoDir, repo); err != nil {
+							switch {
+							case errors.Is(err, ErrInvalidRepo):
+								Fatal(s, ErrInvalidRepo)
+							default:
+								log.Error("unknown git error", "error", err)
+								Fatal(s, ErrSystemMalfunction)
+							}
+						} else {
+							gh.OnFetch(rawRepo, repo, pk)
 						}
 					default:
 						Fatal(s, ErrNotAuthed)
@@ -142,40 +160,40 @@ func Middleware(
 	}
 }
 
-func gitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
+func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
-	switch gitCmd {
-	case "git-upload-archive", "git-upload-pack":
-		exists, err := fileExists(rp)
+	switch GitCmd(gitCmd) {
+	case GitUploadArchive, GitUploadPack:
+		exists, err := FileExists(rp)
 		if !exists {
 			return ErrInvalidRepo
 		}
 		if err != nil {
 			return err
 		}
-		return runGit(s, "", cmd, rp)
-	case "git-receive-pack":
+		return RunGit(s, defaultWorkDir, cmd, rp)
+	case GitReceivePack:
 		err := EnsureRepo(repoDir, repo)
 		if err != nil {
 			return err
 		}
-		err = runGit(s, "", cmd, rp)
+		err = RunGit(s, defaultWorkDir, "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
 		if err != nil {
 			return err
 		}
-		err = ensureDefaultBranch(s, rp)
+		err = EnsureDefaultBranch(s, rp)
 		if err != nil {
 			return err
 		}
 		// Needed for git dumb http server
-		return runGit(s, rp, "update-server-info")
+		return RunGit(s, rp, "update-server-info")
 	default:
 		return fmt.Errorf("unknown git command: %s", gitCmd)
 	}
 }
 
-func fileExists(path string) (bool, error) {
+func FileExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
 		return true, nil
@@ -201,7 +219,7 @@ func Fatal(s ssh.Session, v ...interface{}) {
 // If path does not exist, it'll be created.
 // If the path is not a git repo, it will be git init-ed as a bare repository.
 func EnsureRepo(dir, repo string) error {
-	exists, err := fileExists(dir)
+	exists, err := FileExists(dir)
 	if err != nil {
 		return err
 	}
@@ -212,7 +230,7 @@ func EnsureRepo(dir, repo string) error {
 		}
 	}
 	rp := filepath.Join(dir, repo)
-	exists, err = fileExists(rp)
+	exists, err = FileExists(rp)
 	if err != nil {
 		return err
 	}
@@ -222,21 +240,117 @@ func EnsureRepo(dir, repo string) error {
 			return err
 		}
 	}
+	if err := WritePostReceiveHook(rp); err != nil {
+		return fmt.Errorf("write post-receive hook: %w", err)
+	}
+	if err := WritePreReceiveHook(rp); err != nil {
+		return fmt.Errorf("write pre-receive hook: %w", err)
+	}
 	return nil
 }
 
-func runGit(s ssh.Session, dir string, args ...string) error {
-	usi := exec.CommandContext(s.Context(), "git", args...)
-	usi.Dir = dir
-	usi.Stdout = s
-	usi.Stdin = s
-	if err := usi.Run(); err != nil {
+// WritePreReceiveHook writes a pre-receive hook that checks tag pushes for
+// required file patterns defined in the .mm-patterns file.
+// Only tag refs (refs/tags/*) are checked; branch refs are always allowed.
+// The submitted task is selected via the "submit=<name>" push option
+// (e.g. -o submit=task1). Patterns are looked up by task name; the file is
+// tab-separated ("<name>\t<glob>"). Files are checked via git ls-tree on the
+// tag's commit.
+func WritePreReceiveHook(repoPath string) error {
+	hooksDir := filepath.Join(repoPath, "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return fmt.Errorf("create hooks dir: %w", err)
+	}
+	script := `#!/bin/sh
+PATTERNS_FILE="$GIT_DIR/.mm-patterns"
+TAB=$(printf '\t')
+
+SUBMIT=""
+if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
+    i=0
+    while [ $i -lt "$GIT_PUSH_OPTION_COUNT" ]; do
+        eval "opt=\$GIT_PUSH_OPTION_$i"
+        case "$opt" in
+            submit=*) SUBMIT="${opt#submit=}" ;;
+        esac
+        i=$((i+1))
+    done
+fi
+
+while read OLD NEW REF; do
+    case "$REF" in
+        refs/heads/*) continue ;;
+        refs/tags/*)
+            [ "$OLD" != "0000000000000000000000000000000000000000" ] && echo "ERROR: tag updates not allowed" >&2 && exit 1
+            ;;
+        *) continue ;;
+    esac
+    [ -z "$SUBMIT" ] && continue
+    [ -f "$PATTERNS_FILE" ] || continue
+    PATTERNS=""
+    while IFS="$TAB" read -r pname ppat; do
+        [ "$pname" = "$SUBMIT" ] && PATTERNS="$PATTERNS $ppat"
+    done < "$PATTERNS_FILE"
+    [ -z "$PATTERNS" ] && continue
+    FILES=$(git ls-tree --name-only -r "$NEW" 2>/dev/null)
+    [ -z "$FILES" ] && continue
+    for file in $FILES; do
+        for pattern in $PATTERNS; do
+            case "$file" in
+                $pattern) exit 0 ;;
+            esac
+        done
+    done
+    echo "ERROR: no files match required patterns for task '$SUBMIT' ($PATTERNS)" >&2
+    exit 1
+done
+`
+	return os.WriteFile(
+		filepath.Join(hooksDir, "pre-receive"),
+		[]byte(script), 0o755,
+	)
+}
+
+// WritePostReceiveHook writes a post-receive hook that saves new tag commit hashes
+// and push options to files for the Push hook to read.
+func WritePostReceiveHook(repoPath string) error {
+	hooksDir := filepath.Join(repoPath, "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return fmt.Errorf("create hooks dir: %w", err)
+	}
+	script := `#!/bin/sh
+while read OLD NEW REF; do
+  case "$REF" in refs/tags/*)
+    [ "$OLD" = "0000000000000000000000000000000000000000" ] && echo "$NEW"
+  ;; esac
+done > "$GIT_DIR/push-tags"
+if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
+  i=0
+  while [ $i -lt $GIT_PUSH_OPTION_COUNT ]; do
+    eval "opt=\$GIT_PUSH_OPTION_$i"
+    echo "$opt"
+    i=$((i+1))
+  done > "$GIT_DIR/push-options"
+fi
+`
+	return os.WriteFile(
+		filepath.Join(hooksDir, "post-receive"),
+		[]byte(script), 0o755,
+	)
+}
+
+func RunGit(s ssh.Session, dir string, args ...string) error {
+	cmd := exec.CommandContext(s.Context(), "git", args...)
+	cmd.Dir = dir
+	cmd.Stdout = s
+	cmd.Stdin = s
+	if err := cmd.Run(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func ensureDefaultBranch(s ssh.Session, repoPath string) error {
+func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
 	r, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return err
@@ -248,17 +362,20 @@ func ensureDefaultBranch(s ssh.Session, repoPath string) error {
 	defer brs.Close()
 	fb, err := brs.Next()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
 		return err
 	}
 	// Rename the default branch to the first branch available
 	_, err = r.Head()
-	if err == plumbing.ErrReferenceNotFound {
-		err = runGit(s, repoPath, "branch", "-M", fb.Name().Short())
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		err = RunGit(s, repoPath, "branch", "-M", fb.Name().Short())
 		if err != nil {
 			return err
 		}
 	}
-	if err != nil && err != plumbing.ErrReferenceNotFound {
+	if err != nil && !errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return err
 	}
 	return nil

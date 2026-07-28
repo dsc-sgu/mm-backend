@@ -14,24 +14,24 @@ import (
 
 const (
 	createCourseSQL = `
-		INSERT INTO courses (discipline_id, owner_id, name, created_at)
-		VALUES (:discipline_id, :owner_id, :name, :created_at)
+		INSERT INTO courses (discipline_id, owner_id, name, display_name, created_at)
+		VALUES (:discipline_id, :owner_id, :name, :display_name, :created_at)
 		RETURNING id
 	`
 
 	createCourseMemberSQL = `
-    INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
-    VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
+    	INSERT INTO course_members (user_id, course_id, role, invited_by, is_active)
+    	VALUES (:user_id, :course_id, :role, :invited_by, :is_active)
   `
 
 	createStudentSQL = `
-    INSERT INTO students (user_id, course_id, admission_date, is_active)
-    VALUES (:user_id, :course_id, :admission_date, :is_active)
+    	INSERT INTO students (user_id, course_id, admission_date, is_active)
+    	VALUES (:user_id, :course_id, :admission_date, :is_active)
 	`
 
 	createTeacherSQL = `
-    INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
-    VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
+    	INSERT INTO teachers (user_id, course_id, promoted_by, promoted_at, is_active)
+    	VALUES (:user_id, :course_id, :promoted_by, :promoted_at, :is_active)
 	`
 
 	createInviteSQL = `
@@ -41,28 +41,18 @@ const (
 	`
 
 	getCourseByIdSQL = `
-		SELECT id, discipline_id, owner_id, name, created_at
+		SELECT id, discipline_id, owner_id, name, display_name, created_at
 		FROM courses
 		WHERE id = $1
 	`
-
 	getCourseByNameSQL = `
-    SELECT id, discipline_id, owner_id, name, created_at
-    FROM courses
-    WHERE name = $1
-  `
-
-	getAllCoursesByCourseIdSQL = `
-		SELECT id, discipline_id, owner_id, name, created_at
-		FROM courses
-		WHERE id > $2
-		ORDER BY id
-		LIMIT $1
-	`
-
+    	SELECT id, discipline_id, owner_id, name, display_name, created_at
+    	FROM courses
+    	WHERE name = $1
+  	`
 	getCourseMemberSQL = `
-    SELECT user_id, course_id, role, invited_by, is_active
-    FROM course_members
+    	SELECT user_id, course_id, role, invited_by, is_active
+    	FROM course_members
 		WHERE user_id = $1 AND course_id = $2
 	`
 
@@ -74,9 +64,9 @@ const (
 
 	updateCourseByIdSQL = `
 		UPDATE courses
-		SET owner_id = $1, name = $2
+		SET owner_id = $1, display_name = $2
 		WHERE id = $3
-		RETURNING id, discipline_id, owner_id, name, created_at
+		RETURNING id, discipline_id, owner_id, name, display_name, created_at
 	`
 
 	deleteCourseByIdSQL = `
@@ -94,9 +84,10 @@ func (r *PGRepo) CreateCourse(
 	if err != nil {
 		return nil, fmt.Errorf("create course: begin transaction: %w", err)
 	}
+	rolledBack := false
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			zap.L().Error(err.Error())
+		if !rolledBack {
+			_ = tx.Rollback()
 		}
 	}()
 
@@ -104,6 +95,7 @@ func (r *PGRepo) CreateCourse(
 		DisciplineID: model.DisciplineID,
 		OwnerID:      ownerID,
 		Name:         model.Name,
+		DisplayName:  model.DisplayName,
 		CreatedAt:    time.Now(),
 	}
 
@@ -150,6 +142,7 @@ func (r *PGRepo) CreateCourse(
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("create course: commit transaction: %w", err)
 	}
+	rolledBack = true
 
 	return &newCourse, nil
 }
@@ -171,19 +164,16 @@ func (r *PGRepo) GetCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) GetCourseByName(
-	ctx context.Context,
-	name string,
-) (*courses.Course, error) {
+func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
 	err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return &course, err
 		}
-		return nil, err
+		return &course, err
 	}
 	return &course, nil
 }
@@ -192,15 +182,44 @@ func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	discipline_id uuid.UUID,
+	userID uuid.UUID,
+	isTeacher bool,
+	isStudent bool,
 ) ([]courses.Course, error) {
-	zap.L().
-		Debug("Executing query", zap.String("query", getAllCoursesByCourseIdSQL))
+	whereClause := `WHERE id > $2`
+	if discipline_id != uuid.Nil {
+		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	}
 
+	if userID != uuid.Nil {
+		if isTeacher {
+			whereClause += fmt.Sprintf(` AND id IN (
+			SELECT course_id 
+			FROM course_members 
+			WHERE user_id = '%s' AND role = 'TEACHER')`, userID)
+		} else if isStudent {
+			whereClause += fmt.Sprintf(` AND id IN (
+			SELECT course_id 
+			FROM course_members 
+			WHERE user_id = '%s' AND role = 'STUDENT')`, userID)
+		}
+	}
+
+	getCoursesByFilter := fmt.Sprintf(`
+		SELECT id, discipline_id, owner_id, name, display_name, created_at
+		FROM courses
+		%s
+		ORDER BY name
+		LIMIT $1
+	`, whereClause)
+
+	zap.L().Debug("Executing query", zap.String("query", getCoursesByFilter))
 	var course courses.Course
 	var courseList []courses.Course
 	rows, err := r.db.QueryxContext(
 		ctx,
-		getAllCoursesByCourseIdSQL,
+		getCoursesByFilter,
 		limit,
 		lastID,
 	)
@@ -239,7 +258,7 @@ func (r *PGRepo) UpdateCourseByID(
 		ctx,
 		updateCourseByIdSQL,
 		update.OwnerID,
-		update.Name,
+		update.DisplayName,
 		id,
 	)
 
@@ -345,7 +364,11 @@ func (r *PGRepo) EnrollUserByInvite(
 		IsActive: true,
 	}
 
-	if _, err := tx.NamedExecContext(ctx, createCourseMemberSQL, courseMember); err != nil {
+	if _, err := tx.NamedExecContext(
+		ctx,
+		createCourseMemberSQL,
+		courseMember,
+	); err != nil {
 		return fmt.Errorf("enroll user: insert course member in db: %w", err)
 	}
 
@@ -357,7 +380,11 @@ func (r *PGRepo) EnrollUserByInvite(
 			AdmissionDate: time.Now(),
 			IsActive:      true,
 		}
-		if _, err := tx.NamedExecContext(ctx, createStudentSQL, student); err != nil {
+		if _, err := tx.NamedExecContext(
+			ctx,
+			createStudentSQL,
+			student,
+		); err != nil {
 			return fmt.Errorf("enroll user: insert student in db: %w", err)
 		}
 	case courses.TeacherRole:
@@ -368,7 +395,11 @@ func (r *PGRepo) EnrollUserByInvite(
 			PromotedAt: time.Now(),
 			IsActive:   true,
 		}
-		if _, err := tx.NamedExecContext(ctx, createTeacherSQL, teacher); err != nil {
+		if _, err := tx.NamedExecContext(
+			ctx,
+			createTeacherSQL,
+			teacher,
+		); err != nil {
 			return fmt.Errorf("enroll user: insert teacher in db: %w", err)
 		}
 	default:

@@ -1,12 +1,16 @@
 package tests
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
@@ -15,18 +19,21 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
+	mmgit "github.com/dsc-sgu/mm-backend/internal/git"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 // Helper functions for tests
 func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *nat.Port, *nat.Port, error) {
 	basePort := nat.Port("80/tcp")
+	sshBasePort := nat.Port("2222/tcp")
 
 	req := testcontainers.ContainerRequest{
 		Name: "mm-backend",
@@ -35,7 +42,7 @@ func initBackend(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{string(basePort)},
+		ExposedPorts: []string{string(basePort), string(sshBasePort)},
 		Env: map[string]string{
 			"HOST":          "0.0.0.0",
 			"HTTP_PORT":     basePort.Port(),
@@ -45,8 +52,12 @@ func initBackend(
 			"REDIS_PORT":    "6379",
 			"ENABLE_AUTH":   "false",
 		},
-		WaitingFor: wait.ForLog("Server running"),
-		Networks:   []string{net.Name},
+		WaitingFor: wait.ForAll(
+			wait.ForLog("Server running"),
+			wait.ForListeningPort(basePort),
+			wait.ForListeningPort(sshBasePort),
+		),
+		Networks: []string{net.Name},
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -57,15 +68,20 @@ func initBackend(
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	port, err := container.MappedPort(ctx, nat.Port(basePort))
+	port, err := container.MappedPort(ctx, basePort)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return container, &port, nil
+	sshPort, err := container.MappedPort(ctx, sshBasePort)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return container, &port, &sshPort, nil
 }
 
 func initPostgres(
@@ -286,6 +302,7 @@ func CreateTestCourse(
 	userID uuid.UUID,
 	disciplineID uuid.UUID,
 	name string,
+	displayName string,
 ) uuid.UUID {
 	t.Helper()
 
@@ -298,6 +315,7 @@ func CreateTestCourse(
 	courseBody, _ := json.Marshal(courses.CreateCourse{
 		DisciplineID: disciplineID,
 		Name:         name,
+		DisplayName:  displayName,
 	})
 
 	courseReq, err := http.NewRequest(
@@ -342,7 +360,7 @@ func CreateTestBlock(
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
 		CourseID:  courseID,
-		BlockType: "test",
+		BlockType: "text",
 		Data:      []byte("true"),
 	})
 	require.NoError(t, err)
@@ -371,6 +389,188 @@ func CreateTestBlock(
 	require.NoError(t, json.NewDecoder(blockResp.Body).Decode(&createdBlock))
 
 	return createdBlock.ID
+}
+
+func CreateTestTaskGroup(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	courseID uuid.UUID,
+	name string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks?fake_user_id=%s",
+		port.Port(),
+		userID,
+	)
+
+	body, err := json.Marshal(tasks.CreateTaskGroup{
+		CourseID: courseID,
+		Name:     name,
+		Data:     []byte("true"),
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created tasks.CreateTaskGroupResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+func CreateTestTask(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	groupID uuid.UUID,
+	name string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		port.Port(),
+		groupID,
+		userID,
+	)
+
+	body, err := json.Marshal(tasks.CreateTask{
+		Name:        name,
+		Data:        []byte("true"),
+		MaxGrade:    100,
+		MaxAttempts: 5,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created tasks.CreateTaskResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+func buildTestZip(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	for name, content := range files {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, w.Close())
+
+	return buf.Bytes()
+}
+
+type sshIdentity struct {
+	privateKeyPath string
+	authorizedKey  string
+}
+
+func generateSSHKeyPair(t *testing.T) sshIdentity {
+	t.Helper()
+
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "id_ed25519")
+
+	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", privPath, "-N", "", "-q")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	pubBytes, err := os.ReadFile(privPath + ".pub")
+	require.NoError(t, err)
+
+	return sshIdentity{
+		privateKeyPath: privPath,
+		authorizedKey:  strings.TrimSpace(string(pubBytes)),
+	}
+}
+
+func RegisterTestSSHKey(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	name string,
+	authorizedKey string,
+) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/git/add_key?fake_user_id=%s",
+		port.Port(),
+		userID,
+	)
+
+	body, err := json.Marshal(mmgit.AddSSHKey{Name: name, Key: authorizedKey})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+}
+
+func runGitCommand(t *testing.T, dir string, identity sshIdentity, args ...string) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(
+		os.Environ(),
+		fmt.Sprintf(
+			"GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+			identity.privateKeyPath,
+		),
+		"GIT_AUTHOR_NAME=Test Student",
+		"GIT_AUTHOR_EMAIL=student@test.com",
+		"GIT_COMMITTER_NAME=Test Student",
+		"GIT_COMMITTER_EMAIL=student@test.com",
+	)
+
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func GetRoleInCourse(

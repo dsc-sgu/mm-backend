@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	api "github.com/dsc-sgu/mm-backend/internal"
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
@@ -34,6 +35,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
@@ -168,7 +170,11 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	gitService := git.NewService(pgRepo)
+	taskService := tasks.NewService(pgRepo, gitService)
+	attemptService := attempt.NewService(gitService, pgRepo)
 
+	attemptHandler := attempt.NewHandler(attemptService, taskService)
+	taskHandler := tasks.NewHandler(taskService, blockService)
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
 	courseHandler := courses.NewHandler(courseService, blockService)
@@ -177,6 +183,8 @@ func main() {
 
 	api.SetupRoutes(
 		v1,
+		attemptHandler,
+		taskHandler,
 		blockHandler,
 		courseHandler,
 		disciplineHandler,
@@ -203,17 +211,16 @@ func main() {
 	)
 	defer stop()
 
-	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
-		ssh.PublicKeyAuth(git.CheckPubkeyAuth),
-		ssh.PasswordAuth(git.CheckPasswordAuth),
+		ssh.PublicKeyAuth(gitService.CheckPublicKeyAuth),
+		ssh.PasswordAuth(gitService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			pkggit.Middleware("repos", git.RepoRename, a),
-			git.GitListMiddleware,
+			pkggit.Middleware("repos", gitService.RepoRename, gitService),
+			gitService.GitListMiddleware,
 			logging.Middleware(),
 		),
 	)

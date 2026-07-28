@@ -40,6 +40,7 @@ func TestCreateBlock(t *testing.T) {
 		userID,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 
 	blockID := CreateTestBlock(
@@ -78,6 +79,7 @@ func TestGetBlockByID(t *testing.T) {
 		&backendPort,
 		userID,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 
@@ -148,6 +150,7 @@ func TestUnlinkBlock(t *testing.T) {
 		&backendPort,
 		userID,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 

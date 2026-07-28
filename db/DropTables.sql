@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS attempt_transitions;
 DROP TABLE IF EXISTS attempts;
 DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS task_groups;
 DROP TABLE IF EXISTS course_users_groups;
 DROP TABLE IF EXISTS groups;
 DROP TABLE IF EXISTS milestone_transitions;
@@ -8,6 +9,8 @@ DROP TABLE IF EXISTS discipline_milestones;
 DROP TABLE IF EXISTS admins;
 DROP TABLE IF EXISTS teachers;
 DROP TABLE IF EXISTS students;
+DROP TABLE IF EXISTS course_members;
+DROP TABLE IF EXISTS invites;
 DROP TABLE IF EXISTS courses;
 DROP TABLE IF EXISTS disciplines;
 DROP TABLE IF EXISTS blocks;
