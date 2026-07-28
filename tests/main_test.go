@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	backendPort  nat.Port
-	testPostgres *sql.DB
-	testRedis    *redis.Client
+	backendPort    nat.Port
+	backendSSHPort nat.Port
+	testPostgres   *sql.DB
+	testRedis      *redis.Client
 )
 
 func TestMain(m *testing.M) {
@@ -86,7 +87,7 @@ func TestMain(m *testing.M) {
 		}
 	}()
 
-	backendContainer, port, err := initBackend(ctx, net)
+	backendContainer, port, sshPort, err := initBackend(ctx, net)
 	if err != nil {
 		log.Fatal("start backend:", err)
 	}
@@ -97,6 +98,7 @@ func TestMain(m *testing.M) {
 	}()
 
 	backendPort = *port
+	backendSSHPort = *sshPort
 
 	exitCode := m.Run()
 	os.Exit(exitCode)

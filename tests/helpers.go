@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/docker/go-connections/nat"
@@ -20,6 +23,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
+	mmgit "github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
@@ -27,8 +31,9 @@ import (
 func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *nat.Port, *nat.Port, error) {
 	basePort := nat.Port("80/tcp")
+	sshBasePort := nat.Port("2222/tcp")
 
 	req := testcontainers.ContainerRequest{
 		Name: "mm-backend",
@@ -37,7 +42,7 @@ func initBackend(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{string(basePort)},
+		ExposedPorts: []string{string(basePort), string(sshBasePort)},
 		Env: map[string]string{
 			"HOST":          "0.0.0.0",
 			"HTTP_PORT":     basePort.Port(),
@@ -47,8 +52,12 @@ func initBackend(
 			"REDIS_PORT":    "6379",
 			"ENABLE_AUTH":   "false",
 		},
-		WaitingFor: wait.ForLog("Server running"),
-		Networks:   []string{net.Name},
+		WaitingFor: wait.ForAll(
+			wait.ForLog("Server running"),
+			wait.ForListeningPort(basePort),
+			wait.ForListeningPort(sshBasePort),
+		),
+		Networks: []string{net.Name},
 	}
 
 	container, err := testcontainers.GenericContainer(
@@ -59,15 +68,20 @@ func initBackend(
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	port, err := container.MappedPort(ctx, nat.Port(basePort))
+	port, err := container.MappedPort(ctx, basePort)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return container, &port, nil
+	sshPort, err := container.MappedPort(ctx, sshBasePort)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return container, &port, &sshPort, nil
 }
 
 func initPostgres(
@@ -479,6 +493,84 @@ func buildTestZip(t *testing.T, files map[string]string) []byte {
 	require.NoError(t, w.Close())
 
 	return buf.Bytes()
+}
+
+type sshIdentity struct {
+	privateKeyPath string
+	authorizedKey  string
+}
+
+func generateSSHKeyPair(t *testing.T) sshIdentity {
+	t.Helper()
+
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "id_ed25519")
+
+	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", privPath, "-N", "", "-q")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	pubBytes, err := os.ReadFile(privPath + ".pub")
+	require.NoError(t, err)
+
+	return sshIdentity{
+		privateKeyPath: privPath,
+		authorizedKey:  strings.TrimSpace(string(pubBytes)),
+	}
+}
+
+func RegisterTestSSHKey(
+	t *testing.T,
+	port *nat.Port,
+	userID uuid.UUID,
+	name string,
+	authorizedKey string,
+) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/git/add_key?fake_user_id=%s",
+		port.Port(),
+		userID,
+	)
+
+	body, err := json.Marshal(mmgit.AddSSHKey{Name: name, Key: authorizedKey})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+}
+
+func runGitCommand(t *testing.T, dir string, identity sshIdentity, args ...string) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(
+		os.Environ(),
+		fmt.Sprintf(
+			"GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+			identity.privateKeyPath,
+		),
+		"GIT_AUTHOR_NAME=Test Student",
+		"GIT_AUTHOR_EMAIL=student@test.com",
+		"GIT_COMMITTER_NAME=Test Student",
+		"GIT_COMMITTER_EMAIL=student@test.com",
+	)
+
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func GetRoleInCourse(
