@@ -28,6 +28,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -361,6 +362,9 @@ func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
 	defer brs.Close()
 	fb, err := brs.Next()
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
 		return err
 	}
 	// Rename the default branch to the first branch available
