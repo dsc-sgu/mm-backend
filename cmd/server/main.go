@@ -185,12 +185,13 @@ func main() {
 	taskService := tasks.NewService(pgRepo, gitService)
 	attemptService := attempt.NewService(gitService, pgRepo)
 
-	attemptHandler := attempt.NewHandler(attemptService, taskService)
-	taskHandler := tasks.NewHandler(taskService, blockService)
 	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
 	go rebalanceWorker.Run(ctx)
 	blockService := blocks.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold)
 	courseService := courses.NewService(pgRepo, snapshotService, lockService, blockService, membershipService, userService)
+
+	attemptHandler := attempt.NewHandler(attemptService, taskService)
+	taskHandler := tasks.NewHandler(taskService, blockService, snapshotService)
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)

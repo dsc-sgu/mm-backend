@@ -74,16 +74,16 @@ CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id
 
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
+    origin_id uuid NOT NULL,
     snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     block_type block_type NOT NULL,
     data jsonb NOT NULL,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
     deleted_at timestamp
-
-    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
-    UNIQUE (id, block_type)
 );
+
+CREATE INDEX idx_blocks_origin_id ON blocks(origin_id);
 
 -- NOTE(Ezhkin-Kot): pessimistic locking for course editing
 CREATE TABLE course_locks (
@@ -195,8 +195,8 @@ CREATE TABLE task_groups (
     UNIQUE (course_id, name)
 );
 
--- NOTE(nrydanov): task is a subtype of block — the composite FK plus
--- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
+-- NOTE(nrydanov): task is a subtype of block — CHECK (block_type = 'task')
+-- keeps a task attachable only to a task-type block.
 CREATE TABLE tasks (
     block_id uuid PRIMARY KEY,
     block_type block_type NOT NULL DEFAULT 'task',
@@ -209,7 +209,6 @@ CREATE TABLE tasks (
     available_at timestamp,
     deadline_at timestamp,
 
-    FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
     CHECK (block_type = 'task'),
     UNIQUE (task_group_id, name)
 );

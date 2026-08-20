@@ -33,14 +33,6 @@ const (
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
-	getAllCoursesByCourseIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
-		FROM courses
-		WHERE id > $2 AND deleted_at IS NULL
-		ORDER BY id
-		LIMIT $1
-	`
-
 	updateCourseByIDSQL = `
 		UPDATE courses
 		SET owner_id = COALESCE($1, owner_id), display_name = COALESCE($2, display_name)
@@ -197,7 +189,6 @@ func (r *PGRepo) createCourseTx(
 	); err != nil {
 		return nil, fmt.Errorf("insert teacher: %w", err)
 	}
-	rolledBack = true
 
 	return &newCourse, nil
 }
@@ -219,7 +210,10 @@ func (r *PGRepo) GetCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
+func (r *PGRepo) GetCourseByName(
+	ctx context.Context,
+	name string,
+) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
@@ -237,53 +231,57 @@ func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
-	discipline_id uuid.UUID,
+	disciplineID uuid.UUID,
 	userID uuid.UUID,
 	isTeacher bool,
 	isStudent bool,
 ) ([]courses.Course, error) {
-	whereClause := `WHERE id > $2`
-	if discipline_id != uuid.Nil {
-		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	query := `
+		SELECT id, discipline_id, owner_id, name, display_name, created_at
+		FROM courses
+		WHERE id > $1 AND deleted_at IS NULL
+	`
+	args := []any{lastID}
+
+	if disciplineID != uuid.Nil {
+		args = append(args, disciplineID)
+		query += fmt.Sprintf(" AND discipline_id = $%d", len(args))
 	}
 
 	if userID != uuid.Nil {
-		if isTeacher {
-			whereClause += fmt.Sprintf(` AND id IN (
-			SELECT course_id 
-			FROM course_members 
-			WHERE user_id = '%s' AND role = 'TEACHER')`, userID)
-		} else if isStudent {
-			whereClause += fmt.Sprintf(` AND id IN (
-			SELECT course_id 
-			FROM course_members 
-			WHERE user_id = '%s' AND role = 'STUDENT')`, userID)
+		var role string
+		switch {
+		case isTeacher:
+			role = string(membership.TeacherRole)
+		case isStudent:
+			role = string(membership.StudentRole)
+		}
+		if role != "" {
+			args = append(args, userID, role)
+			query += fmt.Sprintf(
+				` AND id IN (
+					SELECT course_id FROM course_members
+					WHERE user_id = $%d AND role = $%d
+				)`,
+				len(args)-1, len(args),
+			)
 		}
 	}
 
-	getCoursesByFilter := fmt.Sprintf(`
-		SELECT id, discipline_id, owner_id, name, display_name, created_at
-		FROM courses
-		%s
-		ORDER BY name
-		LIMIT $1
-	`, whereClause)
+	args = append(args, limit)
+	query += fmt.Sprintf(" ORDER BY name LIMIT $%d", len(args))
 
-	zap.L().Debug("Executing query", zap.String("query", getCoursesByFilter))
-	var course courses.Course
-	var courseList []courses.Course
-	rows, err := r.db.QueryxContext(
-		ctx,
-		getCoursesByFilter,
-		limit,
-		lastID,
-	)
+	zap.L().Debug("Executing query", zap.String("query", query))
+
+	courseList := make([]courses.Course, 0)
+	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
+		var course courses.Course
 		if err := rows.StructScan(&course); err != nil {
 			return nil, err
 		}

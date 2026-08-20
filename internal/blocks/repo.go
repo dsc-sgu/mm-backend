@@ -24,6 +24,7 @@ type QuizData struct {
 // Block is the database representation of a block.
 type Block struct {
 	ID         uuid.UUID       `json:"id"         db:"id"          binding:"required"`
+	OriginID   uuid.UUID       `json:"originID"   db:"origin_id"   binding:"required"`
 	SnapshotID uuid.UUID       `json:"snapshotID" db:"snapshot_id" binding:"required"`
 	BlockType  string          `json:"blockType"  db:"block_type"  binding:"required"`
 	Data       json.RawMessage `json:"data"       db:"data"        binding:"required"`
@@ -76,6 +77,10 @@ type Repo interface {
 		userID, sessionID uuid.UUID,
 	) (*Block, error)
 	GetBlockByID(ctx context.Context, ref BlockRef) (*Block, error)
+	GetBlockByOriginID(
+		ctx context.Context,
+		originID, snapshotID uuid.UUID,
+	) (*Block, error)
 	GetAllBlocksBySnapshotID(
 		ctx context.Context,
 		snapshotID uuid.UUID,

@@ -85,10 +85,43 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
+	studentBool := false
+	if input.IsStudent != "" {
+		studentBool, err = strconv.ParseBool(input.IsStudent)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid is_student")
+		}
+	}
+
+	userID := uuid.Nil
+	if teacherBool || studentBool {
+		userID = session.UserIDFromContext(ctx)
+	}
+
+	var lastID uuid.UUID
+	if input.LastID != "" {
+		lastID, err = uuid.Parse(input.LastID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid last_id")
+		}
+	}
+
+	var disciplineID uuid.UUID
+	if input.DisciplineID != "" {
+		disciplineID, err = uuid.Parse(input.DisciplineID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("invalid discipline_id")
+		}
+	}
+
 	courseList, err := h.courseService.GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
+		disciplineID,
+		userID,
+		teacherBool,
+		studentBool,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)

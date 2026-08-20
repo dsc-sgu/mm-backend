@@ -249,6 +249,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		&teacher,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 
 	// Enroll Student in the course
@@ -659,6 +660,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			&backendPort,
 			&teacher,
 			disciplineID,
+			"Conflict Course",
 			"Conflict Course",
 		)
 

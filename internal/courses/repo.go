@@ -31,7 +31,7 @@ type CreateCourse struct {
 type UpdateCourse struct {
 	OwnerID     *uuid.UUID `json:"ownerID,omitempty"     db:"owner_id"`
 	Name        *string    `json:"name,omitempty"        db:"name"`
-	DisplayName string     `json:"displayName,omitempty" db:"display_name"`
+	DisplayName *string    `json:"displayName,omitempty" db:"display_name"`
 }
 
 type Repo interface {

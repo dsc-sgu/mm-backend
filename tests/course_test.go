@@ -126,7 +126,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	)
 	require.NotZero(t, testUser.ID)
 
-	userID2 := CreateTestUser(
+	testUser2 := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name 2",
@@ -135,7 +135,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 		"test2@email.com",
 		"password 2",
 	)
-	require.NotZero(t, userID2)
+	require.NotZero(t, testUser2.ID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
@@ -148,7 +148,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	disciplineID2 := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline 2",
 	)
 	require.NotZero(t, disciplineID2)
@@ -157,7 +157,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 		id2 := CreateTestCourse(
 			t,
 			&backendPort,
-			userID2,
+			&testUser2,
 			disciplineID2,
 			fmt.Sprintf("Course2 %d", i),
 			"Test Course",
@@ -186,30 +186,27 @@ func TestGetPaginatedCourse(t *testing.T) {
 	)
 
 	url2 := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_teacher=true&fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_teacher=true",
 		backendPort.Port(),
 		limit,
 		lastID,
 		disciplineID2,
-		userID2,
 	)
 
 	url3 := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=false&is_teacher=false&fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=false&is_teacher=false",
 		backendPort.Port(),
 		limit,
 		lastID,
 		disciplineID,
-		userID,
 	)
 
 	url4 := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=true&fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=true",
 		backendPort.Port(),
 		limit,
 		lastID,
 		disciplineID,
-		userID,
 	)
 
 	// 1 url test
@@ -232,15 +229,15 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Len(t, receivedCourses, limit)
 
-	require.Equal(t, "Course 0", recievedCourses[0].Name)
-	require.Equal(t, "Course 1", recievedCourses[1].Name)
-	require.Equal(t, "Course 2", recievedCourses[2].Name)
+	require.Equal(t, "Course 0", receivedCourses[0].Name)
+	require.Equal(t, "Course 1", receivedCourses[1].Name)
+	require.Equal(t, "Course 2", receivedCourses[2].Name)
 
 	// 2 url test
 	req, err = http.NewRequest(http.MethodGet, url2, nil)
 	require.NoError(t, err)
 
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = testUser2.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -264,7 +261,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	req, err = http.NewRequest(http.MethodGet, url3, nil)
 	require.NoError(t, err)
 
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -288,7 +285,7 @@ func TestGetPaginatedCourse(t *testing.T) {
 	req, err = http.NewRequest(http.MethodGet, url4, nil)
 	require.NoError(t, err)
 
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		err := resp.Body.Close()
@@ -623,6 +620,7 @@ func TestDeleteCourse(t *testing.T) {
 		&backendPort,
 		&teacher,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 

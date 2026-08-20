@@ -16,14 +16,18 @@ import (
 )
 
 const (
+	// new_id is generated once and used for both id and origin_id, so a
+	// freshly created block's origin_id starts out equal to its own id
 	createBlockSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position)
-		VALUES (:snapshot_id, :block_type, :data, :position)
-		RETURNING id
+		WITH new_id AS (SELECT uuidv7() AS id)
+		INSERT INTO blocks (id, origin_id, snapshot_id, block_type, data, position)
+		SELECT new_id.id, new_id.id, :snapshot_id, :block_type, :data, :position
+		FROM new_id
+		RETURNING id, origin_id
 	`
 
 	getBlockByIDSQL = `
-		SELECT id, snapshot_id, block_type, data, position, deleted_at
+		SELECT id, origin_id, snapshot_id, block_type, data, position, deleted_at
 		FROM blocks
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -34,8 +38,14 @@ const (
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
+	getBlockByOriginIDSQL = `
+		SELECT id, origin_id, snapshot_id, block_type, data, position, deleted_at
+		FROM blocks
+		WHERE origin_id = $1 AND snapshot_id = $2 AND deleted_at IS NULL
+	`
+
 	getAllBlocksBySnapshotIDSQL = `
-		SELECT id, snapshot_id, block_type, data, position
+		SELECT id, origin_id, snapshot_id, block_type, data, position
 		FROM blocks
 		WHERE snapshot_id = $1 AND deleted_at IS NULL
 		ORDER BY position ASC
@@ -45,7 +55,7 @@ const (
 		UPDATE blocks
 		SET block_type = COALESCE($1, block_type), data = COALESCE($2, data)
 		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, snapshot_id, block_type, data, position
+		RETURNING id, origin_id, snapshot_id, block_type, data, position
 	`
 
 	updateBlockPositionSQL = `
@@ -98,8 +108,8 @@ const (
 	`
 
 	copyBlocksToSnapshotSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position)
-		SELECT $1, block_type, data, position
+		INSERT INTO blocks (origin_id, snapshot_id, block_type, data, position)
+		SELECT origin_id, $1, block_type, data, position
 		FROM blocks
 		WHERE snapshot_id = $2 AND deleted_at IS NULL
 	`
@@ -351,7 +361,7 @@ func (r *PGRepo) CreateBlock(
 			}
 		}()
 
-		if err := stmt.GetContext(ctx, &newBlock.ID, newBlock); err != nil {
+		if err := stmt.GetContext(ctx, &newBlock, newBlock); err != nil {
 			return fmt.Errorf("tx create block: %w", err)
 		}
 
@@ -390,6 +400,30 @@ func (r *PGRepo) GetBlockByID(
 	}
 	if block.SnapshotID != ref.SnapshotID {
 		return nil, blocks.ErrBlockNotFound
+	}
+	return &block, nil
+}
+
+func (r *PGRepo) GetBlockByOriginID(
+	ctx context.Context,
+	originID, snapshotID uuid.UUID,
+) (*blocks.Block, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getBlockByOriginIDSQL))
+
+	var block blocks.Block
+	err := r.db.GetContext(
+		ctx,
+		&block,
+		getBlockByOriginIDSQL,
+		originID,
+		snapshotID,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
 	}
 	return &block, nil
 }

@@ -102,6 +102,15 @@ func (s *Service) GetBlockByID(
 	return s.repo.GetBlockByID(ctx, ref)
 }
 
+// GetBlockByOriginID resolves a block's current row within snapshotID from
+// its stable origin_id
+func (s *Service) GetBlockByOriginID(
+	ctx context.Context,
+	originID, snapshotID uuid.UUID,
+) (*Block, error) {
+	return s.repo.GetBlockByOriginID(ctx, originID, snapshotID)
+}
+
 func (s *Service) GetAllBlocksBySnapshotID(
 	ctx context.Context,
 	snapshotID uuid.UUID,

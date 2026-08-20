@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
-	"net/http/cookiejar"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -41,7 +41,7 @@ type TestUser struct {
 func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *nat.Port, *nat.Port, error) {
 	return initBackendWithEnv(ctx, net, nil)
 }
 
@@ -49,7 +49,7 @@ func initBackendWithEnv(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
 	additionalEnv map[string]string,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *nat.Port, *nat.Port, error) {
 	basePort := nat.Port("80/tcp")
 	sshBasePort := nat.Port("2222/tcp")
 
@@ -71,7 +71,7 @@ func initBackendWithEnv(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{string(basePort)},
+		ExposedPorts: []string{string(basePort), string(sshBasePort)},
 		Env:          env,
 		WaitingFor:   wait.ForLog("Server running"),
 		Networks:     []string{net.Name},
@@ -198,16 +198,28 @@ func clearPostgres(t *testing.T) {
 
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE
+			attempt_transitions,
+			attempts,
+			tasks,
+			task_groups,
+			ssh_keys,
+			course_users_groups,
+			groups,
+			milestone_transitions,
+			discipline_milestones,
+			admins,
 			course_locks,
 			course_snapshots,
 			blocks,
 			courses,
-			course_members,
-			users,
-			disciplines,
 			students,
 			teachers,
-			invites
+			course_members,
+			invites,
+			units,
+			unit_types,
+			users,
+			disciplines
 		RESTART IDENTITY CASCADE;
 	`)
 	require.NoError(t, err)
@@ -472,7 +484,7 @@ func CreateTestBlockAfter(
 
 	blockBody, err := json.Marshal(blocks.CreateBlock{
 		AfterBlockID: afterBlockID,
-		BlockType:    "test",
+		BlockType:    "text",
 		Data:         []byte("true"),
 	})
 	require.NoError(t, err)
@@ -506,16 +518,15 @@ func CreateTestBlockAfter(
 func CreateTestTaskGroup(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
+	testUser *TestUser,
 	courseID uuid.UUID,
 	name string,
 ) uuid.UUID {
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks",
 		port.Port(),
-		userID,
 	)
 
 	body, err := json.Marshal(tasks.CreateTaskGroup{
@@ -529,7 +540,7 @@ func CreateTestTaskGroup(
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -548,17 +559,16 @@ func CreateTestTaskGroup(
 func CreateTestTask(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
+	testUser *TestUser,
 	groupID uuid.UUID,
 	name string,
 ) uuid.UUID {
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
 		port.Port(),
 		groupID,
-		userID,
 	)
 
 	body, err := json.Marshal(tasks.CreateTask{
@@ -573,7 +583,7 @@ func CreateTestTask(
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -618,7 +628,16 @@ func generateSSHKeyPair(t *testing.T) sshIdentity {
 	dir := t.TempDir()
 	privPath := filepath.Join(dir, "id_ed25519")
 
-	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", privPath, "-N", "", "-q")
+	cmd := exec.Command(
+		"ssh-keygen",
+		"-t",
+		"ed25519",
+		"-f",
+		privPath,
+		"-N",
+		"",
+		"-q",
+	)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
@@ -634,16 +653,15 @@ func generateSSHKeyPair(t *testing.T) sshIdentity {
 func RegisterTestSSHKey(
 	t *testing.T,
 	port *nat.Port,
-	userID uuid.UUID,
+	testUser *TestUser,
 	name string,
 	authorizedKey string,
 ) {
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/git/add_key?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/git/add_key",
 		port.Port(),
-		userID,
 	)
 
 	body, err := json.Marshal(mmgit.AddSSHKey{Name: name, Key: authorizedKey})
@@ -653,7 +671,7 @@ func RegisterTestSSHKey(
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -663,7 +681,12 @@ func RegisterTestSSHKey(
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
-func runGitCommand(t *testing.T, dir string, identity sshIdentity, args ...string) (string, error) {
+func runGitCommand(
+	t *testing.T,
+	dir string,
+	identity sshIdentity,
+	args ...string,
+) (string, error) {
 	t.Helper()
 
 	cmd := exec.Command("git", args...)

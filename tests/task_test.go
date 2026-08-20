@@ -15,10 +15,10 @@ import (
 
 func setupCourseForTasks(
 	t *testing.T,
-) (userID, disciplineID, courseID uuid.UUID) {
+) (testUser TestUser, disciplineID, courseID uuid.UUID) {
 	t.Helper()
 
-	userID = CreateTestUser(
+	testUser = CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test First Name",
@@ -27,12 +27,12 @@ func setupCourseForTasks(
 		"test@email.com",
 		"password",
 	)
-	require.NotZero(t, userID)
+	require.NotZero(t, testUser.ID)
 
 	disciplineID = CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Test Discipline",
 	)
 	require.NotZero(t, disciplineID)
@@ -40,47 +40,63 @@ func setupCourseForTasks(
 	courseID = CreateTestCourse(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		disciplineID,
 		"Test Course",
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
 
-	return userID, disciplineID, courseID
+	// Creating a task creates its backing block, which requires the course
+	// to already be locked for editing with an active draft.
+	draft := LockCourse(t, &backendPort, &testUser, courseID)
+	require.NotZero(t, draft.DraftSnapshotID)
+
+	return testUser, disciplineID, courseID
 }
 
 func TestCreateTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	require.NotZero(t, groupID)
 }
 
 func TestGetTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	require.NotZero(t, groupID)
 
-	taskID := CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
+	taskID := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
 	require.NotZero(t, taskID)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -103,19 +119,18 @@ func TestGetTaskGroup(t *testing.T) {
 func TestGetTaskGroupNotFound(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, _ := setupCourseForTasks(t)
+	testUser, _, _ := setupCourseForTasks(t)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
 		backendPort.Port(),
 		uuid.New(),
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -129,15 +144,20 @@ func TestGetTaskGroupNotFound(t *testing.T) {
 func TestUpdateTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	newName := "Renamed Group"
@@ -147,7 +167,7 @@ func TestUpdateTaskGroup(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -167,21 +187,26 @@ func TestUpdateTaskGroup(t *testing.T) {
 func TestDeleteTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -195,7 +220,7 @@ func TestDeleteTaskGroup(t *testing.T) {
 	getReq, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	getResp, err := http.DefaultClient.Do(getReq)
+	getResp, err := testUser.Client.Do(getReq)
 	require.NoError(t, err)
 	defer func() {
 		if err := getResp.Body.Close(); err != nil {
@@ -209,11 +234,17 @@ func TestDeleteTaskGroup(t *testing.T) {
 func TestCreateTask(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
-	taskID := CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
+	taskID := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
 	require.NotZero(t, taskID)
 }
 
@@ -225,15 +256,20 @@ func TestCreateTask(t *testing.T) {
 func TestCreateTaskWithoutPatterns(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	body, err := json.Marshal(tasks.CreateTask{
@@ -249,7 +285,7 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -267,24 +303,29 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 func TestGetTasks(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
-	taskID1 := CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
-	taskID2 := CreateTestTask(t, &backendPort, userID, groupID, "Task 2")
+	taskID1 := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
+	taskID2 := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 2")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -305,17 +346,22 @@ func TestGetTasks(t *testing.T) {
 func TestUpdateTask(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
-	taskID := CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s",
 		backendPort.Port(),
 		groupID,
 		taskID,
-		userID,
 	)
 
 	newGrade := float32(50)
@@ -328,7 +374,7 @@ func TestUpdateTask(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -349,24 +395,29 @@ func TestUpdateTask(t *testing.T) {
 func TestDeleteTask(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
-	taskID1 := CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
-	_ = CreateTestTask(t, &backendPort, userID, groupID, "Task 2")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID1 := CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
+	_ = CreateTestTask(t, &backendPort, &testUser, groupID, "Task 2")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s",
 		backendPort.Port(),
 		groupID,
 		taskID1,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -377,16 +428,15 @@ func TestDeleteTask(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	getTasksURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	getReq, err := http.NewRequest(http.MethodGet, getTasksURL, nil)
 	require.NoError(t, err)
 
-	getResp, err := http.DefaultClient.Do(getReq)
+	getResp, err := testUser.Client.Do(getReq)
 	require.NoError(t, err)
 	defer func() {
 		if err := getResp.Body.Close(); err != nil {
@@ -409,23 +459,28 @@ func TestDeleteTask(t *testing.T) {
 func TestDeleteLastTaskFails(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
-	taskID := CreateTestTask(t, &backendPort, userID, groupID, "Only Task")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(t, &backendPort, &testUser, groupID, "Only Task")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks/%s",
 		backendPort.Port(),
 		groupID,
 		taskID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -439,10 +494,16 @@ func TestDeleteLastTaskFails(t *testing.T) {
 func TestUploadTemplate(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
-	_ = CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	_ = CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
 
 	zipData := buildTestZip(t, map[string]string{
 		"main.go":   "package main\n\nfunc main() {}\n",
@@ -450,17 +511,16 @@ func TestUploadTemplate(t *testing.T) {
 	})
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(zipData))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/zip")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -474,23 +534,28 @@ func TestUploadTemplate(t *testing.T) {
 func TestUploadTemplateEmptyBody(t *testing.T) {
 	clearDatabases(t)
 
-	userID, _, courseID := setupCourseForTasks(t)
+	testUser, _, courseID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "Group 1")
-	_ = CreateTestTask(t, &backendPort, userID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	_ = CreateTestTask(t, &backendPort, &testUser, groupID, "Task 1")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
 		backendPort.Port(),
 		groupID,
-		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(nil))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/zip")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
