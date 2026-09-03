@@ -2,21 +2,20 @@ package attempt
 
 import (
 	"context"
+	"errors"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
-	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type Handler struct {
-	svc     *Service
-	taskSvc *tasks.Service
+	svc *Service
 }
 
-func NewHandler(svc *Service, taskSvc *tasks.Service) *Handler {
-	return &Handler{svc, taskSvc}
+func NewHandler(svc *Service) *Handler {
+	return &Handler{svc: svc}
 }
 
 type GetDiffInput struct {
@@ -39,7 +38,7 @@ func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOut
 		return nil, huma.Error400BadRequest("parsing id2: " + err.Error())
 	}
 
-	diff, err := h.svc.GetDiff(id1, id2)
+	diff, err := h.svc.GetDiff(ctx, id1, id2)
 	if err != nil {
 		return nil, huma.Error400BadRequest("cannot make diff: " + err.Error())
 	}
@@ -48,10 +47,8 @@ func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOut
 }
 
 type PushAttemptInput struct {
-	CourseID    string `query:"courseID"`
-	TaskGroupID string `query:"taskGroupID"`
-	TaskID      string `query:"taskID"`
-	RawBody     []byte
+	TaskID  string `query:"taskID"`
+	RawBody []byte
 }
 
 type PushAttemptOutput struct {
@@ -61,16 +58,6 @@ type PushAttemptOutput struct {
 }
 
 func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*PushAttemptOutput, error) {
-	courseID, err := uuid.Parse(input.CourseID)
-	if err != nil {
-		return nil, huma.Error400BadRequest("parsing courseID: " + err.Error())
-	}
-
-	taskGroupID, err := uuid.Parse(input.TaskGroupID)
-	if err != nil {
-		return nil, huma.Error400BadRequest("parsing taskGroupID: " + err.Error())
-	}
-
 	taskID, err := uuid.Parse(input.TaskID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing taskID: " + err.Error())
@@ -81,16 +68,11 @@ func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*Pu
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	task, err := h.taskSvc.GetTaskByID(ctx, taskID)
+	commitHash, err := h.svc.PushAttempt(ctx, taskID, participantID, input.RawBody)
 	if err != nil {
-		return nil, huma.Error400BadRequest("task not found: " + err.Error())
-	}
-	if task.TaskGroupID != taskGroupID {
-		return nil, huma.Error400BadRequest("task does not belong to the given task group")
-	}
-
-	commitHash, err := h.svc.PushAttempt(courseID, taskGroupID, task.ID, participantID, input.RawBody)
-	if err != nil {
+		if errors.Is(err, ErrNotCourseMember) {
+			return nil, huma.Error403Forbidden("")
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 

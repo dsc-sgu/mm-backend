@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/ssh"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	gossh "golang.org/x/crypto/ssh"
 
-	"github.com/dsc-sgu/mm-backend/internal/git"
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
+	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
@@ -57,9 +57,17 @@ const (
 			WHERE user_id = $1 AND course_id = $2 AND is_active
 		)
 	`
+
+	repoForTaskSQL = `
+		SELECT cs.course_id, t.task_group_id
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id
+		JOIN course_snapshots cs ON cs.id = b.snapshot_id
+		WHERE t.block_id = $1
+	`
 )
 
-func (r *PGRepo) AddSSHKey(model *git.SSHKey) error {
+func (r *PGRepo) AddSSHKey(model *sshkeys.SSHKey) error {
 	zap.L().Debug("Executing query", zap.String("query", addSSHKeySQL))
 
 	if _, err := r.db.NamedExec(addSSHKeySQL, model); err != nil {
@@ -100,17 +108,7 @@ func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
 	return ownerID, nil
 }
 
-func (r *PGRepo) CheckPublicKeyAuth(ctx ssh.Context, pk ssh.PublicKey) bool {
-	fingerprint := gossh.FingerprintSHA256(pk)
-	_, err := r.GetParticipant(fingerprint)
-	return err == nil
-}
-
-func (r *PGRepo) CheckPasswordAuth(ctx ssh.Context, password string) bool {
-	return false
-}
-
-func (r *PGRepo) SaveAttempt(repoID git.RepoID, taskID uuid.UUID, commitHash string) error {
+func (r *PGRepo) SaveAttempt(repoID pkggit.RepoID, taskID uuid.UUID, commitHash string) error {
 	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
 	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, taskID, time.Now(), transitionData)
 	if err != nil {
@@ -119,9 +117,9 @@ func (r *PGRepo) SaveAttempt(repoID git.RepoID, taskID uuid.UUID, commitHash str
 	return nil
 }
 
-func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (git.AttemptCommitInfo, error) {
+func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (attempt.AttemptCommitInfo, error) {
 	var (
-		info           git.AttemptCommitInfo
+		info           attempt.AttemptCommitInfo
 		transitionData json.RawMessage
 	)
 
@@ -146,14 +144,29 @@ func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (git.AttemptCommitInf
 	return info, nil
 }
 
-func (r *PGRepo) GetCourse(name string) (uuid.UUID, error) {
-	ctx := context.Background()
+func (r *PGRepo) GetCourse(ctx context.Context, name string) (uuid.UUID, error) {
 	course, err := r.GetCourseByName(ctx, name)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("course %q: %w", name, err)
 	}
 
 	return course.ID, nil
+}
+
+func (r *PGRepo) RepoForTask(ctx context.Context, taskID, participantID uuid.UUID) (pkggit.RepoID, error) {
+	zap.L().Debug("Executing query", zap.String("query", repoForTaskSQL))
+
+	id := pkggit.RepoID{ParticipantID: participantID}
+	err := r.db.QueryRowContext(ctx, repoForTaskSQL, taskID).
+		Scan(&id.CourseID, &id.TaskGroupID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return pkggit.RepoID{}, fmt.Errorf("task %s not found", taskID)
+		}
+		return pkggit.RepoID{}, fmt.Errorf("resolve repository for task %s: %w", taskID, err)
+	}
+
+	return id, nil
 }
 
 func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {

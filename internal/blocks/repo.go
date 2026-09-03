@@ -31,15 +31,6 @@ type Block struct {
 	DeletedAt  *time.Time      `json:"-"          db:"deleted_at"`
 }
 
-// CreateBlock is the input for creating a block, used by both the service and repository layers.
-type CreateBlock struct {
-	CourseID     uuid.UUID       `json:"-"`
-	SnapshotID   uuid.UUID       `json:"-"                      db:"snapshot_id" binding:"required"`
-	BlockType    string          `json:"blockType"              db:"block_type"  binding:"required"`
-	Data         json.RawMessage `json:"data"                   db:"data"        binding:"required" swaggertype:"object"`
-	AfterBlockID *uuid.UUID      `json:"afterBlockID,omitempty"`
-}
-
 // UpdateBlock is the input for updating a block, used by both the service and repository layers.
 type UpdateBlock struct {
 	BlockType *string         `json:"blockType,omitempty" db:"block_type"`
@@ -59,23 +50,21 @@ type AdjacentPositions struct {
 	Next string
 }
 
-// BlockRef identifies a specific block within its course and snapshot,
-// together with the editing session performing the operation.
+// EditContext identifies the actor and editing session performing an operation.
+type EditContext struct {
+	UserID    uuid.UUID
+	SessionID uuid.UUID
+}
+
+// BlockRef identifies a specific block within its course and snapshot.
 type BlockRef struct {
 	BlockID    uuid.UUID
 	CourseID   uuid.UUID
 	SnapshotID uuid.UUID
-	UserID     uuid.UUID
-	SessionID  uuid.UUID
 }
 
 type Repo interface {
-	CreateBlock(
-		ctx context.Context,
-		model *CreateBlock,
-		userID, sessionID uuid.UUID,
-	) (*Block, error)
-	GetBlockByID(ctx context.Context, ref BlockRef) (*Block, error)
+	GetBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) (*Block, error)
 	GetAllBlocksBySnapshotID(
 		ctx context.Context,
 		snapshotID uuid.UUID,
@@ -83,13 +72,15 @@ type Repo interface {
 	MoveBlock(
 		ctx context.Context,
 		ref BlockRef,
+		editCtx EditContext,
 		afterBlockID *uuid.UUID,
 	) (string, error)
 	UpdateBlockContent(
 		ctx context.Context,
 		ref BlockRef,
+		editCtx EditContext,
 		model *UpdateBlock,
 	) (*Block, error)
-	DeleteBlockByID(ctx context.Context, ref BlockRef) error
+	DeleteBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) error
 	RebalanceBlockPositions(ctx context.Context, snapshotID uuid.UUID) error
 }

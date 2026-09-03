@@ -60,8 +60,11 @@ func (h *Handler) CreateCourse(
 }
 
 type GetPaginatedCoursesInput struct {
-	Limit  int    `query:"limit"`
-	LastID string `query:"last_id"`
+	Limit        int    `query:"limit"`
+	LastID       string `query:"last_id"`
+	DisciplineID string `query:"discipline_id"`
+	IsTeacher    bool   `query:"is_teacher"`
+	IsStudent    bool   `query:"is_student"`
 }
 
 type GetPaginatedCoursesOutput struct {
@@ -83,9 +86,10 @@ func (h *Handler) GetPaginatedCourses(
 
 	var disciplineID uuid.UUID
 	if input.DisciplineID != "" {
+		var err error
 		disciplineID, err = uuid.Parse(input.DisciplineID)
 		if err != nil {
-			return nil, huma.Error400BadRequest("invalid discipline_id")
+			return nil, huma.Error400BadRequest("")
 		}
 	}
 
@@ -93,10 +97,12 @@ func (h *Handler) GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
-		disciplineID,
-		userID,
-		teacherBool,
-		studentBool,
+		CourseFilter{
+			DisciplineID: disciplineID,
+			UserID:       session.UserIDFromContext(ctx),
+			IsTeacher:    input.IsTeacher,
+			IsStudent:    input.IsStudent,
+		},
 	)
 	if err != nil {
 		return nil, handleServiceError(err)

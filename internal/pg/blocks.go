@@ -299,81 +299,17 @@ func getPositionsForMoveTx(
 	return blocks.AdjacentPositions{Prev: leftPos, Next: rightPos}, nil
 }
 
-func (r *PGRepo) CreateBlock(
-	ctx context.Context,
-	model *blocks.CreateBlock,
-	userID, sessionID uuid.UUID,
-) (*blocks.Block, error) {
-	var newBlock blocks.Block
-
-	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		if err := validateEditableSnapshot(
-			ctx,
-			tx,
-			model.CourseID,
-			model.SnapshotID,
-			userID,
-			sessionID,
-		); err != nil {
-			return err
-		}
-
-		positions, err := getPositionsForMoveTx(
-			ctx,
-			tx,
-			model.SnapshotID,
-			model.AfterBlockID,
-		)
-		if err != nil {
-			return fmt.Errorf("resolve positions: %w", err)
-		}
-
-		newBlock = blocks.Block{
-			SnapshotID: model.SnapshotID,
-			BlockType:  model.BlockType,
-			Data:       model.Data,
-			Position: blocks.CalculateMiddlePosition(
-				positions.Prev,
-				positions.Next,
-			),
-		}
-
-		zap.L().
-			Debug("Executing query within transaction", zap.String("query", createBlockSQL))
-
-		stmt, err := tx.PrepareNamedContext(ctx, createBlockSQL)
-		if err != nil {
-			return fmt.Errorf("tx prepare named statement for block: %w", err)
-		}
-		defer func() {
-			if err := stmt.Close(); err != nil {
-				zap.L().Error("failed to close statement", zap.Error(err))
-			}
-		}()
-
-		if err := stmt.GetContext(ctx, &newBlock.ID, newBlock); err != nil {
-			return fmt.Errorf("tx create block: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &newBlock, nil
-}
-
 func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
 	ref blocks.BlockRef,
+	editCtx blocks.EditContext,
 ) (*blocks.Block, error) {
 	if _, err := r.validateViewableSnapshot(
 		ctx,
 		ref.CourseID,
 		ref.SnapshotID,
-		ref.UserID,
-		ref.SessionID,
+		editCtx.UserID,
+		editCtx.SessionID,
 	); err != nil {
 		return nil, err
 	}
@@ -432,6 +368,7 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 func (r *PGRepo) MoveBlock(
 	ctx context.Context,
 	ref blocks.BlockRef,
+	editCtx blocks.EditContext,
 	afterBlockID *uuid.UUID,
 ) (string, error) {
 	var newPosition string
@@ -442,8 +379,8 @@ func (r *PGRepo) MoveBlock(
 			tx,
 			ref.CourseID,
 			ref.SnapshotID,
-			ref.UserID,
-			ref.SessionID,
+			editCtx.UserID,
+			editCtx.SessionID,
 		); err != nil {
 			return err
 		}
@@ -502,6 +439,7 @@ func (r *PGRepo) MoveBlock(
 func (r *PGRepo) UpdateBlockContent(
 	ctx context.Context,
 	ref blocks.BlockRef,
+	editCtx blocks.EditContext,
 	model *blocks.UpdateBlock,
 ) (*blocks.Block, error) {
 	var block blocks.Block
@@ -512,8 +450,8 @@ func (r *PGRepo) UpdateBlockContent(
 			tx,
 			ref.CourseID,
 			ref.SnapshotID,
-			ref.UserID,
-			ref.SessionID,
+			editCtx.UserID,
+			editCtx.SessionID,
 		); err != nil {
 			return err
 		}
@@ -614,6 +552,7 @@ func (r *PGRepo) RebalanceBlockPositions(
 func (r *PGRepo) DeleteBlockByID(
 	ctx context.Context,
 	ref blocks.BlockRef,
+	editCtx blocks.EditContext,
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		if err := validateEditableSnapshot(
@@ -621,8 +560,8 @@ func (r *PGRepo) DeleteBlockByID(
 			tx,
 			ref.CourseID,
 			ref.SnapshotID,
-			ref.UserID,
-			ref.SessionID,
+			editCtx.UserID,
+			editCtx.SessionID,
 		); err != nil {
 			return err
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,29 +24,21 @@ const (
 	`
 
 	getCourseByIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	getCourseByNameSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
-	getAllCoursesByCourseIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
-		FROM courses
-		WHERE id > $2 AND deleted_at IS NULL
-		ORDER BY id
-		LIMIT $1
-	`
-
 	updateCourseByIDSQL = `
 		UPDATE courses
-		SET owner_id = COALESCE($1, owner_id), name = COALESCE($2, name)
-		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SET owner_id = COALESCE($1, owner_id), name = COALESCE($2, name), display_name = COALESCE($3, display_name)
+		WHERE id = $4 AND deleted_at IS NULL
+		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 	`
 
 	publishSnapshotToCourseSQL = `
@@ -222,12 +215,8 @@ func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Cou
 	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
-	err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return &course, err
-		}
-		return &course, err
+	if err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name); err != nil {
+		return nil, err
 	}
 	return &course, nil
 }
@@ -236,47 +225,47 @@ func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
-	discipline_id uuid.UUID,
-	userID uuid.UUID,
-	isTeacher bool,
-	isStudent bool,
+	filter courses.CourseFilter,
 ) ([]courses.Course, error) {
-	whereClause := `WHERE id > $2`
-	if discipline_id != uuid.Nil {
-		whereClause += fmt.Sprintf(` AND discipline_id='%s'`, discipline_id)
+	join := ""
+	conditions := []string{"c.id > $2", "c.deleted_at IS NULL"}
+	args := []any{limit, lastID}
+
+	if filter.DisciplineID != uuid.Nil {
+		args = append(args, filter.DisciplineID)
+		conditions = append(conditions, fmt.Sprintf("c.discipline_id = $%d", len(args)))
 	}
 
-	if userID != uuid.Nil {
-		if isTeacher {
-			whereClause += fmt.Sprintf(` AND id IN (
-			SELECT course_id 
-			FROM course_members 
-			WHERE user_id = '%s' AND role = 'TEACHER')`, userID)
-		} else if isStudent {
-			whereClause += fmt.Sprintf(` AND id IN (
-			SELECT course_id 
-			FROM course_members 
-			WHERE user_id = '%s' AND role = 'STUDENT')`, userID)
+	if filter.IsTeacher || filter.IsStudent {
+		var roles []string
+		if filter.IsTeacher {
+			roles = append(roles, "'TEACHER'")
 		}
+		if filter.IsStudent {
+			roles = append(roles, "'STUDENT'")
+		}
+
+		join = "JOIN course_members cm ON cm.course_id = c.id"
+		args = append(args, filter.UserID)
+		conditions = append(conditions,
+			fmt.Sprintf("cm.user_id = $%d", len(args)),
+			fmt.Sprintf("cm.role IN (%s)", strings.Join(roles, ", ")),
+		)
 	}
 
 	getCoursesByFilter := fmt.Sprintf(`
-		SELECT id, discipline_id, owner_id, name, created_at
-		FROM courses
+		SELECT c.id, c.discipline_id, c.owner_id, c.name, c.display_name, c.created_at
+		FROM courses c
 		%s
-		ORDER BY name
+		WHERE %s
+		ORDER BY c.name
 		LIMIT $1
-	`, whereClause)
+	`, join, strings.Join(conditions, " AND "))
 
 	zap.L().Debug("Executing query", zap.String("query", getCoursesByFilter))
 	var course courses.Course
 	var courseList []courses.Course
-	rows, err := r.db.QueryxContext(
-		ctx,
-		getCoursesByFilter,
-		limit,
-		lastID,
-	)
+	rows, err := r.db.QueryxContext(ctx, getCoursesByFilter, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +291,7 @@ func (r *PGRepo) UpdateCourseByID(
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIDSQL))
 
 	var course courses.Course
-	err := r.db.QueryRowxContext(ctx, updateCourseByIDSQL, update.OwnerID, update.Name, id).
+	err := r.db.QueryRowxContext(ctx, updateCourseByIDSQL, update.OwnerID, update.Name, update.DisplayName, id).
 		StructScan(&course)
 	if err != nil {
 		return nil, err

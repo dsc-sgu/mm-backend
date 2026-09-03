@@ -82,7 +82,7 @@ func TestBlockPositionRebalancing(t *testing.T) {
 	// A tiny threshold means a handful of insertions is enough to trigger a
 	// rebalance, instead of needing dozens under the production default.
 	backendEnv := map[string]string{"LEXO_RANK_THRESHOLD": "2"}
-	backendContainer, backendPort, err := initBackendWithEnv(
+	backendContainer, backendPort, _, err := initBackendWithEnv(
 		ctx,
 		net,
 		backendEnv,
@@ -116,6 +116,7 @@ func TestBlockPositionRebalancing(t *testing.T) {
 		backendPort,
 		&testUser,
 		disciplineID,
+		"Rebalance Course",
 		"Rebalance Course",
 	)
 	draftSnapshotID := LockCourse(

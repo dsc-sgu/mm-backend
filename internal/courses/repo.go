@@ -14,6 +14,7 @@ type Course struct {
 	ActiveSnapshotID *uuid.UUID `json:"activeSnapshotID,omitempty" db:"active_snapshot_id"`
 	OwnerID          uuid.UUID  `json:"ownerID"                    db:"owner_id"           binding:"required"`
 	Name             string     `json:"name"                       db:"name"               binding:"required"`
+	DisplayName      string     `json:"displayName"                db:"display_name"       binding:"required"`
 	Version          int        `json:"version"                    db:"version"            binding:"required"`
 	CreatedAt        time.Time  `json:"createdAt"                  db:"created_at"         binding:"required"`
 	DeletedAt        *time.Time `json:"-"                          db:"deleted_at"`
@@ -23,12 +24,23 @@ type Course struct {
 type CreateCourse struct {
 	DisciplineID uuid.UUID `json:"disciplineID,omitempty" db:"discipline_id"`
 	Name         string    `json:"name"                   db:"name"          binding:"required"`
+	DisplayName  string    `json:"displayName"             db:"display_name"  binding:"required"`
 }
 
 // UpdateCourse is the input for updating a course, used by both the service and repository layers.
 type UpdateCourse struct {
-	OwnerID *uuid.UUID `json:"ownerID,omitempty" db:"owner_id"`
-	Name    *string    `json:"name,omitempty"    db:"name"`
+	OwnerID     *uuid.UUID `json:"ownerID,omitempty"     db:"owner_id"`
+	Name        *string    `json:"name,omitempty"        db:"name"`
+	DisplayName *string    `json:"displayName,omitempty" db:"display_name"`
+}
+
+// CourseFilter narrows GetPaginatedCourses to courses in a discipline and/or
+// courses where UserID holds the requested role(s).
+type CourseFilter struct {
+	DisciplineID uuid.UUID
+	UserID       uuid.UUID
+	IsTeacher    bool
+	IsStudent    bool
 }
 
 type Repo interface {
@@ -44,6 +56,7 @@ type Repo interface {
 		ctx context.Context,
 		limit int,
 		lastID uuid.UUID,
+		filter CourseFilter,
 	) ([]Course, error)
 	UpdateCourseByID(
 		ctx context.Context,

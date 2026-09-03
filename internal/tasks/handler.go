@@ -5,17 +5,14 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
-
-	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
 type Handler struct {
-	taskSvc  *Service
-	blockSvc *blocks.Service
+	taskSvc *Service
 }
 
-func NewHandler(taskSvc *Service, blockSvc *blocks.Service) *Handler {
-	return &Handler{taskSvc: taskSvc, blockSvc: blockSvc}
+func NewHandler(taskSvc *Service) *Handler {
+	return &Handler{taskSvc: taskSvc}
 }
 
 type GetTaskGroupInput struct {
@@ -156,56 +153,6 @@ func (h *Handler) GetTasks(ctx context.Context, input *GetTasksInput) (*GetTasks
 	return &GetTasksOutput{Body: taskList}, nil
 }
 
-type CreateTaskInput struct {
-	GroupID string `path:"group_id"`
-	Body    CreateTask
-}
-
-type CreateTaskOutput struct {
-	Body *CreateTaskResponse
-}
-
-func (h *Handler) CreateTask(ctx context.Context, input *CreateTaskInput) (*CreateTaskOutput, error) {
-	groupID, err := uuid.Parse(input.GroupID)
-	if err != nil {
-		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
-	}
-
-	// A task is a subtype of block, so first create the backing block (the unit
-	// of course display) and then the task row that references it.
-	tg, err := h.taskSvc.GetTaskGroupByID(ctx, groupID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	if tg == nil {
-		return nil, huma.Error404NotFound("task group not found")
-	}
-
-	block, err := h.blockSvc.CreateBlock(ctx, &blocks.CreateBlock{
-		CourseID:  tg.CourseID,
-		BlockType: "task",
-		Data:      input.Body.Data,
-	})
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	input.Body.BlockID = block.ID
-	input.Body.TaskGroupID = groupID
-
-	task, err := h.taskSvc.CreateTask(ctx, &input.Body)
-	if err != nil {
-		if derr := h.blockSvc.DeleteBlockByID(ctx, block.ID); derr != nil {
-			return nil, huma.Error500InternalServerError(err.Error() + "; rollback: " + derr.Error())
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	return &CreateTaskOutput{
-		Body: &CreateTaskResponse{ID: task.ID},
-	}, nil
-}
-
 type PatchTaskInput struct {
 	GroupID string `path:"group_id"`
 	TaskID  string `path:"task_id"`
@@ -228,22 +175,4 @@ func (h *Handler) PatchTask(ctx context.Context, input *PatchTaskInput) (*PatchT
 	}
 
 	return &PatchTaskOutput{Body: task}, nil
-}
-
-type DeleteTaskInput struct {
-	GroupID string `path:"group_id"`
-	TaskID  string `path:"task_id"`
-}
-
-func (h *Handler) DeleteTask(ctx context.Context, input *DeleteTaskInput) (*struct{}, error) {
-	taskID, err := uuid.Parse(input.TaskID)
-	if err != nil {
-		return nil, huma.Error400BadRequest("parsing task_id: " + err.Error())
-	}
-
-	if err := h.taskSvc.DeleteTask(ctx, taskID); err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	return nil, nil
 }

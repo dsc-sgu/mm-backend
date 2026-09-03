@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
+	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
@@ -15,7 +16,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
-	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
@@ -44,8 +44,7 @@ var (
 	_ snapshots.Repo   = (*PGRepo)(nil)
 	_ locks.Repo       = (*PGRepo)(nil)
 	_ membership.Repo  = (*PGRepo)(nil)
-	_ git.Repo         = (*PGRepo)(nil)
-	_ git.DBRepo       = (*PGRepo)(nil)
+	_ sshkeys.Repo     = (*PGRepo)(nil)
 	_ tasks.Repo       = (*PGRepo)(nil)
 	_ attempt.Repo     = (*PGRepo)(nil)
 )

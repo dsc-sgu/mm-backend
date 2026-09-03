@@ -52,12 +52,6 @@ const (
 		DELETE FROM task_groups WHERE id = $1
 	`
 
-	createTaskSQL = `
-		INSERT INTO tasks (block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
-	`
-
 	getTaskByIDSQL = `
 		SELECT block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
 		FROM tasks WHERE block_id = $1
@@ -77,10 +71,6 @@ const (
 		    deadline_at = COALESCE($5, deadline_at)
 		WHERE block_id = $6
 		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
-	`
-
-	deleteTaskSQL = `
-		DELETE FROM tasks WHERE block_id = $1
 	`
 
 	getTaskGroupIDByNameSQL = `
@@ -182,27 +172,6 @@ func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *PGRepo) CreateTask(ctx context.Context, model *tasks.CreateTask) (*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", createTaskSQL))
-
-	patterns := model.Patterns
-	if patterns == nil {
-		patterns = []string{}
-	}
-
-	var task tasks.Task
-	err := r.db.QueryRowContext(
-		ctx, createTaskSQL,
-		model.BlockID, model.TaskGroupID, model.Name, pq.StringArray(patterns),
-		model.MaxGrade, model.MaxAttempts, model.AvailableAt, model.DeadlineAt,
-	).Scan(&task.ID, &task.TaskGroupID, &task.Name, &task.Patterns,
-		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt)
-	if err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
-	}
-	return &task, nil
-}
-
 func (r *PGRepo) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*tasks.Task, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskByIDSQL))
 
@@ -263,16 +232,6 @@ func (r *PGRepo) UpdateTask(ctx context.Context, taskID uuid.UUID, update *tasks
 		return nil, fmt.Errorf("update task: %w", err)
 	}
 	return &task, nil
-}
-
-func (r *PGRepo) DeleteTask(ctx context.Context, taskID uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteTaskSQL))
-
-	_, err := r.db.ExecContext(ctx, deleteTaskSQL, taskID)
-	if err != nil {
-		return fmt.Errorf("delete task: %w", err)
-	}
-	return nil
 }
 
 func (r *PGRepo) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error) {

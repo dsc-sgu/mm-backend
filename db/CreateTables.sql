@@ -79,7 +79,7 @@ CREATE TABLE blocks (
     data jsonb NOT NULL,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
-    deleted_at timestamp
+    deleted_at timestamp,
 
     -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
     UNIQUE (id, block_type)
