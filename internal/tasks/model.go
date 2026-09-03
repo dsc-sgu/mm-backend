@@ -35,21 +35,6 @@ type UpdateTaskGroup struct {
 	Name *string `json:"name"`
 }
 
-type CreateTask struct {
-	// BlockID and TaskGroupID are set by the handler, not from the request body.
-	BlockID     uuid.UUID `json:"-"`
-	TaskGroupID uuid.UUID `json:"-"`
-	Name        string    `json:"name"                  binding:"required"`
-	// Data is the task's display content; it is stored in the backing block, not
-	// in the tasks row.
-	Data        json.RawMessage `json:"data"                  binding:"required" swaggertype:"object"`
-	Patterns    []string        `json:"patterns,omitempty"`
-	MaxGrade    float32         `json:"maxGrade"              binding:"required"`
-	MaxAttempts int             `json:"maxAttempts"           binding:"required"`
-	AvailableAt *time.Time      `json:"availableAt,omitempty"`
-	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
-}
-
 type UpdateTask struct {
 	Patterns    *[]string  `json:"patterns,omitempty"`
 	MaxGrade    *float32   `json:"maxGrade,omitempty"`
@@ -59,10 +44,6 @@ type UpdateTask struct {
 }
 
 type CreateTaskGroupResponse struct {
-	ID uuid.UUID `json:"id"`
-}
-
-type CreateTaskResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 

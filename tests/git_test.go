@@ -16,7 +16,7 @@ import (
 func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	clearDatabases(t)
 
-	userID := CreateTestUser(
+	testUser := CreateAndLoginUser(
 		t,
 		&backendPort,
 		"Test",
@@ -25,29 +25,35 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 		"gitstudent@test.com",
 		"password",
 	)
+	userID := testUser.ID
 	require.NotZero(t, userID)
 
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		"Git Discipline",
 	)
 
 	courseID := CreateTestCourse(
 		t,
 		&backendPort,
-		userID,
+		&testUser,
 		disciplineID,
 		"gitcourse",
 		"Git Course",
 	)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, userID, courseID, "group1")
-	taskID := CreateTestTask(t, &backendPort, userID, groupID, "taskA")
+	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "group1")
+
+	// Creating a task creates a "task"-typed block, which requires a draft
+	// snapshot to exist for the course.
+	LockCourse(t, &backendPort, &testUser, courseID)
+
+	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "taskA")
 
 	identity := generateSSHKeyPair(t)
-	RegisterTestSSHKey(t, &backendPort, userID, "test-key", identity.authorizedKey)
+	RegisterTestSSHKey(t, &backendPort, &testUser, "test-key", identity.authorizedKey)
 
 	workDir := t.TempDir()
 	repoURL := fmt.Sprintf(
@@ -82,17 +88,16 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	require.NoError(t, err, out)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/attempts/%s/%s?fake_user_id=%s",
+		"http://127.0.0.1:%s/api/v1/attempts/%s/%s",
 		backendPort.Port(),
 		taskID,
-		userID,
 		userID,
 	)
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
 		if err := resp.Body.Close(); err != nil {

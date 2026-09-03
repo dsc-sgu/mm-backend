@@ -26,23 +26,20 @@ import (
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
+	"github.com/dsc-sgu/mm-backend/internal/content"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/db"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/git"
 	"github.com/dsc-sgu/mm-backend/internal/logger"
 	"github.com/dsc-sgu/mm-backend/internal/pg"
-<<<<<<< HEAD
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
-=======
-	"github.com/dsc-sgu/mm-backend/internal/routes"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
->>>>>>> 950c1e3 (feat: add task groups)
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
@@ -185,7 +182,10 @@ func main() {
 	membershipService := membership.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	disciplineService := disciplines.NewService(pgRepo)
-	gitService := git.NewService(pgRepo)
+	gitManager := pkggit.NewManager("repos", config.Host, strconv.Itoa(config.SSHPort))
+	sshKeyService := sshkeys.NewService(pgRepo)
+	taskService := tasks.NewService(pgRepo, gitManager)
+	attemptService := attempt.NewService(pgRepo, gitManager, taskService, pgRepo, sshKeyService)
 
 	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
 	go rebalanceWorker.Run(ctx)
@@ -195,17 +195,23 @@ func main() {
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
+	contentHandler := content.NewHandler(content.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold))
 	courseHandler := courses.NewHandler(courseService, lockService, membershipService, userService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
-	gitHandler := git.NewHandler(gitService)
+	sshKeyHandler := sshkeys.NewHandler(sshKeyService)
+	taskHandler := tasks.NewHandler(taskService)
+	attemptHandler := attempt.NewHandler(attemptService)
 
 	api.SetupRoutes(
 		v1,
 		blockHandler,
+		contentHandler,
 		courseHandler,
 		disciplineHandler,
 		userHandler,
-		gitHandler,
+		sshKeyHandler,
+		attemptHandler,
+		taskHandler,
 		sessionRepo,
 		config,
 	)
@@ -220,17 +226,16 @@ func main() {
 		Handler: handler,
 	}
 
-	a := git.App{Access: pkggit.ReadWriteAccess}
 	sshServer, err := wish.NewServer(
 		wish.WithAddress(
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
-		ssh.PublicKeyAuth(gitService.CheckPublicKeyAuth),
-		ssh.PasswordAuth(gitService.CheckPasswordAuth),
+		ssh.PublicKeyAuth(sshKeyService.CheckPublicKeyAuth),
+		ssh.PasswordAuth(sshKeyService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			pkggit.Middleware("repos", gitService.RepoRename, gitService),
-			gitService.GitListMiddleware,
+			attemptService.SSHMiddleware("repos"),
+			gitManager.ListMiddleware,
 			logging.Middleware(),
 		),
 	)

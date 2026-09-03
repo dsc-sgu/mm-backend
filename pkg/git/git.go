@@ -21,8 +21,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Package git provides custom SSH server which allows to inject reaction on push/fetch events.
-// You can write implementation of `Hooks` interface and inject it into `Middleware` to get any custom logic you want.
+// Package git provides low-level primitives for serving Git repositories
+// over SSH (running git-upload-pack/git-receive-pack, access-level types,
+// pre/post-receive hooks). Callers that need auth, push/fetch notifications,
+// or repo path resolution compose these primitives themselves.
 package git
 
 import (
@@ -34,12 +36,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	gossh "golang.org/x/crypto/ssh"
 )
 
 // ErrNotAuthed represents unauthorized access.
@@ -78,88 +78,6 @@ const (
 
 const defaultWorkDir = ""
 
-// GitHooks is an interface that allows for custom authorization
-// implementations and post push/fetch notifications. Prior to git access,
-// AuthRepo will be called with the ssh.Session public key and the repo name.
-// Implementers return the appropriate AccessLevel.
-//
-// Deprecated: use Hooks instead.
-type GitHooks = Hooks // nolint: revive
-
-// Hooks is an interface that allows for custom authorization
-// implementations and post push/fetch notifications. Prior to git access,
-// AuthRepo will be called with the original (pre-rename) repo path, the
-// renamed repo name and the ssh.Session public key, mirroring OnPush/OnFetch.
-// Implementers return the appropriate AccessLevel.
-type Hooks interface {
-	AuthRepo(originalRepo, repo string, pk ssh.PublicKey) AccessLevel
-	OnPush(string, string, ssh.PublicKey)
-	OnFetch(string, string, ssh.PublicKey)
-}
-
-// Middleware adds Git server functionality to the ssh.Server. Repos are stored
-// in the specified repo directory. The provided Hooks implementation will be
-// checked for access on a per repo basis for a ssh.Session public key.
-// Hooks.Push and Hooks.Fetch will be called on successful completion of
-// their commands.
-func Middleware(
-	repoDir string,
-	RepoRename func(string, gossh.PublicKey) (string, error),
-	gh Hooks,
-) wish.Middleware {
-	return func(sh ssh.Handler) ssh.Handler {
-		return func(s ssh.Session) {
-			cmd := s.Command()
-			if len(cmd) == 2 {
-				gc := cmd[0]
-				pk := s.PublicKey()
-				rawRepo := cmd[1]
-				repo, err := RepoRename(rawRepo, pk)
-				if err != nil {
-					log.Error("repo rename failed", "error", err, "repo", rawRepo)
-					Fatal(s, err)
-					return
-				}
-				access := gh.AuthRepo(rawRepo, repo, pk)
-				switch GitCmd(gc) {
-				case GitReceivePack:
-					switch access {
-					case ReadWriteAccess, AdminAccess:
-						if err := GitPack(s, gc, repoDir, repo); err != nil {
-							log.Error("git push failed", "error", err, "repo", rawRepo)
-							Fatal(s, ErrSystemMalfunction)
-						} else {
-							gh.OnPush(rawRepo, repo, pk)
-						}
-					default:
-						Fatal(s, ErrNotAuthed)
-					}
-					return
-				case GitUploadPack, GitUploadArchive:
-					switch access {
-					case ReadOnlyAccess, ReadWriteAccess, AdminAccess:
-						if err := GitPack(s, gc, repoDir, repo); err != nil {
-							switch {
-							case errors.Is(err, ErrInvalidRepo):
-								Fatal(s, ErrInvalidRepo)
-							default:
-								log.Error("unknown git error", "error", err)
-								Fatal(s, ErrSystemMalfunction)
-							}
-						} else {
-							gh.OnFetch(rawRepo, repo, pk)
-						}
-					default:
-						Fatal(s, ErrNotAuthed)
-					}
-					return
-				}
-			}
-			sh(s)
-		}
-	}
-}
-
 func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
@@ -174,16 +92,13 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 		}
 		return RunGit(s, defaultWorkDir, cmd, rp)
 	case GitReceivePack:
-		err := EnsureRepo(repoDir, repo)
-		if err != nil {
+		if err := EnsureRepo(repoDir, repo); err != nil {
 			return err
 		}
-		err = RunGit(s, defaultWorkDir, "-c", "receive.advertisePushOptions=true", "receive-pack", rp)
-		if err != nil {
+		if err := RunGit(s, defaultWorkDir, "-c", "receive.advertisePushOptions=true", "receive-pack", rp); err != nil {
 			return err
 		}
-		err = EnsureDefaultBranch(s, rp)
-		if err != nil {
+		if err := EnsureDefaultBranch(s, rp); err != nil {
 			return err
 		}
 		// Needed for git dumb http server
