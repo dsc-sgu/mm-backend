@@ -41,36 +41,18 @@ func NewService(
 	}
 }
 
-// CreateBlock inserts a new block after model.AfterBlockID
-func (s *Service) CreateBlock(
-	ctx context.Context,
-	model *CreateBlock,
-	userID, sessionID uuid.UUID,
-) (*Block, error) {
-	block, err := s.repo.CreateBlock(ctx, model, userID, sessionID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if rebalance is needed
-	if len(block.Position) > s.lexoRankThreshold {
-		s.rebalanceWorker.Enqueue(model.SnapshotID)
-	}
-
-	return block, nil
-}
-
 // MoveBlock changes block's position so that it comes after afterBlockID
 func (s *Service) MoveBlock(
 	ctx context.Context,
 	ref BlockRef,
+	editCtx EditContext,
 	afterBlockID *uuid.UUID,
 ) error {
 	if afterBlockID != nil && *afterBlockID == ref.BlockID {
 		return ErrInvalidBlockForMoveAfter
 	}
 
-	newPosition, err := s.repo.MoveBlock(ctx, ref, afterBlockID)
+	newPosition, err := s.repo.MoveBlock(ctx, ref, editCtx, afterBlockID)
 	if err != nil {
 		return err
 	}
@@ -86,20 +68,22 @@ func (s *Service) MoveBlock(
 func (s *Service) UpdateBlockContent(
 	ctx context.Context,
 	ref BlockRef,
+	editCtx EditContext,
 	model *UpdateBlock,
 ) (*Block, error) {
-	return s.repo.UpdateBlockContent(ctx, ref, model)
+	return s.repo.UpdateBlockContent(ctx, ref, editCtx, model)
 }
 
-func (s *Service) DeleteBlockByID(ctx context.Context, ref BlockRef) error {
-	return s.repo.DeleteBlockByID(ctx, ref)
+func (s *Service) DeleteBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) error {
+	return s.repo.DeleteBlockByID(ctx, ref, editCtx)
 }
 
 func (s *Service) GetBlockByID(
 	ctx context.Context,
 	ref BlockRef,
+	editCtx EditContext,
 ) (*Block, error) {
-	return s.repo.GetBlockByID(ctx, ref)
+	return s.repo.GetBlockByID(ctx, ref, editCtx)
 }
 
 func (s *Service) GetAllBlocksBySnapshotID(

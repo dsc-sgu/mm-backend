@@ -279,8 +279,9 @@ func (s *Service) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	filter CourseFilter,
 ) ([]Course, error) {
-	return s.repo.GetPaginatedCourses(ctx, limit, lastID)
+	return s.repo.GetPaginatedCourses(ctx, limit, lastID, filter)
 }
 
 func (s *Service) GetCourseByID(

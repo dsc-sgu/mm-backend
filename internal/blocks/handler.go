@@ -19,11 +19,6 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// BlockIDResponse is the handler-level response for block creation.
-type BlockIDResponse struct {
-	ID uuid.UUID `json:"id"`
-}
-
 func handleServiceError(err error) error {
 	if err == nil {
 		return nil
@@ -67,48 +62,13 @@ func (h *Handler) GetBlock(
 	}
 
 	block, err := h.svc.GetBlockByID(ctx, BlockRef{
-		BlockID:    input.BlockID,
-		CourseID:   input.CourseID,
-		SnapshotID: input.SnapshotID,
-		UserID:     userID,
-		SessionID:  sessionID,
-	})
+		BlockID: input.BlockID, CourseID: input.CourseID, SnapshotID: input.SnapshotID,
+	}, EditContext{UserID: userID, SessionID: sessionID})
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
 	return &GetBlockOutput{Body: block}, nil
-}
-
-type CreateBlockInput struct {
-	CourseID   uuid.UUID `path:"course_id"`
-	SnapshotID uuid.UUID `path:"snapshot_id"`
-	Body       CreateBlock
-}
-
-type CreateBlockOutput struct {
-	Body *BlockIDResponse
-}
-
-func (h *Handler) CreateBlock(
-	ctx context.Context,
-	input *CreateBlockInput,
-) (*CreateBlockOutput, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	input.Body.CourseID = input.CourseID
-	input.Body.SnapshotID = input.SnapshotID
-
-	block, err := h.svc.CreateBlock(ctx, &input.Body, userID, sessionID)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-
-	return &CreateBlockOutput{Body: &BlockIDResponse{ID: block.ID}}, nil
 }
 
 type MoveBlockInput struct {
@@ -129,12 +89,8 @@ func (h *Handler) MoveBlock(
 	}
 
 	err := h.svc.MoveBlock(ctx, BlockRef{
-		BlockID:    input.BlockID,
-		CourseID:   input.CourseID,
-		SnapshotID: input.SnapshotID,
-		UserID:     userID,
-		SessionID:  sessionID,
-	}, input.Body.AfterBlockID)
+		BlockID: input.BlockID, CourseID: input.CourseID, SnapshotID: input.SnapshotID,
+	}, EditContext{UserID: userID, SessionID: sessionID}, input.Body.AfterBlockID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -164,12 +120,8 @@ func (h *Handler) PatchBlock(
 	}
 
 	block, err := h.svc.UpdateBlockContent(ctx, BlockRef{
-		BlockID:    input.BlockID,
-		CourseID:   input.CourseID,
-		SnapshotID: input.SnapshotID,
-		UserID:     userID,
-		SessionID:  sessionID,
-	}, &input.Body)
+		BlockID: input.BlockID, CourseID: input.CourseID, SnapshotID: input.SnapshotID,
+	}, EditContext{UserID: userID, SessionID: sessionID}, &input.Body)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -194,12 +146,8 @@ func (h *Handler) DeleteBlock(
 	}
 
 	err := h.svc.DeleteBlockByID(ctx, BlockRef{
-		BlockID:    input.BlockID,
-		CourseID:   input.CourseID,
-		SnapshotID: input.SnapshotID,
-		UserID:     userID,
-		SessionID:  sessionID,
-	})
+		BlockID: input.BlockID, CourseID: input.CourseID, SnapshotID: input.SnapshotID,
+	}, EditContext{UserID: userID, SessionID: sessionID})
 	if err != nil {
 		return nil, handleServiceError(err)
 	}

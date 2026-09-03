@@ -86,7 +86,7 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 
 	// Setup Backend with short lock TTL
 	backendEnv := map[string]string{"COURSE_LOCK_TTL_SECONDS": "2"}
-	backendContainer, backendPort, err := initBackendWithEnv(
+	backendContainer, backendPort, _, err := initBackendWithEnv(
 		ctx,
 		net,
 		backendEnv,
@@ -132,6 +132,7 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 		backendPort,
 		&userA,
 		disciplineID,
+		"Optimistic Lock Course",
 		"Optimistic Lock Course",
 	)
 

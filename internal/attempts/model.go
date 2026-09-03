@@ -23,6 +23,14 @@ type FileInfo struct {
 	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
 }
 
+type AttemptCommitInfo struct {
+	UserID      uuid.UUID
+	TaskID      uuid.UUID
+	CommitHash  string
+	CourseID    uuid.UUID
+	TaskGroupID uuid.UUID
+}
+
 type Attempt struct {
 	Id             uuid.UUID       `json:"id"                       db:"attempt_id"      binding:"required"`
 	UserID         uuid.UUID       `json:"userId"                   db:"user_id"         binding:"required"`

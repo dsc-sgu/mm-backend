@@ -249,6 +249,7 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 		&testUser,
 		disciplineID,
 		"Lexo Course",
+		"Lexo Course",
 	)
 	draftSnapshotID := LockCourse(
 		t,
