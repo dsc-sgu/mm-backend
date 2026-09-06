@@ -15,6 +15,9 @@ type Repo interface {
 	// RepoForTask resolves which course and task group a task belongs to,
 	// yielding the repository that holds the participant's attempts at it.
 	RepoForTask(ctx context.Context, taskID, participantID uuid.UUID) (pkggit.RepoID, error)
+	// GetTaskCourseID resolves which course a task belongs to, for
+	// authorizing access to already-recorded attempts.
+	GetTaskCourseID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error)
 }
 
 type TaskReader interface {
@@ -27,6 +30,7 @@ type TaskReader interface {
 type CourseReader interface {
 	GetCourse(context.Context, string) (uuid.UUID, error)
 	IsCourseMember(context.Context, uuid.UUID, uuid.UUID) (bool, error)
+	IsCourseTeacher(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
 type IdentityReader interface {

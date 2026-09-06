@@ -97,13 +97,6 @@ const (
 		LIMIT 1
 	`
 
-	copyBlocksToSnapshotSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position)
-		SELECT $1, block_type, data, position
-		FROM blocks
-		WHERE snapshot_id = $2 AND deleted_at IS NULL
-	`
-
 	lockSnapshotSQL = `
 		SELECT course_id, status
 		FROM course_snapshots
@@ -436,64 +429,6 @@ func (r *PGRepo) MoveBlock(
 	return newPosition, nil
 }
 
-func (r *PGRepo) UpdateBlockContent(
-	ctx context.Context,
-	ref blocks.BlockRef,
-	editCtx blocks.EditContext,
-	model *blocks.UpdateBlock,
-) (*blocks.Block, error) {
-	var block blocks.Block
-
-	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		if err := validateEditableSnapshot(
-			ctx,
-			tx,
-			ref.CourseID,
-			ref.SnapshotID,
-			editCtx.UserID,
-			editCtx.SessionID,
-		); err != nil {
-			return err
-		}
-		if err := blockBelongsToSnapshot(
-			ctx,
-			tx,
-			ref.BlockID,
-			ref.SnapshotID,
-		); err != nil {
-			return err
-		}
-
-		zap.L().
-			Debug("Executing query within transaction", zap.String("query", updateBlockContentSQL))
-
-		// nil Data must reach the driver as SQL NULL (not an empty string),
-		// so that COALESCE leaves the existing column value untouched
-		var data any
-		if len(model.Data) > 0 {
-			data = string(model.Data)
-		}
-
-		err := tx.QueryRowxContext(
-			ctx,
-			updateBlockContentSQL,
-			model.BlockType,
-			data,
-			ref.BlockID,
-		).StructScan(&block)
-		if err != nil {
-			return fmt.Errorf("tx update block content: %w", err)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &block, nil
-}
-
 // RebalanceBlockPositions recomputes and updates every block's position
 // for a specific snapshot to distribute the blocks evenly across the alphabet
 func (r *PGRepo) RebalanceBlockPositions(
@@ -624,24 +559,3 @@ func (r *PGRepo) DeleteAllBlocksByCourseID(
 	return nil
 }
 
-// CopyBlocksToSnapshot copies blocks from one snapshot to another
-func (r *PGRepo) CopyBlocksToSnapshot(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	sourceSnapshotID uuid.UUID,
-	targetSnapshotID uuid.UUID,
-) error {
-	zap.L().
-		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
-
-	_, err := tx.ExecContext(
-		ctx,
-		copyBlocksToSnapshotSQL,
-		targetSnapshotID,
-		sourceSnapshotID,
-	)
-	if err != nil {
-		return fmt.Errorf("tx copy blocks: %w", err)
-	}
-	return nil
-}

@@ -197,9 +197,15 @@ CREATE TABLE task_groups (
 
 -- NOTE(nrydanov): task is a subtype of block — the composite FK plus
 -- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
+-- NOTE(Ezhkin-Kot): a task's block gets a fresh id every time its snapshot is
+-- copied (course-editing draft creation / snapshot switch), so a task's own
+-- row is copied alongside it rather than shared — each snapshot generation
+-- of a task has its own row, keyed by that generation's block_id. snapshot_id
+-- is denormalized from blocks so uniqueness can be scoped per-generation.
 CREATE TABLE tasks (
     block_id uuid PRIMARY KEY,
     block_type block_type NOT NULL DEFAULT 'task',
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     task_group_id uuid NOT NULL REFERENCES task_groups(id),
     name varchar(128) NOT NULL,
     -- glob patterns matching the files that count as this task's solution
@@ -211,7 +217,7 @@ CREATE TABLE tasks (
 
     FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
     CHECK (block_type = 'task'),
-    UNIQUE (task_group_id, name)
+    UNIQUE (snapshot_id, task_group_id, name)
 );
 
 CREATE TABLE attempts (
