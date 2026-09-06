@@ -98,37 +98,6 @@ func (h *Handler) MoveBlock(
 	return nil, nil
 }
 
-type PatchBlockInput struct {
-	CourseID   uuid.UUID `path:"course_id"`
-	SnapshotID uuid.UUID `path:"snapshot_id"`
-	BlockID    uuid.UUID `path:"block_id"`
-	Body       UpdateBlock
-}
-
-type PatchBlockOutput struct {
-	Body *Block
-}
-
-func (h *Handler) PatchBlock(
-	ctx context.Context,
-	input *PatchBlockInput,
-) (*PatchBlockOutput, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	block, err := h.svc.UpdateBlockContent(ctx, BlockRef{
-		BlockID: input.BlockID, CourseID: input.CourseID, SnapshotID: input.SnapshotID,
-	}, EditContext{UserID: userID, SessionID: sessionID}, &input.Body)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-
-	return &PatchBlockOutput{Body: block}, nil
-}
-
 type DeleteBlockInput struct {
 	CourseID   uuid.UUID `path:"course_id"`
 	SnapshotID uuid.UUID `path:"snapshot_id"`

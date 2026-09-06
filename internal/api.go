@@ -96,7 +96,7 @@ func setupBlockRoutes(api huma.API, bh *blocks.Handler, ch *content.Handler) {
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}",
 		Summary: "Update existing block", DefaultStatus: http.StatusOK,
 		Tags: []string{"Block"},
-	}, bh.PatchBlock)
+	}, ch.PatchBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}/move",
@@ -279,5 +279,4 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 	huma.Register(api, huma.Operation{Method: http.MethodDelete, Path: "/tasks/{group_id}", Summary: "Delete task group", DefaultStatus: http.StatusNoContent, Tags: []string{"Task"}}, handler.DeleteTaskGroup)
 	huma.Register(api, huma.Operation{Method: http.MethodPost, Path: "/tasks/{group_id}/template", Summary: "Upload task template", DefaultStatus: http.StatusNoContent, Tags: []string{"Task"}}, handler.UploadTemplate)
 	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/tasks/{group_id}/tasks", Summary: "Get tasks", Tags: []string{"Task"}}, handler.GetTasks)
-	huma.Register(api, huma.Operation{Method: http.MethodPatch, Path: "/tasks/{group_id}/tasks/{task_id}", Summary: "Update task", Tags: []string{"Task"}}, handler.PatchTask)
 }

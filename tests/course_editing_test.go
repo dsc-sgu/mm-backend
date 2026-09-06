@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/content"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
@@ -440,7 +441,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		)
 		newBlockData := `{"text":"updated content"}`
 		body, _ := json.Marshal(
-			blocks.UpdateBlock{Data: json.RawMessage(newBlockData)},
+			content.PatchBlockCommand{Data: json.RawMessage(newBlockData)},
 		)
 		req, err := http.NewRequest(
 			http.MethodPatch,

@@ -17,6 +17,10 @@ func (r *repoStub) CreateBlockContent(_ context.Context, command CreateBlockComm
 	return &CreatedBlockContent{BlockID: uuid.New()}, nil
 }
 
+func (r *repoStub) PatchBlockContent(_ context.Context, _ PatchBlockCommand) (*PatchedBlockContent, error) {
+	return &PatchedBlockContent{}, nil
+}
+
 type rebalanceNotifierStub struct{}
 
 func (rebalanceNotifierStub) Enqueue(uuid.UUID) {}

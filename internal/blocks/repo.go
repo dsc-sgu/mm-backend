@@ -31,12 +31,6 @@ type Block struct {
 	DeletedAt  *time.Time      `json:"-"          db:"deleted_at"`
 }
 
-// UpdateBlock is the input for updating a block, used by both the service and repository layers.
-type UpdateBlock struct {
-	BlockType *string         `json:"blockType,omitempty" db:"block_type"`
-	Data      json.RawMessage `json:"data,omitempty"      db:"data"       swaggertype:"object"`
-}
-
 // MoveBlock is the input for moving a block.
 type MoveBlock struct {
 	AfterBlockID *uuid.UUID `json:"afterBlockID,omitempty"`
@@ -75,12 +69,6 @@ type Repo interface {
 		editCtx EditContext,
 		afterBlockID *uuid.UUID,
 	) (string, error)
-	UpdateBlockContent(
-		ctx context.Context,
-		ref BlockRef,
-		editCtx EditContext,
-		model *UpdateBlock,
-	) (*Block, error)
 	DeleteBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) error
 	RebalanceBlockPositions(ctx context.Context, snapshotID uuid.UUID) error
 }

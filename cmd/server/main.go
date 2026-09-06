@@ -184,7 +184,7 @@ func main() {
 	disciplineService := disciplines.NewService(pgRepo)
 	gitManager := pkggit.NewManager("repos", config.Host, strconv.Itoa(config.SSHPort))
 	sshKeyService := sshkeys.NewService(pgRepo)
-	taskService := tasks.NewService(pgRepo, gitManager)
+	taskService := tasks.NewService(pgRepo, gitManager, membershipService)
 	attemptService := attempt.NewService(pgRepo, gitManager, taskService, pgRepo, sshKeyService)
 
 	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)

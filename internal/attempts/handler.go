@@ -28,6 +28,11 @@ type GetDiffOutput struct {
 }
 
 func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOutput, error) {
+	callerID := session.UserIDFromContext(ctx)
+	if callerID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	id1, err := uuid.Parse(input.ID1)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing id1: " + err.Error())
@@ -38,8 +43,11 @@ func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOut
 		return nil, huma.Error400BadRequest("parsing id2: " + err.Error())
 	}
 
-	diff, err := h.svc.GetDiff(ctx, id1, id2)
+	diff, err := h.svc.GetDiff(ctx, callerID, id1, id2)
 	if err != nil {
+		if errors.Is(err, ErrNotCourseMember) {
+			return nil, huma.Error403Forbidden("")
+		}
 		return nil, huma.Error400BadRequest("cannot make diff: " + err.Error())
 	}
 
@@ -91,6 +99,11 @@ type GetAttemptsOutput struct {
 }
 
 func (h *Handler) GetAttempts(ctx context.Context, input *GetAttemptsInput) (*GetAttemptsOutput, error) {
+	callerID := session.UserIDFromContext(ctx)
+	if callerID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	taskID, err := uuid.Parse(input.TaskID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing task_id: " + err.Error())
@@ -101,8 +114,11 @@ func (h *Handler) GetAttempts(ctx context.Context, input *GetAttemptsInput) (*Ge
 		return nil, huma.Error400BadRequest("parsing participant_id: " + err.Error())
 	}
 
-	attempts, err := h.svc.GetAttempts(taskID, participantID)
+	attempts, err := h.svc.GetAttempts(ctx, callerID, taskID, participantID)
 	if err != nil {
+		if errors.Is(err, ErrNotCourseMember) {
+			return nil, huma.Error403Forbidden("")
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 
