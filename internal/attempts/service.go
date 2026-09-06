@@ -30,8 +30,34 @@ func NewService(repo Repo, git GitManager, tasks TaskReader, courses CourseReade
 	return &Service{repo: repo, git: git, tasks: tasks, courses: courses, identities: identities}
 }
 
-func (s *Service) GetAttempts(taskID, participantID uuid.UUID) ([]Attempt, error) {
+// GetAttempts lists a participant's attempts at a task. The caller must be
+// that participant themself or an active teacher of the task's course.
+func (s *Service) GetAttempts(ctx context.Context, callerID, taskID, participantID uuid.UUID) ([]Attempt, error) {
+	if err := s.assertViewer(ctx, callerID, participantID, taskID); err != nil {
+		return nil, err
+	}
 	return s.repo.GetAttempts(taskID, participantID)
+}
+
+// assertViewer authorizes callerID to view ownerID's data for a task: either
+// they are the same person, or callerID is an active teacher of the course
+// the task belongs to.
+func (s *Service) assertViewer(ctx context.Context, callerID, ownerID, taskID uuid.UUID) error {
+	if callerID == ownerID {
+		return nil
+	}
+	courseID, err := s.repo.GetTaskCourseID(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	isTeacher, err := s.courses.IsCourseTeacher(ctx, callerID, courseID)
+	if err != nil {
+		return fmt.Errorf("check course teacher: %w", err)
+	}
+	if !isTeacher {
+		return ErrNotCourseMember
+	}
+	return nil
 }
 
 // ErrNotCourseMember is returned when a participant may not touch a course's repositories.
@@ -116,7 +142,7 @@ func (s *Service) PushAttempt(ctx context.Context, taskID, participantID uuid.UU
 	return hash, nil
 }
 
-func (s *Service) GetDiff(ctx context.Context, id1, id2 uuid.UUID) ([]string, error) {
+func (s *Service) GetDiff(ctx context.Context, callerID, id1, id2 uuid.UUID) ([]string, error) {
 	one, err := s.repo.GetAttemptCommitInfo(id1)
 	if err != nil {
 		return nil, fmt.Errorf("get diff: %w", err)
@@ -127,6 +153,15 @@ func (s *Service) GetDiff(ctx context.Context, id1, id2 uuid.UUID) ([]string, er
 	}
 	if one.UserID != two.UserID {
 		return nil, errors.New("attempts belong to different users")
+	}
+	if callerID != one.UserID {
+		isTeacher, err := s.courses.IsCourseTeacher(ctx, callerID, one.CourseID)
+		if err != nil {
+			return nil, fmt.Errorf("check course teacher: %w", err)
+		}
+		if !isTeacher {
+			return nil, ErrNotCourseMember
+		}
 	}
 	patterns, _ := s.tasks.GetTaskPatternsByTaskID(ctx, one.TaskID)
 	id := pkggit.RepoID{CourseID: one.CourseID, TaskGroupID: one.TaskGroupID, ParticipantID: one.UserID}

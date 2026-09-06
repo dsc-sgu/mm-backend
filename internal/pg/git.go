@@ -12,6 +12,7 @@ import (
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
@@ -51,15 +52,21 @@ const (
 		LIMIT 1
 	`
 
-	isCourseMemberSQL = `
-		SELECT EXISTS(
-			SELECT 1 FROM course_members
-			WHERE user_id = $1 AND course_id = $2 AND is_active
-		)
-	`
-
 	repoForTaskSQL = `
 		SELECT cs.course_id, t.task_group_id
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id
+		JOIN course_snapshots cs ON cs.id = b.snapshot_id
+		JOIN courses c ON c.id = cs.course_id
+		WHERE t.block_id = $1 AND b.snapshot_id = c.active_snapshot_id
+	`
+
+	// Unlike repoForTaskSQL, this is not restricted to the active snapshot:
+	// it backs authorization for viewing already-recorded attempts, which
+	// must keep resolving even if the task later drops out of the active
+	// snapshot.
+	getTaskCourseIDSQL = `
+		SELECT cs.course_id
 		FROM tasks t
 		JOIN blocks b ON b.id = t.block_id
 		JOIN course_snapshots cs ON cs.id = b.snapshot_id
@@ -169,13 +176,39 @@ func (r *PGRepo) RepoForTask(ctx context.Context, taskID, participantID uuid.UUI
 	return id, nil
 }
 
+// IsCourseMember delegates to the single membership implementation shared
+// with course-editing (GetMember) so attempts and course-editing can never
+// disagree on who counts as an active course member.
 func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
-	zap.L().Debug("Executing query", zap.String("query", isCourseMemberSQL))
-
-	var exists bool
-	err := r.db.GetContext(ctx, &exists, isCourseMemberSQL, userID, courseID)
+	member, err := r.GetMember(ctx, userID, courseID)
 	if err != nil {
 		return false, fmt.Errorf("check course membership: %w", err)
 	}
-	return exists, nil
+	return member != nil && member.IsActive, nil
+}
+
+// IsCourseTeacher reports whether userID is an active teacher of courseID,
+// used to authorize viewing another participant's attempts.
+func (r *PGRepo) IsCourseTeacher(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
+	member, err := r.GetMember(ctx, userID, courseID)
+	if err != nil {
+		return false, fmt.Errorf("check course teacher: %w", err)
+	}
+	return member != nil && member.IsActive && member.Role == membership.TeacherRole, nil
+}
+
+// GetTaskCourseID resolves the course a task belongs to, for authorization
+// purposes only — deliberately not scoped to the active snapshot.
+func (r *PGRepo) GetTaskCourseID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTaskCourseIDSQL))
+
+	var courseID uuid.UUID
+	err := r.db.GetContext(ctx, &courseID, getTaskCourseIDSQL, taskID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, fmt.Errorf("task %s not found", taskID)
+		}
+		return uuid.Nil, fmt.Errorf("get task course: %w", err)
+	}
+	return courseID, nil
 }

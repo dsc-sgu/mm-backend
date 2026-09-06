@@ -2,11 +2,16 @@ package tasks
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
+
+// ErrTaskGroupNotFound is returned when a task group id does not resolve to
+// an existing task group.
+var ErrTaskGroupNotFound = errors.New("task group not found")
 
 type TaskGroup struct {
 	ID       uuid.UUID `json:"id"       db:"id"        binding:"required"`
@@ -16,6 +21,7 @@ type TaskGroup struct {
 
 type Task struct {
 	ID          uuid.UUID      `json:"id"          db:"block_id"      binding:"required"`
+	SnapshotID  uuid.UUID      `json:"-"           db:"snapshot_id"`
 	TaskGroupID uuid.UUID      `json:"taskGroupID" db:"task_group_id" binding:"required"`
 	Name        string         `json:"name"        db:"name"          binding:"required"`
 	Patterns    pq.StringArray `json:"patterns"    db:"patterns"`
@@ -33,14 +39,6 @@ type CreateTaskGroup struct {
 
 type UpdateTaskGroup struct {
 	Name *string `json:"name"`
-}
-
-type UpdateTask struct {
-	Patterns    *[]string  `json:"patterns,omitempty"`
-	MaxGrade    *float32   `json:"maxGrade,omitempty"`
-	MaxAttempts *int       `json:"maxAttempts,omitempty"`
-	AvailableAt *time.Time `json:"availableAt,omitempty"`
-	DeadlineAt  *time.Time `json:"deadlineAt,omitempty"`
 }
 
 type CreateTaskGroupResponse struct {

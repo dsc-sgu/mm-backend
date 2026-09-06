@@ -2,9 +2,13 @@ package tasks
 
 import (
 	"context"
+	"errors"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
 
 type Handler struct {
@@ -13,6 +17,20 @@ type Handler struct {
 
 func NewHandler(taskSvc *Service) *Handler {
 	return &Handler{taskSvc: taskSvc}
+}
+
+func handleServiceError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrTaskGroupNotFound):
+		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, membership.ErrNotFound),
+		errors.Is(err, membership.ErrPermissionDenied):
+		return huma.Error403Forbidden(err.Error())
+	}
+	return huma.Error500InternalServerError(err.Error())
 }
 
 type GetTaskGroupInput struct {
@@ -24,30 +42,26 @@ type GetTaskGroupOutput struct {
 }
 
 func (h *Handler) GetTaskGroup(ctx context.Context, input *GetTaskGroupInput) (*GetTaskGroupOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	groupID, err := uuid.Parse(input.GroupID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	tg, err := h.taskSvc.GetTaskGroupByID(ctx, groupID)
+	result, err := h.taskSvc.GetTaskGroup(ctx, userID, sessionID, groupID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
-	if tg == nil {
+	if result == nil {
 		return nil, huma.Error404NotFound("task group not found")
 	}
 
-	tasksList, err := h.taskSvc.GetTasks(ctx, groupID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	result := TaskGroupWithTasks{
-		TaskGroup: *tg,
-		Tasks:     tasksList,
-	}
-
-	return &GetTaskGroupOutput{Body: &result}, nil
+	return &GetTaskGroupOutput{Body: result}, nil
 }
 
 type CreateTaskGroupInput struct {
@@ -59,9 +73,14 @@ type CreateTaskGroupOutput struct {
 }
 
 func (h *Handler) CreateTaskGroup(ctx context.Context, input *CreateTaskGroupInput) (*CreateTaskGroupOutput, error) {
-	tg, err := h.taskSvc.CreateTaskGroup(ctx, &input.Body)
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	tg, err := h.taskSvc.CreateTaskGroup(ctx, userID, &input.Body)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &CreateTaskGroupOutput{
@@ -79,14 +98,19 @@ type PatchTaskGroupOutput struct {
 }
 
 func (h *Handler) PatchTaskGroup(ctx context.Context, input *PatchTaskGroupInput) (*PatchTaskGroupOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	groupID, err := uuid.Parse(input.GroupID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	tg, err := h.taskSvc.UpdateTaskGroup(ctx, groupID, &input.Body)
+	tg, err := h.taskSvc.UpdateTaskGroup(ctx, userID, groupID, &input.Body)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &PatchTaskGroupOutput{Body: tg}, nil
@@ -97,13 +121,18 @@ type DeleteTaskGroupInput struct {
 }
 
 func (h *Handler) DeleteTaskGroup(ctx context.Context, input *DeleteTaskGroupInput) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	groupID, err := uuid.Parse(input.GroupID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	if err := h.taskSvc.DeleteTaskGroup(ctx, groupID); err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+	if err := h.taskSvc.DeleteTaskGroup(ctx, userID, groupID); err != nil {
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -115,6 +144,11 @@ type UploadTemplateInput struct {
 }
 
 func (h *Handler) UploadTemplate(ctx context.Context, input *UploadTemplateInput) (*struct{}, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	groupID, err := uuid.Parse(input.GroupID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
@@ -124,8 +158,8 @@ func (h *Handler) UploadTemplate(ctx context.Context, input *UploadTemplateInput
 		return nil, huma.Error400BadRequest("empty body")
 	}
 
-	if err := h.taskSvc.UploadTemplate(ctx, groupID, input.RawBody); err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+	if err := h.taskSvc.UploadTemplate(ctx, userID, groupID, input.RawBody); err != nil {
+		return nil, handleServiceError(err)
 	}
 
 	return nil, nil
@@ -140,39 +174,21 @@ type GetTasksOutput struct {
 }
 
 func (h *Handler) GetTasks(ctx context.Context, input *GetTasksInput) (*GetTasksOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	sessionID := session.SessionIDFromContext(ctx)
+	if userID == uuid.Nil || sessionID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
 	groupID, err := uuid.Parse(input.GroupID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	taskList, err := h.taskSvc.GetTasks(ctx, groupID)
+	taskList, err := h.taskSvc.GetTasks(ctx, userID, sessionID, groupID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &GetTasksOutput{Body: taskList}, nil
-}
-
-type PatchTaskInput struct {
-	GroupID string `path:"group_id"`
-	TaskID  string `path:"task_id"`
-	Body    UpdateTask
-}
-
-type PatchTaskOutput struct {
-	Body *Task
-}
-
-func (h *Handler) PatchTask(ctx context.Context, input *PatchTaskInput) (*PatchTaskOutput, error) {
-	taskID, err := uuid.Parse(input.TaskID)
-	if err != nil {
-		return nil, huma.Error400BadRequest("parsing task_id: " + err.Error())
-	}
-
-	task, err := h.taskSvc.UpdateTask(ctx, taskID, &input.Body)
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-
-	return &PatchTaskOutput{Body: task}, nil
 }

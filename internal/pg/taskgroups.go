@@ -13,14 +13,29 @@ import (
 )
 
 const (
+	// Scoped to the active snapshot, same as getTaskByNameSQL: with each
+	// snapshot generation of a task keeping its own row, an unscoped query
+	// here would mix in patterns from historical, no-longer-live generations.
 	getTaskPatternsSQL = `
-		SELECT name, patterns FROM tasks
-		WHERE task_group_id = $1 AND array_length(patterns, 1) > 0
-		ORDER BY name
+		SELECT t.name, t.patterns
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
+		JOIN course_snapshots cs ON cs.id = t.snapshot_id
+		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = t.snapshot_id
+		WHERE t.task_group_id = $1 AND array_length(t.patterns, 1) > 0
+		ORDER BY t.name
 	`
 
+	// Only resolves a task if its block is part of the course's currently
+	// active (published) snapshot, so a git push can't target a task that
+	// only exists in an unpublished draft.
 	getTaskByNameSQL = `
-		SELECT block_id FROM tasks WHERE task_group_id = $1 AND name = $2
+		SELECT t.block_id
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
+		JOIN course_snapshots cs ON cs.id = b.snapshot_id
+		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = b.snapshot_id
+		WHERE t.task_group_id = $1 AND t.name = $2
 	`
 
 	getTaskPatternsByTaskIDSQL = `
@@ -52,14 +67,42 @@ const (
 		DELETE FROM task_groups WHERE id = $1
 	`
 
+	// Both queries join blocks so a task whose block has been (soft-)deleted
+	// disappears from every read path, the same as a fully deleted task would.
 	getTaskByIDSQL = `
-		SELECT block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
-		FROM tasks WHERE block_id = $1
+		SELECT t.block_id, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
+		WHERE t.block_id = $1
 	`
 
-	getTasksSQL = `
-		SELECT block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
-		FROM tasks WHERE task_group_id = $1 ORDER BY name
+	// Scoped to a specific snapshot (the caller's own in-progress draft, or
+	// the course's active/published snapshot — see ResolveViewSnapshot):
+	// each snapshot generation of a task has its own row, so listing "all"
+	// tasks for a group without this scope would return one row per
+	// generation ever copied.
+	getTasksByGroupAndSnapshotSQL = `
+		SELECT t.block_id, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
+		FROM tasks t
+		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
+		WHERE t.task_group_id = $1 AND t.snapshot_id = $2
+		ORDER BY t.name
+	`
+
+	// resolveViewSnapshotSQL picks the caller's own in-progress draft for
+	// courseID, if they currently hold its edit lock; ResolveViewSnapshot
+	// falls back to the course's active snapshot when this finds nothing.
+	resolveViewSnapshotSQL = `
+		SELECT cs.id
+		FROM course_snapshots cs
+		JOIN course_locks cl ON cl.course_id = cs.course_id
+		WHERE cs.course_id = $1
+		  AND cs.status = 'draft'
+		  AND cs.created_by = $2
+		  AND cl.user_id = $2
+		  AND cl.session_id = $3
+		  AND cl.expires_at > NOW()
+		LIMIT 1
 	`
 
 	updateTaskSQL = `
@@ -186,10 +229,10 @@ func (r *PGRepo) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*tasks.Task
 	return &task, nil
 }
 
-func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID uuid.UUID) ([]*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTasksSQL))
+func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID, snapshotID uuid.UUID) ([]*tasks.Task, error) {
+	zap.L().Debug("Executing query", zap.String("query", getTasksByGroupAndSnapshotSQL))
 
-	rows, err := r.db.QueryxContext(ctx, getTasksSQL, taskGroupID)
+	rows, err := r.db.QueryxContext(ctx, getTasksByGroupAndSnapshotSQL, taskGroupID, snapshotID)
 	if err != nil {
 		return nil, fmt.Errorf("get tasks: %w", err)
 	}
@@ -210,30 +253,6 @@ func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID uuid.UUID) ([]*tasks.
 	return taskList, rows.Err()
 }
 
-func (r *PGRepo) UpdateTask(ctx context.Context, taskID uuid.UUID, update *tasks.UpdateTask) (*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", updateTaskSQL))
-
-	var patterns any
-	if update.Patterns != nil {
-		patterns = pq.StringArray(*update.Patterns)
-	}
-
-	var task tasks.Task
-	err := r.db.QueryRowContext(
-		ctx, updateTaskSQL,
-		patterns, update.MaxGrade, update.MaxAttempts,
-		update.AvailableAt, update.DeadlineAt, taskID,
-	).Scan(&task.ID, &task.TaskGroupID, &task.Name, &task.Patterns,
-		&task.MaxGrade, &task.MaxAttempts, &task.AvailableAt, &task.DeadlineAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task %s: not found", taskID)
-		}
-		return nil, fmt.Errorf("update task: %w", err)
-	}
-	return &task, nil
-}
-
 func (r *PGRepo) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskCountSQL))
 
@@ -251,6 +270,9 @@ func (r *PGRepo) GetCourseIDByTaskGroup(ctx context.Context, taskGroupID uuid.UU
 	var courseID uuid.UUID
 	err := r.db.GetContext(ctx, &courseID, getCourseIDByTaskGroupSQL, taskGroupID)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, tasks.ErrTaskGroupNotFound
+		}
 		return uuid.Nil, fmt.Errorf("get course by task group %s: %w", taskGroupID, err)
 	}
 	return courseID, nil
@@ -313,4 +335,29 @@ func (r *PGRepo) GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) 
 		return nil, fmt.Errorf("get task patterns by id: %w", err)
 	}
 	return patterns, nil
+}
+
+// ResolveViewSnapshot picks which snapshot generation of a course's tasks a
+// caller should see: their own in-progress draft, if they currently hold the
+// course's edit lock, otherwise the course's active (published) snapshot.
+func (r *PGRepo) ResolveViewSnapshot(ctx context.Context, courseID, userID, sessionID uuid.UUID) (uuid.UUID, error) {
+	zap.L().Debug("Executing query", zap.String("query", resolveViewSnapshotSQL))
+
+	var draftID uuid.UUID
+	err := r.db.GetContext(ctx, &draftID, resolveViewSnapshotSQL, courseID, userID, sessionID)
+	if err == nil {
+		return draftID, nil
+	}
+	if err != sql.ErrNoRows {
+		return uuid.Nil, fmt.Errorf("resolve draft snapshot: %w", err)
+	}
+
+	course, err := r.GetCourseByID(ctx, courseID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve view snapshot: get course: %w", err)
+	}
+	if course == nil || course.ActiveSnapshotID == nil {
+		return uuid.Nil, fmt.Errorf("course %s has no active snapshot", courseID)
+	}
+	return *course.ActiveSnapshotID, nil
 }

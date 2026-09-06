@@ -48,9 +48,15 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 
 	// Creating a task creates a "task"-typed block, which requires a draft
 	// snapshot to exist for the course.
-	LockCourse(t, &backendPort, &testUser, courseID)
+	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
 
 	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "taskA")
+
+	// A task only becomes attemptable (over HTTP or SSH) once it is part of
+	// the course's active, published snapshot.
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, lockResult.DraftSnapshotID,
+	))
 
 	identity := generateSSHKeyPair(t)
 	RegisterTestSSHKey(t, &backendPort, &testUser, "test-key", identity.authorizedKey)

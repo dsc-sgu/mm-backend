@@ -65,15 +65,6 @@ func (s *Service) MoveBlock(
 	return nil
 }
 
-func (s *Service) UpdateBlockContent(
-	ctx context.Context,
-	ref BlockRef,
-	editCtx EditContext,
-	model *UpdateBlock,
-) (*Block, error) {
-	return s.repo.UpdateBlockContent(ctx, ref, editCtx, model)
-}
-
 func (s *Service) DeleteBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) error {
 	return s.repo.DeleteBlockByID(ctx, ref, editCtx)
 }
