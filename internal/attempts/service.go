@@ -347,7 +347,11 @@ func (s *Service) onPush(
 	if err != nil {
 		return
 	}
-	defer os.Remove(filepath.Join(base, "push-options"))
+	defer func() {
+		if err := os.Remove(filepath.Join(base, "push-options")); err != nil {
+			zap.L().Warn("remove push-options file", zap.Error(err))
+		}
+	}()
 	name := parseSubmitOption(
 		strings.Split(strings.TrimSpace(string(options)), "\n"),
 	)
@@ -362,7 +366,11 @@ func (s *Service) onPush(
 	if err != nil {
 		return
 	}
-	defer os.Remove(filepath.Join(base, "push-tags"))
+	defer func() {
+		if err := os.Remove(filepath.Join(base, "push-tags")); err != nil {
+			zap.L().Warn("remove push-tags file", zap.Error(err))
+		}
+	}()
 	for _, hash := range strings.Fields(string(tags)) {
 		if err := s.recordAttempt(ctx, id, taskID, hash); err != nil {
 			zap.L().Error("save pushed attempt", zap.Error(err))
