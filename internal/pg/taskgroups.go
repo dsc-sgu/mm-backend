@@ -49,22 +49,27 @@ const (
 	`
 
 	getTaskGroupByIDSQL = `
-		SELECT id, course_id, name FROM task_groups WHERE id = $1
+		SELECT id, course_id, name FROM task_groups
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	getTaskGroupByNameSQL = `
 		SELECT id, course_id, name
 		FROM task_groups
-		WHERE name = $1 AND course_id = $2
+		WHERE name = $1 AND course_id = $2 AND deleted_at IS NULL
 	`
 
 	updateTaskGroupSQL = `
-		UPDATE task_groups SET name = $1 WHERE id = $2
+		UPDATE task_groups SET name = $1
+		WHERE id = $2 AND deleted_at IS NULL
 		RETURNING id, course_id, name
 	`
 
+	// Soft-deleted, like blocks: tasks from any snapshot generation, including
+	// history, may still reference the group.
 	deleteTaskGroupSQL = `
-		DELETE FROM task_groups WHERE id = $1
+		UPDATE task_groups SET deleted_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	// Both queries join blocks so a task whose block has been deleted disappears
@@ -117,11 +122,13 @@ const (
 	`
 
 	getTaskGroupIDByNameSQL = `
-		SELECT id FROM task_groups WHERE name = $1 AND course_id = $2
+		SELECT id FROM task_groups
+		WHERE name = $1 AND course_id = $2 AND deleted_at IS NULL
 	`
 
 	getCourseIDByTaskGroupSQL = `
-		SELECT course_id FROM task_groups WHERE id = $1
+		SELECT course_id FROM task_groups
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	getTaskCountSQL = `

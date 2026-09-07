@@ -10,9 +10,10 @@ import (
 )
 
 type TaskGroup struct {
-	ID       uuid.UUID `json:"id"       db:"id"        binding:"required"`
-	CourseID uuid.UUID `json:"courseID" db:"course_id" binding:"required"`
-	Name     string    `json:"name"     db:"name"      binding:"required"`
+	ID        uuid.UUID  `json:"id"       db:"id"         binding:"required"`
+	CourseID  uuid.UUID  `json:"courseID" db:"course_id"  binding:"required"`
+	Name      string     `json:"name"     db:"name"       binding:"required"`
+	DeletedAt *time.Time `json:"-"        db:"deleted_at"`
 }
 
 type Task struct {

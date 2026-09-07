@@ -238,6 +238,101 @@ func TestDeleteTaskGroup(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, getResp.StatusCode)
 }
 
+// TestDeleteTaskGroupWithTasks is a regression test for a bug where deleting
+// a task group that still had tasks referencing it (from any snapshot
+// generation) crashed with a raw foreign key violation instead of succeeding
+// via soft-delete.
+func TestDeleteTaskGroupWithTasks(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		backendPort.Port(),
+		groupID,
+	)
+
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	require.NoError(t, err)
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	// Group should no longer be retrievable.
+	getReq, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+
+	getResp, err := testUser.Client.Do(getReq)
+	require.NoError(t, err)
+	defer func() {
+		if err := getResp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusNotFound, getResp.StatusCode)
+}
+
+// TestCreateTaskGroupReusesDeletedName checks that a task group name freed up
+// by a soft-delete can be reused: uniqueness is scoped to non-deleted groups
+// only (a partial index), not to the table as a whole.
+func TestCreateTaskGroupReusesDeletedName(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	firstGroupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+
+	deleteURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		backendPort.Port(),
+		firstGroupID,
+	)
+	deleteReq, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	require.NoError(t, err)
+	deleteResp, err := testUser.Client.Do(deleteReq)
+	require.NoError(t, err)
+	defer func() {
+		if err := deleteResp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
+
+	secondGroupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	require.NotZero(t, secondGroupID)
+	require.NotEqual(t, firstGroupID, secondGroupID)
+}
+
 func TestCreateTask(t *testing.T) {
 	clearDatabases(t)
 
