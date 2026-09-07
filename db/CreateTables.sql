@@ -191,9 +191,14 @@ CREATE TABLE task_groups (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     course_id uuid NOT NULL REFERENCES courses(id),
     name varchar(128) NOT NULL,
-
-    UNIQUE (course_id, name)
+    deleted_at timestamp
 );
+
+-- NOTE(Ezhkin-Kot): task_groups is soft-deleted (like blocks) rather than
+-- hard-deleted, since tasks from any snapshot generation, including old
+-- history, may still reference a group; a partial index keeps names unique
+-- only among the still-live groups, so a deleted name can be reused.
+CREATE UNIQUE INDEX idx_task_groups_course_name ON task_groups(course_id, name) WHERE (deleted_at IS NULL);
 
 -- NOTE(nrydanov): task is a subtype of block — the composite FK plus
 -- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
