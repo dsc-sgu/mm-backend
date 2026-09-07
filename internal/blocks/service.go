@@ -8,21 +8,6 @@ import (
 	"github.com/google/uuid"
 )
 
-var (
-	ErrSnapshotNotFound = errors.New("snapshot not found")
-	ErrSnapshotNotDraft = errors.New(
-		"cannot modify blocks in a non-draft snapshot",
-	)
-	ErrInvalidBlockForMoveAfter = errors.New(
-		"block cannot be moved after itself",
-	)
-	ErrBlockNotFound      = errors.New("block not found")
-	ErrAfterBlockNotFound = errors.New(
-		"after_block_id does not exist in this snapshot",
-	)
-	ErrPermissionDenied = errors.New("permission denied")
-)
-
 type Service struct {
 	repo              Repo
 	rebalanceWorker   *RebalanceWorker
@@ -41,18 +26,62 @@ func NewService(
 	}
 }
 
+var (
+	ErrSnapshotNotFound = errors.New("snapshot not found")
+	ErrSnapshotNotDraft = errors.New(
+		"cannot modify blocks in a non-draft snapshot",
+	)
+	ErrInvalidBlockForMoveAfter = errors.New(
+		"block cannot be moved after itself",
+	)
+	ErrBlockNotFound      = errors.New("block not found")
+	ErrAfterBlockNotFound = errors.New(
+		"after_block_id does not exist in this snapshot",
+	)
+	ErrPermissionDenied  = errors.New("permission denied")
+	ErrTaskGroupNotFound = errors.New("task group not found")
+	ErrInvalidTaskBlock  = errors.New("task data supplied for a non-task block")
+)
+
+// CreateBlock creates a block (and, if it's a task-type block, its task data
+// alongside it), enqueueing a lexorank rebalance if positions have grown too long.
+func (s *Service) CreateBlock(
+	ctx context.Context,
+	command CreateBlockCommand,
+) (*CreatedBlock, error) {
+	result, err := s.repo.CreateBlock(ctx, command)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.PositionLength > s.lexoRankThreshold {
+		s.rebalanceWorker.Enqueue(result.SnapshotID)
+	}
+
+	return result, nil
+}
+
+// PatchBlock updates a block's own data and, if it's a task-type block, its
+// task fields.
+func (s *Service) PatchBlock(
+	ctx context.Context,
+	command PatchBlockCommand,
+) (*PatchedBlock, error) {
+	return s.repo.PatchBlock(ctx, command)
+}
+
 // MoveBlock changes block's position so that it comes after afterBlockID
 func (s *Service) MoveBlock(
 	ctx context.Context,
-	ref BlockRef,
 	editCtx EditContext,
+	ref BlockRef,
 	afterBlockID *uuid.UUID,
 ) error {
 	if afterBlockID != nil && *afterBlockID == ref.BlockID {
 		return ErrInvalidBlockForMoveAfter
 	}
 
-	newPosition, err := s.repo.MoveBlock(ctx, ref, editCtx, afterBlockID)
+	newPosition, err := s.repo.MoveBlock(ctx, editCtx, ref, afterBlockID)
 	if err != nil {
 		return err
 	}
@@ -65,16 +94,20 @@ func (s *Service) MoveBlock(
 	return nil
 }
 
-func (s *Service) DeleteBlockByID(ctx context.Context, ref BlockRef, editCtx EditContext) error {
-	return s.repo.DeleteBlockByID(ctx, ref, editCtx)
+func (s *Service) DeleteBlockByID(
+	ctx context.Context,
+	editCtx EditContext,
+	ref BlockRef,
+) error {
+	return s.repo.DeleteBlockByID(ctx, editCtx, ref)
 }
 
 func (s *Service) GetBlockByID(
 	ctx context.Context,
-	ref BlockRef,
 	editCtx EditContext,
+	ref BlockRef,
 ) (*Block, error) {
-	return s.repo.GetBlockByID(ctx, ref, editCtx)
+	return s.repo.GetBlockByID(ctx, editCtx, ref)
 }
 
 func (s *Service) GetAllBlocksBySnapshotID(

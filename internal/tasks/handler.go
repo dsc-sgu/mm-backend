@@ -41,7 +41,10 @@ type GetTaskGroupOutput struct {
 	Body *TaskGroupWithTasks
 }
 
-func (h *Handler) GetTaskGroup(ctx context.Context, input *GetTaskGroupInput) (*GetTaskGroupOutput, error) {
+func (h *Handler) GetTaskGroup(
+	ctx context.Context,
+	input *GetTaskGroupInput,
+) (*GetTaskGroupOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	sessionID := session.SessionIDFromContext(ctx)
 	if userID == uuid.Nil || sessionID == uuid.Nil {
@@ -72,7 +75,10 @@ type CreateTaskGroupOutput struct {
 	Body *CreateTaskGroupResponse
 }
 
-func (h *Handler) CreateTaskGroup(ctx context.Context, input *CreateTaskGroupInput) (*CreateTaskGroupOutput, error) {
+func (h *Handler) CreateTaskGroup(
+	ctx context.Context,
+	input *CreateTaskGroupInput,
+) (*CreateTaskGroupOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -97,7 +103,10 @@ type PatchTaskGroupOutput struct {
 	Body *TaskGroup
 }
 
-func (h *Handler) PatchTaskGroup(ctx context.Context, input *PatchTaskGroupInput) (*PatchTaskGroupOutput, error) {
+func (h *Handler) PatchTaskGroup(
+	ctx context.Context,
+	input *PatchTaskGroupInput,
+) (*PatchTaskGroupOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -120,7 +129,10 @@ type DeleteTaskGroupInput struct {
 	GroupID string `path:"group_id"`
 }
 
-func (h *Handler) DeleteTaskGroup(ctx context.Context, input *DeleteTaskGroupInput) (*struct{}, error) {
+func (h *Handler) DeleteTaskGroup(
+	ctx context.Context,
+	input *DeleteTaskGroupInput,
+) (*struct{}, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -143,7 +155,10 @@ type UploadTemplateInput struct {
 	RawBody []byte
 }
 
-func (h *Handler) UploadTemplate(ctx context.Context, input *UploadTemplateInput) (*struct{}, error) {
+func (h *Handler) UploadTemplate(
+	ctx context.Context,
+	input *UploadTemplateInput,
+) (*struct{}, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -158,7 +173,12 @@ func (h *Handler) UploadTemplate(ctx context.Context, input *UploadTemplateInput
 		return nil, huma.Error400BadRequest("empty body")
 	}
 
-	if err := h.taskSvc.UploadTemplate(ctx, userID, groupID, input.RawBody); err != nil {
+	if err := h.taskSvc.UploadTemplate(
+		ctx,
+		userID,
+		groupID,
+		input.RawBody,
+	); err != nil {
 		return nil, handleServiceError(err)
 	}
 
@@ -173,7 +193,10 @@ type GetTasksOutput struct {
 	Body []*Task
 }
 
-func (h *Handler) GetTasks(ctx context.Context, input *GetTasksInput) (*GetTasksOutput, error) {
+func (h *Handler) GetTasks(
+	ctx context.Context,
+	input *GetTasksInput,
+) (*GetTasksOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	sessionID := session.SessionIDFromContext(ctx)
 	if userID == uuid.Nil || sessionID == uuid.Nil {

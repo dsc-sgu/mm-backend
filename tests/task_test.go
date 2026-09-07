@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dsc-sgu/mm-backend/internal/content"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
@@ -60,7 +60,13 @@ func TestCreateTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	require.NotZero(t, groupID)
 }
 
@@ -69,10 +75,23 @@ func TestGetTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	require.NotZero(t, groupID)
 
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
 	require.NotZero(t, taskID)
 
 	url := fmt.Sprintf(
@@ -134,7 +153,13 @@ func TestUpdateTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/tasks/%s",
@@ -171,7 +196,13 @@ func TestDeleteTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/tasks/%s",
@@ -212,9 +243,22 @@ func TestCreateTask(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
 	require.NotZero(t, taskID)
 }
 
@@ -228,7 +272,13 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
@@ -236,10 +286,10 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 		courseID,
 	)
 
-	body, err := json.Marshal(content.CreateBlockCommand{
+	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
 		Data:      []byte("true"),
-		Task: &content.TaskData{
+		Task: &blocks.TaskData{
 			TaskGroupID: groupID,
 			Name:        "Task NoPatternsField",
 			MaxGrade:    100,
@@ -275,10 +325,30 @@ func TestGetTasks(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 
-	taskID1 := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
-	taskID2 := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 2")
+	taskID1 := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
+	taskID2 := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 2",
+	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
@@ -317,8 +387,21 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
 
 	require.Equal(t, http.StatusNoContent, PublishDraft(
 		t, &backendPort, &testUser, courseID, draftSnapshotID,
@@ -352,7 +435,12 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedTasks))
 
 	require.Len(t, receivedTasks, 1)
-	require.NotEqual(t, taskID, receivedTasks[0].ID, "task should have a new block id in the new draft generation")
+	require.NotEqual(
+		t,
+		taskID,
+		receivedTasks[0].ID,
+		"task should have a new block id in the new draft generation",
+	)
 	require.Equal(t, "Task 1", receivedTasks[0].Name)
 	require.Equal(t, groupID, receivedTasks[0].TaskGroupID)
 }
@@ -365,8 +453,21 @@ func TestUpdateTask(t *testing.T) {
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
@@ -377,8 +478,8 @@ func TestUpdateTask(t *testing.T) {
 	)
 
 	newGrade := float32(50)
-	body, _ := json.Marshal(content.PatchBlockCommand{
-		Task: &content.TaskUpdate{
+	body, _ := json.Marshal(blocks.PatchBlockCommand{
+		Task: &blocks.TaskUpdate{
 			MaxGrade: &newGrade,
 			Patterns: &[]string{"*.go"},
 		},
@@ -402,7 +503,7 @@ func TestUpdateTask(t *testing.T) {
 		Block *struct {
 			ID uuid.UUID `json:"id"`
 		} `json:"block"`
-		Task *content.TaskData `json:"task"`
+		Task *blocks.TaskData `json:"task"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
 
@@ -417,7 +518,13 @@ func TestUploadTemplate(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	zipData := buildTestZip(t, map[string]string{
@@ -451,7 +558,13 @@ func TestUploadTemplateEmptyBody(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
 	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	url := fmt.Sprintf(
@@ -483,8 +596,21 @@ func TestPushAttemptRejectsUnpublishedTask(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "Group 1")
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
 	// Note: the draft created by setupCourseForTasks is never published.
 
 	zipData := buildTestZip(t, map[string]string{

@@ -30,7 +30,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
-	"github.com/dsc-sgu/mm-backend/internal/content"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
@@ -195,7 +194,6 @@ func main() {
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
-	contentHandler := content.NewHandler(content.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold))
 	courseHandler := courses.NewHandler(courseService, lockService, membershipService, userService)
 	disciplineHandler := disciplines.NewHandler(disciplineService)
 	sshKeyHandler := sshkeys.NewHandler(sshKeyService)
@@ -205,7 +203,6 @@ func main() {
 	api.SetupRoutes(
 		v1,
 		blockHandler,
-		contentHandler,
 		courseHandler,
 		disciplineHandler,
 		userHandler,

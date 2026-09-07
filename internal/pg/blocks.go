@@ -7,12 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 const (
@@ -116,6 +118,35 @@ const (
 		FROM course_locks
 		WHERE course_id = $1
 		FOR UPDATE
+	`
+
+	createTaskSQL = `
+		INSERT INTO tasks (block_id, snapshot_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
+		VALUES (:block_id, :snapshot_id, :task_group_id, :name, :patterns, :max_grade, :max_attempts, :available_at, :deadline_at)
+		RETURNING block_id
+	`
+
+	// Generates the copied blocks' ids explicitly (instead of relying on the
+	// column DEFAULT) so a task-type block's `tasks` row can be copied
+	// alongside it under the new block_id. Each snapshot generation of a task
+	// gets its own tasks row (see the NOTE on the tasks table), so this never
+	// collides with the source's still-existing row.
+	copyBlocksToSnapshotSQL = `
+		WITH source AS (
+			SELECT id AS old_id, uuidv7() AS new_id, block_type, data, position
+			FROM blocks
+			WHERE snapshot_id = $2 AND deleted_at IS NULL
+		),
+		inserted_blocks AS (
+			INSERT INTO blocks (id, snapshot_id, block_type, data, position)
+			SELECT new_id, $1, block_type, data, position FROM source
+			RETURNING id
+		)
+		INSERT INTO tasks (block_id, snapshot_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
+		SELECT s.new_id, $1, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
+		FROM source s
+		JOIN tasks t ON t.block_id = s.old_id
+		WHERE s.block_type = 'task' AND s.new_id IN (SELECT id FROM inserted_blocks)
 	`
 )
 
@@ -292,10 +323,270 @@ func getPositionsForMoveTx(
 	return blocks.AdjacentPositions{Prev: leftPos, Next: rightPos}, nil
 }
 
+func (r *PGRepo) CreateBlock(
+	ctx context.Context,
+	command blocks.CreateBlockCommand,
+) (*blocks.CreatedBlock, error) {
+	if command.BlockType == "task" && command.Task == nil {
+		return nil, fmt.Errorf("task data is required for task block")
+	}
+
+	var result blocks.CreatedBlock
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		var snapshot snapshots.Snapshot
+		if err := tx.GetContext(
+			ctx,
+			&snapshot,
+			getDraftSnapshotSQL,
+			command.CourseID,
+			command.Actor.UserID,
+		); err != nil {
+			return fmt.Errorf("get current draft snapshot: %w", err)
+		}
+		if err := validateEditableSnapshot(
+			ctx,
+			tx,
+			command.CourseID,
+			snapshot.ID,
+			command.Actor.UserID,
+			command.Actor.SessionID,
+		); err != nil {
+			return err
+		}
+
+		positions, err := getPositionsForMoveTx(
+			ctx,
+			tx,
+			snapshot.ID,
+			command.AfterBlockID,
+		)
+		if err != nil {
+			return fmt.Errorf("resolve positions: %w", err)
+		}
+		block := blocks.Block{
+			SnapshotID: snapshot.ID,
+			BlockType:  command.BlockType,
+			Data:       command.Data,
+			Position: blocks.CalculateMiddlePosition(
+				positions.Prev,
+				positions.Next,
+			),
+		}
+		stmt, err := tx.PrepareNamedContext(ctx, createBlockSQL)
+		if err != nil {
+			return fmt.Errorf("prepare block: %w", err)
+		}
+		defer func() {
+			if closeErr := stmt.Close(); closeErr != nil {
+				zap.L().
+					Error("failed to close block statement", zap.Error(closeErr))
+			}
+		}()
+		if err := stmt.GetContext(ctx, &block.ID, block); err != nil {
+			return fmt.Errorf("create block: %w", err)
+		}
+		result.BlockID = block.ID
+		result.SnapshotID = block.SnapshotID
+		result.PositionLength = len(block.Position)
+
+		if command.BlockType != "task" {
+			return nil
+		}
+		task := command.Task
+
+		var groupCourseID uuid.UUID
+		if err := tx.GetContext(
+			ctx,
+			&groupCourseID,
+			getCourseIDByTaskGroupSQL,
+			task.TaskGroupID,
+		); err != nil {
+			if err == sql.ErrNoRows {
+				return blocks.ErrTaskGroupNotFound
+			}
+			return fmt.Errorf("get task group course: %w", err)
+		}
+		if groupCourseID != command.CourseID {
+			return blocks.ErrTaskGroupNotFound
+		}
+
+		patterns := task.Patterns
+		if patterns == nil {
+			patterns = []string{}
+		}
+		newTask := tasks.Task{
+			ID:          block.ID,
+			SnapshotID:  block.SnapshotID,
+			TaskGroupID: task.TaskGroupID,
+			Name:        task.Name,
+			Patterns:    pq.StringArray(patterns),
+			MaxGrade:    task.MaxGrade,
+			MaxAttempts: task.MaxAttempts,
+			AvailableAt: task.AvailableAt,
+			DeadlineAt:  task.DeadlineAt,
+		}
+		taskStmt, err := tx.PrepareNamedContext(ctx, createTaskSQL)
+		if err != nil {
+			return fmt.Errorf("prepare task: %w", err)
+		}
+		defer func() {
+			if closeErr := taskStmt.Close(); closeErr != nil {
+				zap.L().
+					Error("failed to close task statement", zap.Error(closeErr))
+			}
+		}()
+		if err := taskStmt.GetContext(
+			ctx,
+			&result.TaskID,
+			newTask,
+		); err != nil {
+			return fmt.Errorf("create task: %w", err)
+		}
+		zap.L().
+			Debug("created task block", zap.String("block_id", block.ID.String()))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// PatchBlock updates a block's own data and, if it is a task-type block, its
+// task fields - all gated by the same editable-snapshot check used for
+// every other course-editing mutation.
+func (r *PGRepo) PatchBlock(
+	ctx context.Context,
+	command blocks.PatchBlockCommand,
+) (*blocks.PatchedBlock, error) {
+	var result blocks.PatchedBlock
+	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
+		if err := validateEditableSnapshot(
+			ctx,
+			tx,
+			command.CourseID,
+			command.SnapshotID,
+			command.Actor.UserID,
+			command.Actor.SessionID,
+		); err != nil {
+			return err
+		}
+		if err := blockBelongsToSnapshot(
+			ctx,
+			tx,
+			command.BlockID,
+			command.SnapshotID,
+		); err != nil {
+			return err
+		}
+
+		// nil Data must reach the driver as SQL NULL (not an empty string),
+		// so that COALESCE leaves the existing column value untouched
+		var data any
+		if len(command.Data) > 0 {
+			data = string(command.Data)
+		}
+		var block blocks.Block
+		if err := tx.QueryRowxContext(ctx, updateBlockContentSQL, command.BlockType, data, command.BlockID).
+			StructScan(&block); err != nil {
+			return fmt.Errorf("tx update block: %w", err)
+		}
+		result.Block = &block
+
+		if command.Task != nil && block.BlockType != "task" {
+			return blocks.ErrInvalidTaskBlock
+		}
+		if block.BlockType != "task" {
+			return nil
+		}
+
+		var task *blocks.TaskData
+		var taskErr error
+		if command.Task != nil {
+			task, taskErr = patchTask(ctx, tx, block.ID, command.Task)
+		} else {
+			task, taskErr = getTaskData(ctx, tx, block.ID)
+		}
+		if taskErr != nil {
+			return taskErr
+		}
+		result.Task = task
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// taskDataFromRow converts a tasks.Task row into the blocks.TaskData shape
+// returned to callers.
+func taskDataFromRow(task tasks.Task) *blocks.TaskData {
+	return &blocks.TaskData{
+		TaskGroupID: task.TaskGroupID,
+		Name:        task.Name,
+		Patterns:    []string(task.Patterns),
+		MaxGrade:    task.MaxGrade,
+		MaxAttempts: task.MaxAttempts,
+		AvailableAt: task.AvailableAt,
+		DeadlineAt:  task.DeadlineAt,
+	}
+}
+
+// getTaskData reads a task-type block's current task data, without modifying
+// it. A task-type block with no matching tasks row is an invariant violation
+// - surfaced as ErrInvalidTaskBlock rather than a raw "not found".
+func getTaskData(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	blockID uuid.UUID,
+) (*blocks.TaskData, error) {
+	var task tasks.Task
+	if err := tx.GetContext(ctx, &task, getTaskByIDSQL, blockID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, blocks.ErrInvalidTaskBlock
+		}
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+	return taskDataFromRow(task), nil
+}
+
+// patchTask updates the task attached to blockID and returns its new state.
+// A task-type block with no matching tasks row is an invariant violation -
+// surfaced as ErrInvalidTaskBlock rather than a raw "not found".
+func patchTask(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	blockID uuid.UUID,
+	update *blocks.TaskUpdate,
+) (*blocks.TaskData, error) {
+	var patterns any
+	if update.Patterns != nil {
+		patterns = pq.StringArray(*update.Patterns)
+	}
+	var task tasks.Task
+	if err := tx.QueryRowxContext(
+		ctx,
+		updateTaskSQL,
+		patterns,
+		update.MaxGrade,
+		update.MaxAttempts,
+		update.AvailableAt,
+		update.DeadlineAt,
+		blockID,
+	).StructScan(&task); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, blocks.ErrInvalidTaskBlock
+		}
+		return nil, fmt.Errorf("tx update task: %w", err)
+	}
+	return taskDataFromRow(task), nil
+}
+
 func (r *PGRepo) GetBlockByID(
 	ctx context.Context,
-	ref blocks.BlockRef,
 	editCtx blocks.EditContext,
+	ref blocks.BlockRef,
 ) (*blocks.Block, error) {
 	if _, err := r.validateViewableSnapshot(
 		ctx,
@@ -360,8 +651,8 @@ func (r *PGRepo) GetAllBlocksBySnapshotID(
 
 func (r *PGRepo) MoveBlock(
 	ctx context.Context,
-	ref blocks.BlockRef,
 	editCtx blocks.EditContext,
+	ref blocks.BlockRef,
 	afterBlockID *uuid.UUID,
 ) (string, error) {
 	var newPosition string
@@ -486,8 +777,8 @@ func (r *PGRepo) RebalanceBlockPositions(
 
 func (r *PGRepo) DeleteBlockByID(
 	ctx context.Context,
-	ref blocks.BlockRef,
 	editCtx blocks.EditContext,
+	ref blocks.BlockRef,
 ) error {
 	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		if err := validateEditableSnapshot(
@@ -559,3 +850,25 @@ func (r *PGRepo) DeleteAllBlocksByCourseID(
 	return nil
 }
 
+// CopyBlocksToSnapshot copies blocks (and, for task-type blocks, their
+// attached task data) from one snapshot to another.
+func (r *PGRepo) CopyBlocksToSnapshot(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	sourceSnapshotID uuid.UUID,
+	targetSnapshotID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing block copying query within transaction", zap.String("query", copyBlocksToSnapshotSQL))
+
+	_, err := tx.ExecContext(
+		ctx,
+		copyBlocksToSnapshotSQL,
+		targetSnapshotID,
+		sourceSnapshotID,
+	)
+	if err != nil {
+		return fmt.Errorf("tx copy blocks: %w", err)
+	}
+	return nil
+}

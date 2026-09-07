@@ -12,7 +12,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/config"
-	"github.com/dsc-sgu/mm-backend/internal/content"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
@@ -22,7 +21,6 @@ import (
 func SetupRoutes(
 	api huma.API,
 	blockHandler *blocks.Handler,
-	contentHandler *content.Handler,
 	courseHandler *courses.Handler,
 	disciplineHandler *disciplines.Handler,
 	userHandler *users.Handler,
@@ -46,7 +44,7 @@ func SetupRoutes(
 	setupSSHKeyRoutes(private, sshKeyHandler)
 	setupAttemptRoutes(private, attemptHandler)
 	setupTaskRoutes(private, taskHandler)
-	setupBlockRoutes(private, blockHandler, contentHandler)
+	setupBlockRoutes(private, blockHandler)
 	setupCourseRoutes(private, courseHandler)
 	setupDisciplineRoutes(private, disciplineHandler)
 }
@@ -77,14 +75,14 @@ func setupUserRoutes(public, private huma.API, uc *users.Handler) {
 	}, uc.GetSession)
 }
 
-func setupBlockRoutes(api huma.API, bh *blocks.Handler, ch *content.Handler) {
+func setupBlockRoutes(api huma.API, bh *blocks.Handler) {
 	const blockPath = "/courses/{course_id}/snapshots/{snapshot_id}/blocks"
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/blocks",
 		Summary: "Create block in the current course draft", DefaultStatus: http.StatusCreated,
 		Tags: []string{"Block"},
-	}, ch.CreateBlock)
+	}, bh.CreateBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodGet, Path: blockPath + "/{block_id}",
@@ -96,7 +94,7 @@ func setupBlockRoutes(api huma.API, bh *blocks.Handler, ch *content.Handler) {
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}",
 		Summary: "Update existing block", DefaultStatus: http.StatusOK,
 		Tags: []string{"Block"},
-	}, ch.PatchBlock)
+	}, bh.PatchBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}/move",

@@ -115,16 +115,28 @@ func (r *PGRepo) GetParticipant(fingerprint string) (uuid.UUID, error) {
 	return ownerID, nil
 }
 
-func (r *PGRepo) SaveAttempt(repoID pkggit.RepoID, taskID uuid.UUID, commitHash string) error {
+func (r *PGRepo) SaveAttempt(
+	repoID pkggit.RepoID,
+	taskID uuid.UUID,
+	commitHash string,
+) error {
 	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
-	_, err := r.db.Exec(saveAttemptSQL, repoID.ParticipantID, taskID, time.Now(), transitionData)
+	_, err := r.db.Exec(
+		saveAttemptSQL,
+		repoID.ParticipantID,
+		taskID,
+		time.Now(),
+		transitionData,
+	)
 	if err != nil {
 		return fmt.Errorf("save attempt: %w", err)
 	}
 	return nil
 }
 
-func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (attempt.AttemptCommitInfo, error) {
+func (r *PGRepo) GetAttemptCommitInfo(
+	attemptID uuid.UUID,
+) (attempt.AttemptCommitInfo, error) {
 	var (
 		info           attempt.AttemptCommitInfo
 		transitionData json.RawMessage
@@ -134,7 +146,11 @@ func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (attempt.AttemptCommi
 		&info.UserID, &info.TaskID, &transitionData, &info.TaskGroupID, &info.CourseID,
 	)
 	if err != nil {
-		return info, fmt.Errorf("get attempt %s commit info: %w", attemptID, err)
+		return info, fmt.Errorf(
+			"get attempt %s commit info: %w",
+			attemptID,
+			err,
+		)
 	}
 
 	var data struct {
@@ -144,14 +160,20 @@ func (r *PGRepo) GetAttemptCommitInfo(attemptID uuid.UUID) (attempt.AttemptCommi
 		return info, fmt.Errorf("parse transition_data: %w", err)
 	}
 	if data.CommitHash == "" {
-		return info, fmt.Errorf("attempt %s has no commit_hash in transition_data", attemptID)
+		return info, fmt.Errorf(
+			"attempt %s has no commit_hash in transition_data",
+			attemptID,
+		)
 	}
 
 	info.CommitHash = data.CommitHash
 	return info, nil
 }
 
-func (r *PGRepo) GetCourse(ctx context.Context, name string) (uuid.UUID, error) {
+func (r *PGRepo) GetCourse(
+	ctx context.Context,
+	name string,
+) (uuid.UUID, error) {
 	course, err := r.GetCourseByName(ctx, name)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("course %q: %w", name, err)
@@ -160,7 +182,10 @@ func (r *PGRepo) GetCourse(ctx context.Context, name string) (uuid.UUID, error) 
 	return course.ID, nil
 }
 
-func (r *PGRepo) RepoForTask(ctx context.Context, taskID, participantID uuid.UUID) (pkggit.RepoID, error) {
+func (r *PGRepo) RepoForTask(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (pkggit.RepoID, error) {
 	zap.L().Debug("Executing query", zap.String("query", repoForTaskSQL))
 
 	id := pkggit.RepoID{ParticipantID: participantID}
@@ -170,7 +195,11 @@ func (r *PGRepo) RepoForTask(ctx context.Context, taskID, participantID uuid.UUI
 		if err == sql.ErrNoRows {
 			return pkggit.RepoID{}, fmt.Errorf("task %s not found", taskID)
 		}
-		return pkggit.RepoID{}, fmt.Errorf("resolve repository for task %s: %w", taskID, err)
+		return pkggit.RepoID{}, fmt.Errorf(
+			"resolve repository for task %s: %w",
+			taskID,
+			err,
+		)
 	}
 
 	return id, nil
@@ -179,7 +208,10 @@ func (r *PGRepo) RepoForTask(ctx context.Context, taskID, participantID uuid.UUI
 // IsCourseMember delegates to the single membership implementation shared
 // with course-editing (GetMember) so attempts and course-editing can never
 // disagree on who counts as an active course member.
-func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
+func (r *PGRepo) IsCourseMember(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (bool, error) {
 	member, err := r.GetMember(ctx, userID, courseID)
 	if err != nil {
 		return false, fmt.Errorf("check course membership: %w", err)
@@ -189,17 +221,24 @@ func (r *PGRepo) IsCourseMember(ctx context.Context, userID, courseID uuid.UUID)
 
 // IsCourseTeacher reports whether userID is an active teacher of courseID,
 // used to authorize viewing another participant's attempts.
-func (r *PGRepo) IsCourseTeacher(ctx context.Context, userID, courseID uuid.UUID) (bool, error) {
+func (r *PGRepo) IsCourseTeacher(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (bool, error) {
 	member, err := r.GetMember(ctx, userID, courseID)
 	if err != nil {
 		return false, fmt.Errorf("check course teacher: %w", err)
 	}
-	return member != nil && member.IsActive && member.Role == membership.TeacherRole, nil
+	return member != nil && member.IsActive &&
+		member.Role == membership.TeacherRole, nil
 }
 
 // GetTaskCourseID resolves the course a task belongs to, for authorization
-// purposes only — deliberately not scoped to the active snapshot.
-func (r *PGRepo) GetTaskCourseID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error) {
+// purposes only - deliberately not scoped to the active snapshot.
+func (r *PGRepo) GetTaskCourseID(
+	ctx context.Context,
+	taskID uuid.UUID,
+) (uuid.UUID, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskCourseIDSQL))
 
 	var courseID uuid.UUID

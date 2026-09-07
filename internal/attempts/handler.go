@@ -18,6 +18,20 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
+func handleServiceError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrPermissionDenied):
+		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, ErrDifferentUsers),
+		errors.Is(err, ErrDifferentTasks):
+		return huma.Error400BadRequest(err.Error())
+	}
+	return huma.Error500InternalServerError(err.Error())
+}
+
 type GetDiffInput struct {
 	ID1 string `query:"id1"`
 	ID2 string `query:"id2"`
@@ -27,7 +41,10 @@ type GetDiffOutput struct {
 	Body []string
 }
 
-func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOutput, error) {
+func (h *Handler) GetDiff(
+	ctx context.Context,
+	input *GetDiffInput,
+) (*GetDiffOutput, error) {
 	callerID := session.UserIDFromContext(ctx)
 	if callerID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -45,10 +62,7 @@ func (h *Handler) GetDiff(ctx context.Context, input *GetDiffInput) (*GetDiffOut
 
 	diff, err := h.svc.GetDiff(ctx, callerID, id1, id2)
 	if err != nil {
-		if errors.Is(err, ErrNotCourseMember) {
-			return nil, huma.Error403Forbidden("")
-		}
-		return nil, huma.Error400BadRequest("cannot make diff: " + err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &GetDiffOutput{Body: diff}, nil
@@ -65,7 +79,10 @@ type PushAttemptOutput struct {
 	}
 }
 
-func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*PushAttemptOutput, error) {
+func (h *Handler) PushAttempt(
+	ctx context.Context,
+	input *PushAttemptInput,
+) (*PushAttemptOutput, error) {
 	taskID, err := uuid.Parse(input.TaskID)
 	if err != nil {
 		return nil, huma.Error400BadRequest("parsing taskID: " + err.Error())
@@ -76,12 +93,14 @@ func (h *Handler) PushAttempt(ctx context.Context, input *PushAttemptInput) (*Pu
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	commitHash, err := h.svc.PushAttempt(ctx, taskID, participantID, input.RawBody)
+	commitHash, err := h.svc.PushAttempt(
+		ctx,
+		taskID,
+		participantID,
+		input.RawBody,
+	)
 	if err != nil {
-		if errors.Is(err, ErrNotCourseMember) {
-			return nil, huma.Error403Forbidden("")
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	out := &PushAttemptOutput{}
@@ -98,7 +117,10 @@ type GetAttemptsOutput struct {
 	Body []Attempt
 }
 
-func (h *Handler) GetAttempts(ctx context.Context, input *GetAttemptsInput) (*GetAttemptsOutput, error) {
+func (h *Handler) GetAttempts(
+	ctx context.Context,
+	input *GetAttemptsInput,
+) (*GetAttemptsOutput, error) {
 	callerID := session.UserIDFromContext(ctx)
 	if callerID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
@@ -111,15 +133,14 @@ func (h *Handler) GetAttempts(ctx context.Context, input *GetAttemptsInput) (*Ge
 
 	participantID, err := uuid.Parse(input.ParticipantID)
 	if err != nil {
-		return nil, huma.Error400BadRequest("parsing participant_id: " + err.Error())
+		return nil, huma.Error400BadRequest(
+			"parsing participant_id: " + err.Error(),
+		)
 	}
 
 	attempts, err := h.svc.GetAttempts(ctx, callerID, taskID, participantID)
 	if err != nil {
-		if errors.Is(err, ErrNotCourseMember) {
-			return nil, huma.Error403Forbidden("")
-		}
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, handleServiceError(err)
 	}
 
 	return &GetAttemptsOutput{Body: attempts}, nil
