@@ -40,9 +40,11 @@ func (s *Service) Add(ownerID uuid.UUID, model AddSSHKey) error {
 		CreatedAt:   time.Now(),
 	})
 }
+
 func (s *Service) Delete(ownerID uuid.UUID, fingerprint string) error {
 	return s.repo.DeleteSSHKey(ownerID, fingerprint)
 }
+
 func (s *Service) ParticipantID(fingerprint string) (uuid.UUID, error) {
 	return s.repo.GetParticipant(fingerprint)
 }

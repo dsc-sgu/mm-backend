@@ -79,7 +79,11 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() {
+		if err := os.RemoveAll(tmp); err != nil {
+			log.Error("remove temp dir", "error", err, "path", tmp)
+		}
+	}()
 	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: templatePath})
 	if err != nil {
 		return fmt.Errorf("clone template: %w", err)
@@ -119,7 +123,11 @@ func (m *Manager) commitFiles(barePath string, files []FileInfo, message string)
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() {
+		if err := os.RemoveAll(tmp); err != nil {
+			log.Error("remove temp dir", "error", err, "path", tmp)
+		}
+	}()
 	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: barePath})
 	if err != nil {
 		if err = os.RemoveAll(tmp); err != nil {
