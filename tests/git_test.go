@@ -44,13 +44,26 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 		"Git Course",
 	)
 
-	groupID := CreateTestTaskGroup(t, &backendPort, &testUser, courseID, "group1")
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"group1",
+	)
 
 	// Creating a task creates a "task"-typed block, which requires a draft
 	// snapshot to exist for the course.
 	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
 
-	taskID := CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "taskA")
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"taskA",
+	)
 
 	// A task only becomes attemptable (over HTTP or SSH) once it is part of
 	// the course's active, published snapshot.
@@ -59,7 +72,13 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	))
 
 	identity := generateSSHKeyPair(t)
-	RegisterTestSSHKey(t, &backendPort, &testUser, "test-key", identity.authorizedKey)
+	RegisterTestSSHKey(
+		t,
+		&backendPort,
+		&testUser,
+		"test-key",
+		identity.authorizedKey,
+	)
 
 	workDir := t.TempDir()
 	repoURL := fmt.Sprintf(

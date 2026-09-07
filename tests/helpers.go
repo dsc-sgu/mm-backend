@@ -25,7 +25,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
-	"github.com/dsc-sgu/mm-backend/internal/content"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
@@ -472,7 +471,7 @@ func CreateTestBlockAfter(
 		courseID,
 	)
 
-	blockBody, err := json.Marshal(content.CreateBlockCommand{
+	blockBody, err := json.Marshal(blocks.CreateBlockCommand{
 		AfterBlockID: afterBlockID,
 		BlockType:    "text",
 		Data:         []byte("true"),
@@ -648,10 +647,10 @@ func CreateTestTask(
 		courseID,
 	)
 
-	body, err := json.Marshal(content.CreateBlockCommand{
+	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
 		Data:      []byte("true"),
-		Task: &content.TaskData{
+		Task: &blocks.TaskData{
 			TaskGroupID: groupID,
 			Name:        name,
 			MaxGrade:    100,
@@ -711,7 +710,16 @@ func generateSSHKeyPair(t *testing.T) sshIdentity {
 	dir := t.TempDir()
 	privPath := filepath.Join(dir, "id_ed25519")
 
-	cmd := exec.Command("ssh-keygen", "-t", "ed25519", "-f", privPath, "-N", "", "-q")
+	cmd := exec.Command(
+		"ssh-keygen",
+		"-t",
+		"ed25519",
+		"-f",
+		privPath,
+		"-N",
+		"",
+		"-q",
+	)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
@@ -756,7 +764,12 @@ func RegisterTestSSHKey(
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 }
 
-func runGitCommand(t *testing.T, dir string, identity sshIdentity, args ...string) (string, error) {
+func runGitCommand(
+	t *testing.T,
+	dir string,
+	identity sshIdentity,
+	args ...string,
+) (string, error) {
 	t.Helper()
 
 	cmd := exec.Command("git", args...)

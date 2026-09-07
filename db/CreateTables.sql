@@ -199,9 +199,7 @@ CREATE TABLE task_groups (
 -- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
 -- NOTE(Ezhkin-Kot): a task's block gets a fresh id every time its snapshot is
 -- copied (course-editing draft creation / snapshot switch), so a task's own
--- row is copied alongside it rather than shared — each snapshot generation
--- of a task has its own row, keyed by that generation's block_id. snapshot_id
--- is denormalized from blocks so uniqueness can be scoped per-generation.
+-- row is copied alongside it.
 CREATE TABLE tasks (
     block_id uuid PRIMARY KEY,
     block_type block_type NOT NULL DEFAULT 'task',

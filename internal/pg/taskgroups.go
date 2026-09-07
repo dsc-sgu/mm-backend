@@ -67,8 +67,8 @@ const (
 		DELETE FROM task_groups WHERE id = $1
 	`
 
-	// Both queries join blocks so a task whose block has been (soft-)deleted
-	// disappears from every read path, the same as a fully deleted task would.
+	// Both queries join blocks so a task whose block has been deleted disappears
+	// from every read path, the same as a fully deleted task would.
 	getTaskByIDSQL = `
 		SELECT t.block_id, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
 		FROM tasks t
@@ -77,7 +77,7 @@ const (
 	`
 
 	// Scoped to a specific snapshot (the caller's own in-progress draft, or
-	// the course's active/published snapshot — see ResolveViewSnapshot):
+	// the course's active/published snapshot - see ResolveViewSnapshot):
 	// each snapshot generation of a task has its own row, so listing "all"
 	// tasks for a group without this scope would return one row per
 	// generation ever copied.
@@ -129,14 +129,29 @@ const (
 	`
 )
 
-func (r *PGRepo) GetTaskGroupIDByName(ctx context.Context, name string, courseID uuid.UUID) (uuid.UUID, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskGroupIDByNameSQL))
+func (r *PGRepo) GetTaskGroupIDByName(
+	ctx context.Context,
+	name string,
+	courseID uuid.UUID,
+) (uuid.UUID, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getTaskGroupIDByNameSQL))
 
 	var groupID uuid.UUID
-	err := r.db.GetContext(ctx, &groupID, getTaskGroupIDByNameSQL, name, courseID)
+	err := r.db.GetContext(
+		ctx,
+		&groupID,
+		getTaskGroupIDByNameSQL,
+		name,
+		courseID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return uuid.Nil, fmt.Errorf("task group %q in course %s: not found", name, courseID)
+			return uuid.Nil, fmt.Errorf(
+				"task group %q in course %s: not found",
+				name,
+				courseID,
+			)
 		}
 		return uuid.Nil, fmt.Errorf("get task group id by name: %w", err)
 	}
@@ -158,7 +173,10 @@ func (r *PGRepo) CreateTaskGroup(
 	return &tg, nil
 }
 
-func (r *PGRepo) GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*tasks.TaskGroup, error) {
+func (r *PGRepo) GetTaskGroupByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*tasks.TaskGroup, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskGroupByIDSQL))
 
 	var tg tasks.TaskGroup
@@ -172,14 +190,22 @@ func (r *PGRepo) GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*tasks.Tas
 	return &tg, nil
 }
 
-func (r *PGRepo) GetTaskGroupByName(ctx context.Context, name string, courseID uuid.UUID) (*tasks.TaskGroup, error) {
+func (r *PGRepo) GetTaskGroupByName(
+	ctx context.Context,
+	name string,
+	courseID uuid.UUID,
+) (*tasks.TaskGroup, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskGroupByNameSQL))
 
 	var tg tasks.TaskGroup
 	err := r.db.GetContext(ctx, &tg, getTaskGroupByNameSQL, name, courseID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task group %q in course %s: not found", name, courseID)
+			return nil, fmt.Errorf(
+				"task group %q in course %s: not found",
+				name,
+				courseID,
+			)
 		}
 		return nil, fmt.Errorf("get task group by name: %w", err)
 	}
@@ -215,7 +241,10 @@ func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *PGRepo) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*tasks.Task, error) {
+func (r *PGRepo) GetTaskByID(
+	ctx context.Context,
+	taskID uuid.UUID,
+) (*tasks.Task, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskByIDSQL))
 
 	var task tasks.Task
@@ -229,10 +258,19 @@ func (r *PGRepo) GetTaskByID(ctx context.Context, taskID uuid.UUID) (*tasks.Task
 	return &task, nil
 }
 
-func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID, snapshotID uuid.UUID) ([]*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTasksByGroupAndSnapshotSQL))
+func (r *PGRepo) GetTasks(
+	ctx context.Context,
+	taskGroupID, snapshotID uuid.UUID,
+) ([]*tasks.Task, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getTasksByGroupAndSnapshotSQL))
 
-	rows, err := r.db.QueryxContext(ctx, getTasksByGroupAndSnapshotSQL, taskGroupID, snapshotID)
+	rows, err := r.db.QueryxContext(
+		ctx,
+		getTasksByGroupAndSnapshotSQL,
+		taskGroupID,
+		snapshotID,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("get tasks: %w", err)
 	}
@@ -253,7 +291,10 @@ func (r *PGRepo) GetTasks(ctx context.Context, taskGroupID, snapshotID uuid.UUID
 	return taskList, rows.Err()
 }
 
-func (r *PGRepo) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error) {
+func (r *PGRepo) GetTaskCount(
+	ctx context.Context,
+	taskGroupID uuid.UUID,
+) (int, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskCountSQL))
 
 	var count int
@@ -264,21 +305,37 @@ func (r *PGRepo) GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, 
 	return count, nil
 }
 
-func (r *PGRepo) GetCourseIDByTaskGroup(ctx context.Context, taskGroupID uuid.UUID) (uuid.UUID, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseIDByTaskGroupSQL))
+func (r *PGRepo) GetCourseIDByTaskGroup(
+	ctx context.Context,
+	taskGroupID uuid.UUID,
+) (uuid.UUID, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getCourseIDByTaskGroupSQL))
 
 	var courseID uuid.UUID
-	err := r.db.GetContext(ctx, &courseID, getCourseIDByTaskGroupSQL, taskGroupID)
+	err := r.db.GetContext(
+		ctx,
+		&courseID,
+		getCourseIDByTaskGroupSQL,
+		taskGroupID,
+	)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return uuid.Nil, tasks.ErrTaskGroupNotFound
 		}
-		return uuid.Nil, fmt.Errorf("get course by task group %s: %w", taskGroupID, err)
+		return uuid.Nil, fmt.Errorf(
+			"get course by task group %s: %w",
+			taskGroupID,
+			err,
+		)
 	}
 	return courseID, nil
 }
 
-func (r *PGRepo) GetTaskPatterns(ctx context.Context, taskGroupID uuid.UUID) (map[string][]string, error) {
+func (r *PGRepo) GetTaskPatterns(
+	ctx context.Context,
+	taskGroupID uuid.UUID,
+) (map[string][]string, error) {
 	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsSQL))
 
 	rows, err := r.db.QueryxContext(ctx, getTaskPatternsSQL, taskGroupID)
@@ -313,18 +370,27 @@ func (r *PGRepo) GetTaskByName(
 	zap.L().Debug("Executing query", zap.String("query", getTaskByNameSQL))
 
 	var taskID uuid.UUID
-	err := r.db.QueryRowContext(ctx, getTaskByNameSQL, taskGroupID, name).Scan(&taskID)
+	err := r.db.QueryRowContext(ctx, getTaskByNameSQL, taskGroupID, name).
+		Scan(&taskID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return uuid.Nil, fmt.Errorf("task %q in group %s: not found", name, taskGroupID)
+			return uuid.Nil, fmt.Errorf(
+				"task %q in group %s: not found",
+				name,
+				taskGroupID,
+			)
 		}
 		return uuid.Nil, fmt.Errorf("get task by name: %w", err)
 	}
 	return taskID, nil
 }
 
-func (r *PGRepo) GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsByTaskIDSQL))
+func (r *PGRepo) GetTaskPatternsByTaskID(
+	ctx context.Context,
+	taskID uuid.UUID,
+) ([]string, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", getTaskPatternsByTaskIDSQL))
 
 	var patterns pq.StringArray
 	err := r.db.GetContext(ctx, &patterns, getTaskPatternsByTaskIDSQL, taskID)
@@ -340,11 +406,22 @@ func (r *PGRepo) GetTaskPatternsByTaskID(ctx context.Context, taskID uuid.UUID) 
 // ResolveViewSnapshot picks which snapshot generation of a course's tasks a
 // caller should see: their own in-progress draft, if they currently hold the
 // course's edit lock, otherwise the course's active (published) snapshot.
-func (r *PGRepo) ResolveViewSnapshot(ctx context.Context, courseID, userID, sessionID uuid.UUID) (uuid.UUID, error) {
-	zap.L().Debug("Executing query", zap.String("query", resolveViewSnapshotSQL))
+func (r *PGRepo) ResolveViewSnapshot(
+	ctx context.Context,
+	courseID, userID, sessionID uuid.UUID,
+) (uuid.UUID, error) {
+	zap.L().
+		Debug("Executing query", zap.String("query", resolveViewSnapshotSQL))
 
 	var draftID uuid.UUID
-	err := r.db.GetContext(ctx, &draftID, resolveViewSnapshotSQL, courseID, userID, sessionID)
+	err := r.db.GetContext(
+		ctx,
+		&draftID,
+		resolveViewSnapshotSQL,
+		courseID,
+		userID,
+		sessionID,
+	)
 	if err == nil {
 		return draftID, nil
 	}
@@ -354,10 +431,16 @@ func (r *PGRepo) ResolveViewSnapshot(ctx context.Context, courseID, userID, sess
 
 	course, err := r.GetCourseByID(ctx, courseID)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("resolve view snapshot: get course: %w", err)
+		return uuid.Nil, fmt.Errorf(
+			"resolve view snapshot: get course: %w",
+			err,
+		)
 	}
 	if course == nil || course.ActiveSnapshotID == nil {
-		return uuid.Nil, fmt.Errorf("course %s has no active snapshot", courseID)
+		return uuid.Nil, fmt.Errorf(
+			"course %s has no active snapshot",
+			courseID,
+		)
 	}
 	return *course.ActiveSnapshotID, nil
 }

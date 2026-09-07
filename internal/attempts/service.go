@@ -26,13 +26,37 @@ type Service struct {
 	identities IdentityReader
 }
 
-func NewService(repo Repo, git GitManager, tasks TaskReader, courses CourseReader, identities IdentityReader) *Service {
-	return &Service{repo: repo, git: git, tasks: tasks, courses: courses, identities: identities}
+func NewService(
+	repo Repo,
+	git GitManager,
+	tasks TaskReader,
+	courses CourseReader,
+	identities IdentityReader,
+) *Service {
+	return &Service{
+		repo:       repo,
+		git:        git,
+		tasks:      tasks,
+		courses:    courses,
+		identities: identities,
+	}
 }
+
+var (
+	// ErrPermissionDenied is returned when a participant may not touch a course's repositories.
+	ErrPermissionDenied = errors.New("permission denied")
+	// ErrDifferentUsers is returned when a diff is requested between two attempts belonging to different users.
+	ErrDifferentUsers = errors.New("attempts belong to different users")
+	// ErrDifferentTasks is returned when a diff is requested between two attempts at different tasks.
+	ErrDifferentTasks = errors.New("attempts belong to different tasks")
+)
 
 // GetAttempts lists a participant's attempts at a task. The caller must be
 // that participant themself or an active teacher of the task's course.
-func (s *Service) GetAttempts(ctx context.Context, callerID, taskID, participantID uuid.UUID) ([]Attempt, error) {
+func (s *Service) GetAttempts(
+	ctx context.Context,
+	callerID, taskID, participantID uuid.UUID,
+) ([]Attempt, error) {
 	if err := s.assertViewer(ctx, callerID, participantID, taskID); err != nil {
 		return nil, err
 	}
@@ -42,7 +66,10 @@ func (s *Service) GetAttempts(ctx context.Context, callerID, taskID, participant
 // assertViewer authorizes callerID to view ownerID's data for a task: either
 // they are the same person, or callerID is an active teacher of the course
 // the task belongs to.
-func (s *Service) assertViewer(ctx context.Context, callerID, ownerID, taskID uuid.UUID) error {
+func (s *Service) assertViewer(
+	ctx context.Context,
+	callerID, ownerID, taskID uuid.UUID,
+) error {
 	if callerID == ownerID {
 		return nil
 	}
@@ -55,23 +82,23 @@ func (s *Service) assertViewer(ctx context.Context, callerID, ownerID, taskID uu
 		return fmt.Errorf("check course teacher: %w", err)
 	}
 	if !isTeacher {
-		return ErrNotCourseMember
+		return ErrPermissionDenied
 	}
 	return nil
 }
 
-// ErrNotCourseMember is returned when a participant may not touch a course's repositories.
-var ErrNotCourseMember = errors.New("not a member of the course")
-
 // assertMember is the single authorization gate for repository access; the HTTP
 // and the SSH entry points both go through it.
-func (s *Service) assertMember(ctx context.Context, participantID, courseID uuid.UUID) error {
+func (s *Service) assertMember(
+	ctx context.Context,
+	participantID, courseID uuid.UUID,
+) error {
 	member, err := s.courses.IsCourseMember(ctx, participantID, courseID)
 	if err != nil {
 		return fmt.Errorf("check course membership: %w", err)
 	}
 	if !member {
-		return ErrNotCourseMember
+		return ErrPermissionDenied
 	}
 	return nil
 }
@@ -79,7 +106,10 @@ func (s *Service) assertMember(ctx context.Context, participantID, courseID uuid
 // repoForTask resolves the repository holding a participant's attempts at a task.
 // The course comes from the task itself, so a caller cannot point an attempt at a
 // course the task does not belong to.
-func (s *Service) repoForTask(ctx context.Context, taskID, participantID uuid.UUID) (pkggit.RepoID, error) {
+func (s *Service) repoForTask(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (pkggit.RepoID, error) {
 	id, err := s.repo.RepoForTask(ctx, taskID, participantID)
 	if err != nil {
 		return pkggit.RepoID{}, err
@@ -94,14 +124,23 @@ func (s *Service) repoForTask(ctx context.Context, taskID, participantID uuid.UU
 // produced the commit, the rules that govern accepting it and storing it live
 // here and nowhere else. Access is already settled by the caller's gate
 // (repoForTask over HTTP, authRepo over SSH), which runs before any work.
-func (s *Service) recordAttempt(ctx context.Context, id pkggit.RepoID, taskID uuid.UUID, commitHash string) error {
+func (s *Service) recordAttempt(
+	ctx context.Context,
+	id pkggit.RepoID,
+	taskID uuid.UUID,
+	commitHash string,
+) error {
 	if err := s.repo.SaveAttempt(id, taskID, commitHash); err != nil {
 		return fmt.Errorf("save attempt: %w", err)
 	}
 	return nil
 }
 
-func (s *Service) PushAttempt(ctx context.Context, taskID, participantID uuid.UUID, zipData []byte) (string, error) {
+func (s *Service) PushAttempt(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+	zipData []byte,
+) (string, error) {
 	id, err := s.repoForTask(ctx, taskID, participantID)
 	if err != nil {
 		return "", err
@@ -123,7 +162,10 @@ func (s *Service) PushAttempt(ctx context.Context, taskID, participantID uuid.UU
 			}
 		}
 		if !matched {
-			return "", fmt.Errorf("no uploaded files match required patterns for this task (%v)", patterns)
+			return "", fmt.Errorf(
+				"no uploaded files match required patterns for this task (%v)",
+				patterns,
+			)
 		}
 	}
 	if err := s.git.EnsureRepo(id); err != nil {
@@ -142,7 +184,10 @@ func (s *Service) PushAttempt(ctx context.Context, taskID, participantID uuid.UU
 	return hash, nil
 }
 
-func (s *Service) GetDiff(ctx context.Context, callerID, id1, id2 uuid.UUID) ([]string, error) {
+func (s *Service) GetDiff(
+	ctx context.Context,
+	callerID, id1, id2 uuid.UUID,
+) ([]string, error) {
 	one, err := s.repo.GetAttemptCommitInfo(id1)
 	if err != nil {
 		return nil, fmt.Errorf("get diff: %w", err)
@@ -152,7 +197,10 @@ func (s *Service) GetDiff(ctx context.Context, callerID, id1, id2 uuid.UUID) ([]
 		return nil, fmt.Errorf("get diff: %w", err)
 	}
 	if one.UserID != two.UserID {
-		return nil, errors.New("attempts belong to different users")
+		return nil, ErrDifferentUsers
+	}
+	if one.TaskID != two.TaskID {
+		return nil, ErrDifferentTasks
 	}
 	if callerID != one.UserID {
 		isTeacher, err := s.courses.IsCourseTeacher(ctx, callerID, one.CourseID)
@@ -160,11 +208,15 @@ func (s *Service) GetDiff(ctx context.Context, callerID, id1, id2 uuid.UUID) ([]
 			return nil, fmt.Errorf("check course teacher: %w", err)
 		}
 		if !isTeacher {
-			return nil, ErrNotCourseMember
+			return nil, ErrPermissionDenied
 		}
 	}
 	patterns, _ := s.tasks.GetTaskPatternsByTaskID(ctx, one.TaskID)
-	id := pkggit.RepoID{CourseID: one.CourseID, TaskGroupID: one.TaskGroupID, ParticipantID: one.UserID}
+	id := pkggit.RepoID{
+		CourseID:      one.CourseID,
+		TaskGroupID:   one.TaskGroupID,
+		ParticipantID: one.UserID,
+	}
 	return s.git.Diff(id, one.CommitHash, two.CommitHash, patterns)
 }
 
@@ -196,8 +248,19 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 			case pkggit.GitReceivePack:
 				switch access {
 				case pkggit.ReadWriteAccess, pkggit.AdminAccess:
-					if err := pkggit.GitPack(sess, gc, repoDir, repo); err != nil {
-						log.Error("git push failed", "error", err, "repo", rawRepo)
+					if err := pkggit.GitPack(
+						sess,
+						gc,
+						repoDir,
+						repo,
+					); err != nil {
+						log.Error(
+							"git push failed",
+							"error",
+							err,
+							"repo",
+							rawRepo,
+						)
 						pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
 					} else {
 						s.onPush(sess.Context(), rawRepo, repo, pk)
@@ -207,8 +270,15 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 				}
 			case pkggit.GitUploadPack, pkggit.GitUploadArchive:
 				switch access {
-				case pkggit.ReadOnlyAccess, pkggit.ReadWriteAccess, pkggit.AdminAccess:
-					if err := pkggit.GitPack(sess, gc, repoDir, repo); err != nil {
+				case pkggit.ReadOnlyAccess,
+					pkggit.ReadWriteAccess,
+					pkggit.AdminAccess:
+					if err := pkggit.GitPack(
+						sess,
+						gc,
+						repoDir,
+						repo,
+					); err != nil {
 						switch {
 						case errors.Is(err, pkggit.ErrInvalidRepo):
 							pkggit.Fatal(sess, pkggit.ErrInvalidRepo)
@@ -229,7 +299,11 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 	}
 }
 
-func (s *Service) repoRename(ctx context.Context, original string, key gossh.PublicKey) (string, error) {
+func (s *Service) repoRename(
+	ctx context.Context,
+	original string,
+	key gossh.PublicKey,
+) (string, error) {
 	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
 	if err != nil {
 		return "", err
@@ -243,7 +317,11 @@ func (s *Service) repoRename(ctx context.Context, original string, key gossh.Pub
 	return id.IntoPath() + ".git", nil
 }
 
-func (s *Service) authRepo(ctx context.Context, original, repo string, key ssh.PublicKey) pkggit.AccessLevel {
+func (s *Service) authRepo(
+	ctx context.Context,
+	original, repo string,
+	key ssh.PublicKey,
+) pkggit.AccessLevel {
 	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
 	if err != nil {
 		return pkggit.NoAccess
@@ -254,7 +332,11 @@ func (s *Service) authRepo(ctx context.Context, original, repo string, key ssh.P
 	return pkggit.ReadWriteAccess
 }
 
-func (s *Service) onPush(ctx context.Context, original, repo string, key ssh.PublicKey) {
+func (s *Service) onPush(
+	ctx context.Context,
+	original, repo string,
+	key ssh.PublicKey,
+) {
 	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
 	if err != nil {
 		zap.L().Error("resolve pushed repository", zap.Error(err))
@@ -266,7 +348,9 @@ func (s *Service) onPush(ctx context.Context, original, repo string, key ssh.Pub
 		return
 	}
 	defer os.Remove(filepath.Join(base, "push-options"))
-	name := parseSubmitOption(strings.Split(strings.TrimSpace(string(options)), "\n"))
+	name := parseSubmitOption(
+		strings.Split(strings.TrimSpace(string(options)), "\n"),
+	)
 	if name == "" {
 		return
 	}
@@ -288,10 +372,21 @@ func (s *Service) onPush(ctx context.Context, original, repo string, key ssh.Pub
 
 func (s *Service) onFetch(context.Context, string, string, ssh.PublicKey) {}
 
-func (s *Service) GetRepoID(ctx context.Context, path, fingerprint string) (pkggit.RepoID, error) {
-	parts := strings.Split(strings.Trim(strings.TrimSuffix(path, ".git"), string(os.PathSeparator)), string(os.PathSeparator))
+func (s *Service) GetRepoID(
+	ctx context.Context,
+	path, fingerprint string,
+) (pkggit.RepoID, error) {
+	parts := strings.Split(
+		strings.Trim(
+			strings.TrimSuffix(path, ".git"),
+			string(os.PathSeparator),
+		),
+		string(os.PathSeparator),
+	)
 	if len(parts) < 2 {
-		return pkggit.RepoID{}, errors.New("invalid path: need course/group_name")
+		return pkggit.RepoID{}, errors.New(
+			"invalid path: need course/group_name",
+		)
 	}
 	courseID, err := s.courses.GetCourse(ctx, parts[0])
 	if err != nil {
@@ -305,12 +400,19 @@ func (s *Service) GetRepoID(ctx context.Context, path, fingerprint string) (pkgg
 	if err != nil {
 		return pkggit.RepoID{}, err
 	}
-	return pkggit.RepoID{CourseID: courseID, TaskGroupID: groupID, ParticipantID: participantID}, nil
+	return pkggit.RepoID{
+		CourseID:      courseID,
+		TaskGroupID:   groupID,
+		ParticipantID: participantID,
+	}, nil
 }
 
 func parseSubmitOption(options []string) string {
 	for _, option := range options {
-		if value, ok := strings.CutPrefix(strings.TrimSpace(option), "submit="); ok {
+		if value, ok := strings.CutPrefix(
+			strings.TrimSpace(option),
+			"submit=",
+		); ok {
 			return strings.TrimSpace(value)
 		}
 	}
