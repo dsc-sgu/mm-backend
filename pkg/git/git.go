@@ -226,8 +226,15 @@ done
 	)
 }
 
-// WritePostReceiveHook writes a post-receive hook that saves new tag commit hashes
-// and push options to files for the Push hook to read.
+// WritePostReceiveHook writes a post-receive hook that saves new tag commit
+// hashes and push options to files for onPush to read. Both files are
+// unconditionally (re)written on every push, even when a file would end up
+// empty: onPush deletes them once it has read them, but only after a
+// successful push all the way through GitPack, so if a push option was
+// written and something downstream of receive-pack (e.g. GitPack's
+// post-processing) failed before onPush ran, the file would otherwise be
+// left on disk and misread by a later, unrelated push that carries no
+// options of its own.
 func WritePostReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -239,14 +246,16 @@ while read OLD NEW REF; do
     [ "$OLD" = "0000000000000000000000000000000000000000" ] && echo "$NEW"
   ;; esac
 done > "$GIT_DIR/push-tags"
-if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
-  i=0
-  while [ $i -lt $GIT_PUSH_OPTION_COUNT ]; do
-    eval "opt=\$GIT_PUSH_OPTION_$i"
-    echo "$opt"
-    i=$((i+1))
-  done > "$GIT_DIR/push-options"
-fi
+{
+  if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
+    i=0
+    while [ $i -lt $GIT_PUSH_OPTION_COUNT ]; do
+      eval "opt=\$GIT_PUSH_OPTION_$i"
+      echo "$opt"
+      i=$((i+1))
+    done
+  fi
+} > "$GIT_DIR/push-options"
 `
 	return os.WriteFile(
 		filepath.Join(hooksDir, "post-receive"),
