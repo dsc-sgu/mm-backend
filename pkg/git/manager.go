@@ -231,13 +231,49 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 	return os.WriteFile(PatternsFilePath(m.RepoPath(id)), []byte(content.String()), 0o644)
 }
 
+// MatchesAnyPattern reports whether name matches any of the given glob
+// patterns. Matching follows POSIX shell "case" pattern rules — the same
+// rules the pre-receive hook applies via a shell case statement (see
+// WritePreReceiveHook) — rather than filepath.Match's: '*' matches '/' too,
+// so a pattern like "*.go" matches a nested path like "cmd/main.go". This
+// keeps the accept/reject decision for a submission identical whether it
+// arrives over SSH git push or through the web zip upload (see the "Mask
+// gate" in internal/attempts/README.md).
 func MatchesAnyPattern(name string, patterns []string) bool {
 	for _, pattern := range patterns {
-		if matched, _ := filepath.Match(pattern, name); matched {
+		if globMatch(pattern, name) {
 			return true
 		}
 	}
 	return false
+}
+
+// globMatch matches name against a shell glob pattern supporting '*' (any
+// sequence of characters, including '/') and '?' (any single character).
+func globMatch(pattern, name string) bool {
+	pi, ni := 0, 0
+	starIdx, matchIdx := -1, 0
+	for ni < len(name) {
+		switch {
+		case pi < len(pattern) && (pattern[pi] == '?' || pattern[pi] == name[ni]):
+			pi++
+			ni++
+		case pi < len(pattern) && pattern[pi] == '*':
+			starIdx = pi
+			matchIdx = ni
+			pi++
+		case starIdx != -1:
+			pi = starIdx + 1
+			matchIdx++
+			ni = matchIdx
+		default:
+			return false
+		}
+	}
+	for pi < len(pattern) && pattern[pi] == '*' {
+		pi++
+	}
+	return pi == len(pattern)
 }
 
 func (m *Manager) ListMiddleware(next ssh.Handler) ssh.Handler {
