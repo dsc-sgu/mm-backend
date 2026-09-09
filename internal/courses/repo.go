@@ -52,10 +52,14 @@ type Repo interface {
 		ownerID uuid.UUID,
 	) (*Course, error)
 	GetCourseByID(ctx context.Context, id uuid.UUID) (*Course, error)
+	// GetPaginatedCourses lists courses ordered by name, keyset-paginated on
+	// (name, id); lastName must be the name of the course lastID belongs to
+	// (the last row of the previous page), not an independent cursor.
 	GetPaginatedCourses(
 		ctx context.Context,
 		limit int,
 		lastID uuid.UUID,
+		lastName string,
 		filter CourseFilter,
 	) ([]Course, error)
 	UpdateCourseByID(
