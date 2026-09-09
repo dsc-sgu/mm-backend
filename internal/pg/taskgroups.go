@@ -16,13 +16,18 @@ const (
 	// Scoped to the active snapshot, same as getTaskByNameSQL: with each
 	// snapshot generation of a task keeping its own row, an unscoped query
 	// here would mix in patterns from historical, no-longer-live generations.
+	//
+	// Deliberately not filtered to tasks with a non-empty patterns array:
+	// the pre-receive hook needs every live task name, including
+	// pattern-less ones, to tell "no patterns required" apart from "no such
+	// task" for an "-o submit=<name>" it doesn't recognize.
 	getTaskPatternsSQL = `
 		SELECT t.name, t.patterns
 		FROM tasks t
 		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
 		JOIN course_snapshots cs ON cs.id = t.snapshot_id
 		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = t.snapshot_id
-		WHERE t.task_group_id = $1 AND array_length(t.patterns, 1) > 0
+		WHERE t.task_group_id = $1
 		ORDER BY t.name
 	`
 
@@ -339,6 +344,11 @@ func (r *PGRepo) GetCourseIDByTaskGroup(
 	return courseID, nil
 }
 
+// GetTaskPatterns returns every active task in taskGroupID by name, mapped
+// to its required file patterns - an empty (but present) slice for a task
+// that doesn't require any. The presence of the key, not just its length,
+// is what lets a caller distinguish a real task with no pattern
+// requirements from a name that doesn't exist at all.
 func (r *PGRepo) GetTaskPatterns(
 	ctx context.Context,
 	taskGroupID uuid.UUID,
@@ -362,9 +372,7 @@ func (r *PGRepo) GetTaskPatterns(
 		if err := rows.Scan(&name, &patterns); err != nil {
 			return nil, fmt.Errorf("scan task patterns: %w", err)
 		}
-		if len(patterns) > 0 {
-			result[name] = patterns
-		}
+		result[name] = patterns
 	}
 	return result, rows.Err()
 }

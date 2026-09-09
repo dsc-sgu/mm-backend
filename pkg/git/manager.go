@@ -216,6 +216,12 @@ type filteredPatch struct {
 func (p *filteredPatch) FilePatches() []fdiff.FilePatch { return p.filePatches }
 func (p *filteredPatch) Message() string                { return p.message }
 
+// WritePatterns writes the pre-receive hook's ".mm-patterns" file: one
+// "<task name>\t<glob>" line per required pattern. A task with no patterns
+// still gets a single "<task name>\t" line with an empty glob - the hook
+// needs a line for every live task name, not just ones with patterns, to
+// tell "no patterns required" apart from "no such task" for an
+// "-o submit=<name>" it doesn't recognize.
 func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 	var content strings.Builder
 	names := make([]string, 0, len(patterns))
@@ -224,7 +230,12 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		for _, pattern := range patterns[name] {
+		filePatterns := patterns[name]
+		if len(filePatterns) == 0 {
+			_, _ = fmt.Fprintf(&content, "%s\t\n", name)
+			continue
+		}
+		for _, pattern := range filePatterns {
 			_, _ = fmt.Fprintf(&content, "%s\t%s\n", name, pattern)
 		}
 	}
