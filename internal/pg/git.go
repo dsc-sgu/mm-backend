@@ -120,13 +120,18 @@ func (r *PGRepo) SaveAttempt(
 	taskID uuid.UUID,
 	commitHash string,
 ) error {
-	transitionData := fmt.Sprintf(`{"commit_hash":"%s"}`, commitHash)
-	_, err := r.db.Exec(
+	transitionData, err := json.Marshal(struct {
+		CommitHash string `json:"commit_hash"`
+	}{CommitHash: commitHash})
+	if err != nil {
+		return fmt.Errorf("marshal transition data: %w", err)
+	}
+	_, err = r.db.Exec(
 		saveAttemptSQL,
 		repoID.ParticipantID,
 		taskID,
 		time.Now(),
-		transitionData,
+		string(transitionData),
 	)
 	if err != nil {
 		return fmt.Errorf("save attempt: %w", err)
