@@ -171,8 +171,12 @@ func EnsureRepo(dir, repo string) error {
 // Only tag refs (refs/tags/*) are checked; branch refs are always allowed.
 // The submitted task is selected via the "submit=<name>" push option
 // (e.g. -o submit=task1). Patterns are looked up by task name; the file is
-// tab-separated ("<name>\t<glob>"). Files are checked via git ls-tree on the
-// tag's commit.
+// tab-separated ("<name>\t<glob>", empty glob for a task with no required
+// patterns) and lists every live task in the group (see WritePatterns), so
+// a "submit=<name>" naming a task that doesn't exist at all is rejected
+// outright, rather than silently treated the same as "no patterns
+// required" the way an absent line would be. Files are checked via git
+// ls-tree on the tag's commit.
 func WritePreReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
@@ -203,11 +207,20 @@ while read OLD NEW REF; do
         *) continue ;;
     esac
     [ -z "$SUBMIT" ] && continue
-    [ -f "$PATTERNS_FILE" ] || continue
+    FOUND=""
     PATTERNS=""
-    while IFS="$TAB" read -r pname ppat; do
-        [ "$pname" = "$SUBMIT" ] && PATTERNS="$PATTERNS $ppat"
-    done < "$PATTERNS_FILE"
+    if [ -f "$PATTERNS_FILE" ]; then
+        while IFS="$TAB" read -r pname ppat; do
+            if [ "$pname" = "$SUBMIT" ]; then
+                FOUND=1
+                [ -n "$ppat" ] && PATTERNS="$PATTERNS $ppat"
+            fi
+        done < "$PATTERNS_FILE"
+    fi
+    if [ -z "$FOUND" ]; then
+        echo "ERROR: no task named '$SUBMIT' in this group" >&2
+        exit 1
+    fi
     [ -z "$PATTERNS" ] && continue
     FILES=$(git ls-tree --name-only -r "$NEW" 2>/dev/null)
     [ -z "$FILES" ] && continue
