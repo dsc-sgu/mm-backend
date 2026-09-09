@@ -221,15 +221,22 @@ func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Cou
 	return &course, nil
 }
 
+// GetPaginatedCourses lists courses in a stable, gapless order using keyset
+// (seek) pagination. The cursor condition must compare the same columns the
+// results are ordered by - here (name, id), with id as a tie-breaker since
+// name alone is not unique - or pages can silently skip or repeat rows: a
+// cursor on a column that isn't the sort key partitions the *unsorted* table,
+// which has no consistent relationship to a page boundary drawn by name.
 func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	lastName string,
 	filter courses.CourseFilter,
 ) ([]courses.Course, error) {
 	join := ""
-	conditions := []string{"c.id > $2", "c.deleted_at IS NULL"}
-	args := []any{limit, lastID}
+	conditions := []string{"(c.name, c.id) > ($2, $3)", "c.deleted_at IS NULL"}
+	args := []any{limit, lastName, lastID}
 
 	if filter.DisciplineID != uuid.Nil {
 		args = append(args, filter.DisciplineID)
@@ -258,7 +265,7 @@ func (r *PGRepo) GetPaginatedCourses(
 		FROM courses c
 		%s
 		WHERE %s
-		ORDER BY c.name
+		ORDER BY c.name, c.id
 		LIMIT $1
 	`, join, strings.Join(conditions, " AND "))
 
