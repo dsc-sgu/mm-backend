@@ -28,6 +28,7 @@
 package git
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -36,6 +37,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/go-git/go-git/v5"
@@ -263,12 +265,23 @@ done > "$GIT_DIR/push-tags"
 	)
 }
 
+// RunGit runs git in dir with the session wired up as stdin/stdout (the pack
+// protocol) and stderr mirrored both to the session's dedicated SSH stderr
+// channel and to a buffer that gets logged on failure. Without this, stderr
+// (unlike stdout) has nowhere to go: Go connects an unset cmd.Stderr to
+// /dev/null, so anything git itself writes there - as opposed to what a
+// pre/post-receive hook writes to its own stderr, which git relays to the
+// client over the pack protocol's side-band regardless - was previously
+// silently lost, on both the client and the server.
 func RunGit(s ssh.Session, dir string, args ...string) error {
 	cmd := exec.CommandContext(s.Context(), "git", args...)
 	cmd.Dir = dir
 	cmd.Stdout = s
 	cmd.Stdin = s
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(s.Stderr(), &stderr)
 	if err := cmd.Run(); err != nil {
+		log.Error("git command failed", "args", args, "stderr", stderr.String(), "error", err)
 		return err
 	}
 	return nil
