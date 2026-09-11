@@ -215,8 +215,8 @@ CREATE TABLE tasks (
     patterns text[] NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
     max_attempts integer NOT NULL,
-    available_at timestamp,
-    deadline_at timestamp,
+    available_at timestamptz,
+    deadline_at timestamptz,
 
     FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
     CHECK (block_type = 'task'),

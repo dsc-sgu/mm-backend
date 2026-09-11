@@ -5,8 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io/fs"
-	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,8 +12,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
@@ -27,12 +23,10 @@ import (
 // Manager owns bare-repository filesystem operations. It has no application-domain dependencies.
 type Manager struct {
 	RepoDir string
-	Host    string
-	Port    string
 }
 
-func NewManager(repoDir, host, port string) *Manager {
-	return &Manager{RepoDir: repoDir, Host: host, Port: port}
+func NewManager(repoDir string) *Manager {
+	return &Manager{RepoDir: repoDir}
 }
 
 func (m *Manager) RepoPath(id RepoID) string { return filepath.Join(m.RepoDir, id.IntoPath()+".git") }
@@ -285,21 +279,4 @@ func globMatch(pattern, name string) bool {
 		pi++
 	}
 	return pi == len(pattern)
-}
-
-func (m *Manager) ListMiddleware(next ssh.Handler) ssh.Handler {
-	return func(sess ssh.Session) {
-		if len(sess.Command()) != 0 {
-			next(sess)
-			return
-		}
-		dirs, err := os.ReadDir(m.RepoDir)
-		if err != nil && err != fs.ErrNotExist {
-			log.Error("Invalid repository", "error", err)
-		}
-		for _, dir := range dirs {
-			wish.Println(sess, fmt.Sprintf("git clone ssh://%s/%s", net.JoinHostPort(m.Host, m.Port), dir.Name()))
-		}
-		next(sess)
-	}
 }
