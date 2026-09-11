@@ -181,7 +181,7 @@ func main() {
 	membershipService := membership.NewService(pgRepo)
 	userService := users.NewService(pgRepo, sessionRepo, cookieConfig)
 	disciplineService := disciplines.NewService(pgRepo)
-	gitManager := pkggit.NewManager("repos", config.Host, strconv.Itoa(config.SSHPort))
+	gitManager := pkggit.NewManager("repos")
 	sshKeyService := sshkeys.NewService(pgRepo)
 	taskService := tasks.NewService(pgRepo, gitManager, membershipService)
 	attemptService := attempt.NewService(pgRepo, gitManager, taskService, pgRepo, sshKeyService)
@@ -232,7 +232,6 @@ func main() {
 		ssh.PasswordAuth(sshKeyService.CheckPasswordAuth),
 		wish.WithMiddleware(
 			attemptService.SSHMiddleware("repos"),
-			gitManager.ListMiddleware,
 			logging.Middleware(),
 		),
 	)
