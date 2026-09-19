@@ -24,7 +24,7 @@ type Course struct {
 type CreateCourse struct {
 	DisciplineID uuid.UUID `json:"disciplineID,omitempty" db:"discipline_id"`
 	Name         string    `json:"name"                   db:"name"          binding:"required"`
-	DisplayName  string    `json:"displayName"             db:"display_name"  binding:"required"`
+	DisplayName  string    `json:"displayName"            db:"display_name"  binding:"required"`
 }
 
 // UpdateCourse is the input for updating a course, used by both the service and repository layers.

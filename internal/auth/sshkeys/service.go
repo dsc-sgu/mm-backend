@@ -12,15 +12,15 @@ import (
 
 type SSHKey struct {
 	OwnerID     uuid.UUID `db:"owner_id"`
-	Name        string    `json:"name" db:"name" binding:"required"`
-	Key         string    `json:"key" db:"key" binding:"required"`
-	Fingerprint string    `json:"fingerprint" db:"fingerprint"`
+	Name        string    `db:"name"        json:"name"        binding:"required"`
+	Key         string    `db:"key"         json:"key"         binding:"required"`
+	Fingerprint string    `db:"fingerprint" json:"fingerprint"`
 	CreatedAt   time.Time `db:"created_at"`
 }
 
 type AddSSHKey struct {
 	Name string `json:"name" binding:"required"`
-	Key  string `json:"key" binding:"required"`
+	Key  string `json:"key"  binding:"required"`
 }
 
 type Service struct{ repo Repo }

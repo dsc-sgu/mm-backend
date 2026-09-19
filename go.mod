@@ -8,6 +8,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.37.3
 	github.com/docker/go-connections v0.7.0
 	github.com/go-git/go-git/v5 v5.18.0
+	github.com/gobwas/glob v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/redis/go-redis/v9 v9.19.0

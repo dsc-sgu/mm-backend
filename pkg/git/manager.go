@@ -1,12 +1,17 @@
 package git
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +22,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	fdiff "github.com/go-git/go-git/v6/plumbing/format/diff"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/gobwas/glob"
 	"github.com/google/uuid"
 )
 
@@ -56,14 +62,14 @@ func (m *Manager) EnsureRepo(id RepoID) error {
 	return m.initRepoWithTemplate(id)
 }
 
-func TemplatePath(taskGroupID uuid.UUID) string {
+func TemplateRepoName(taskGroupID uuid.UUID) string {
 	hasher := sha1.New()
 	_, _ = fmt.Fprint(hasher, "template:", taskGroupID.String())
 	return hex.EncodeToString(hasher.Sum(nil)) + ".git"
 }
 
 func (m *Manager) initRepoWithTemplate(id RepoID) error {
-	templatePath := filepath.Join(m.RepoDir, TemplatePath(id.TaskGroupID))
+	templatePath := filepath.Join(m.RepoDir, TemplateRepoName(id.TaskGroupID))
 	barePath := m.RepoPath(id)
 	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
 		_, err = gogit.PlainInit(barePath, true)
@@ -95,7 +101,7 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 }
 
 func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error {
-	path := filepath.Join(m.RepoDir, TemplatePath(taskGroupID))
+	path := filepath.Join(m.RepoDir, TemplateRepoName(taskGroupID))
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if _, err = gogit.PlainInit(path, true); err != nil {
 			return fmt.Errorf("init template repo: %w", err)
@@ -110,6 +116,97 @@ func (m *Manager) PushFiles(id RepoID, files []FileInfo) (string, error) {
 		return "", err
 	}
 	return m.commitFiles(m.RepoPath(id), files, "web attempt")
+}
+
+// UnzipFiles extracts regular files from a submitted archive.
+// Entry names are sanitized against Zip Slip (path traversal via "../" or
+// absolute paths escaping the extraction root once files are later written
+// to disk in Manager.commitFiles), and both per-file and total decompressed
+// size are capped so a small, highly-compressed archive (a "zip bomb")
+// cannot exhaust memory or disk.
+func UnzipFiles(data []byte) ([]FileInfo, error) {
+	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, err
+	}
+	if len(reader.File) > MaxZipFileCount {
+		return nil, fmt.Errorf(
+			"archive contains %d files, exceeding the limit of %d",
+			len(reader.File), MaxZipFileCount,
+		)
+	}
+
+	files := make([]FileInfo, 0, len(reader.File))
+	var totalSize int64
+	for _, f := range reader.File {
+		if f.FileInfo().IsDir() || f.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
+		name, err := sanitizeZipEntryName(f.Name)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", f.Name, err)
+		}
+		// Read fully, failing once more than MaxZipFileSize bytes have been
+		// read. Does not trust the zip entry's declared uncompressed size,
+		// which an attacker controls independently of the actual compressed
+		// data.
+		content, err := io.ReadAll(io.LimitReader(rc, MaxZipFileSize+1))
+		if err == nil && int64(len(content)) > MaxZipFileSize {
+			err = fmt.Errorf("file exceeds the size limit of %d bytes", MaxZipFileSize)
+		}
+		closeErr := rc.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", f.Name, err)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close %s: %w", f.Name, closeErr)
+		}
+		totalSize += int64(len(content))
+		if totalSize > MaxZipTotalSize {
+			return nil, fmt.Errorf(
+				"archive exceeds the total decompressed size limit of %d bytes",
+				MaxZipTotalSize,
+			)
+		}
+		files = append(files, FileInfo{
+			FileName: name, FileSize: int64(len(content)), UploadedAt: time.Now(), Content: content,
+		})
+	}
+	return files, nil
+}
+
+// sanitizeZipEntryName validates a zip entry name and returns it cleaned.
+// Zip entries always use "/" as the separator regardless of OS (APPNOTE
+// 4.4.17.1), so cleaning is done with the "path" package, not "filepath".
+func sanitizeZipEntryName(name string) (string, error) {
+	if name == "" {
+		return "", errors.New("empty file name")
+	}
+	if strings.ContainsRune(name, 0) {
+		return "", errors.New("file name contains a null byte")
+	}
+	if strings.Contains(name, "\\") {
+		return "", errors.New("file name contains a backslash")
+	}
+	clean := path.Clean(name)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") ||
+		path.IsAbs(clean) {
+		return "", errors.New("path escapes the archive root")
+	}
+	// A ".git" path component would land inside the metadata directory of
+	// the temporary worktree Manager.commitFiles clones the repo into,
+	// rather than the tracked content — e.g. ".git/hooks/pre-commit" or
+	// ".git/config". go-git's Worktree.Add happens to reject such paths
+	// today, but only after the file has already been written to disk, so
+	// this is enforced here rather than relied on incidentally.
+	if slices.Contains(strings.Split(clean, "/"), ".git") {
+		return "", errors.New(`path contains a ".git" component`)
+	}
+	return clean, nil
 }
 
 func (m *Manager) commitFiles(barePath string, files []FileInfo, message string) (string, error) {
@@ -154,7 +251,12 @@ func (m *Manager) commitFiles(barePath string, files []FileInfo, message string)
 			return "", err
 		}
 	}
-	hash, err := wt.Commit(message, &gogit.CommitOptions{Author: &object.Signature{Name: "mm-backend", Email: "mm-backend@mergeminds", When: time.Now()}})
+	hash, err := wt.Commit(
+		message,
+		&gogit.CommitOptions{
+			Author: &object.Signature{Name: "mm-backend", Email: "mm-backend@mergeminds", When: time.Now()},
+		},
+	)
 	if err != nil {
 		return "", fmt.Errorf("commit: %w", err)
 	}
@@ -198,7 +300,8 @@ func (m *Manager) Diff(id RepoID, fromHash, toHash string, patterns []string) ([
 		}
 	}
 	buf := &bytes.Buffer{}
-	_ = fdiff.NewUnifiedEncoder(buf, fdiff.DefaultContextLines).Encode(&filteredPatch{message: patch.Message(), filePatches: fps})
+	_ = fdiff.NewUnifiedEncoder(buf, fdiff.DefaultContextLines).
+		Encode(&filteredPatch{message: patch.Message(), filePatches: fps})
 	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n"), nil
 }
 
@@ -208,7 +311,8 @@ type filteredPatch struct {
 }
 
 func (p *filteredPatch) FilePatches() []fdiff.FilePatch { return p.filePatches }
-func (p *filteredPatch) Message() string                { return p.message }
+
+func (p *filteredPatch) Message() string { return p.message }
 
 // WritePatterns writes the pre-receive hook's ".mm-patterns" file: one
 // "<task name>\t<glob>" line per required pattern. A task with no patterns
@@ -237,46 +341,21 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 }
 
 // MatchesAnyPattern reports whether name matches any of the given glob
-// patterns. Matching follows POSIX shell "case" pattern rules — the same
-// rules the pre-receive hook applies via a shell case statement (see
-// WritePreReceiveHook) — rather than filepath.Match's: '*' matches '/' too,
-// so a pattern like "*.go" matches a nested path like "cmd/main.go". This
-// keeps the accept/reject decision for a submission identical whether it
-// arrives over SSH git push or through the web zip upload (see the "Mask
-// gate" in internal/attempts/README.md).
+// patterns. Patterns are compiled with no separator characters, so '*' and
+// '?' match '/' too — the same rule the pre-receive hook applies via a shell
+// case statement (see WritePreReceiveHook), rather than filepath.Match's,
+// where '*' stops at '/'. This keeps the accept/reject decision for a
+// submission identical whether it arrives over SSH git push or through the
+// web zip upload (see the "Mask gate" in internal/attempts/README.md).
 func MatchesAnyPattern(name string, patterns []string) bool {
 	for _, pattern := range patterns {
-		if globMatch(pattern, name) {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		if g.Match(name) {
 			return true
 		}
 	}
 	return false
-}
-
-// globMatch matches name against a shell glob pattern supporting '*' (any
-// sequence of characters, including '/') and '?' (any single character).
-func globMatch(pattern, name string) bool {
-	pi, ni := 0, 0
-	starIdx, matchIdx := -1, 0
-	for ni < len(name) {
-		switch {
-		case pi < len(pattern) && (pattern[pi] == '?' || pattern[pi] == name[ni]):
-			pi++
-			ni++
-		case pi < len(pattern) && pattern[pi] == '*':
-			starIdx = pi
-			matchIdx = ni
-			pi++
-		case starIdx != -1:
-			pi = starIdx + 1
-			matchIdx++
-			ni = matchIdx
-		default:
-			return false
-		}
-	}
-	for pi < len(pattern) && pattern[pi] == '*' {
-		pi++
-	}
-	return pi == len(pattern)
 }
