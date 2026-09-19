@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/ssh v0.0.0-20250128164007-98fd5ae11894
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/go-git/go-git/v5 v5.19.2
+	github.com/gobwas/glob v1.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/moby/moby/api v1.56.1

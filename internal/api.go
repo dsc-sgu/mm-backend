@@ -15,6 +15,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
@@ -265,16 +266,103 @@ func setupSSHKeyRoutes(api huma.API, handler *sshkeys.Handler) {
 }
 
 func setupAttemptRoutes(api huma.API, handler *attempt.Handler) {
-	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/attempts/diff", Summary: "Get attempt diff", Tags: []string{"Attempt"}}, handler.GetDiff)
-	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/attempts/{task_id}/{participant_id}", Summary: "Get attempts", Tags: []string{"Attempt"}}, handler.GetAttempts)
-	huma.Register(api, huma.Operation{Method: http.MethodPost, Path: "/attempts", Summary: "Push attempt", DefaultStatus: http.StatusCreated, Tags: []string{"Attempt"}}, handler.PushAttempt)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodGet,
+			Path:    "/attempts/diff",
+			Summary: "Get attempt diff",
+			Tags:    []string{"Attempt"},
+		},
+		handler.GetDiff,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodGet,
+			Path:    "/attempts/{task_id}/{participant_id}",
+			Summary: "Get attempts",
+			Tags:    []string{"Attempt"},
+		},
+		handler.GetAttempts,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:        http.MethodPost,
+			Path:          "/attempts",
+			Summary:       "Push attempt",
+			DefaultStatus: http.StatusCreated,
+			Tags:          []string{"Attempt"},
+			MaxBodyBytes:  pkggit.MaxZipArchiveSize,
+		},
+		handler.PushAttempt,
+	)
 }
 
 func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
-	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/tasks/{group_id}", Summary: "Get task group", Tags: []string{"Task"}}, handler.GetTaskGroup)
-	huma.Register(api, huma.Operation{Method: http.MethodPost, Path: "/tasks", Summary: "Create task group", DefaultStatus: http.StatusCreated, Tags: []string{"Task"}}, handler.CreateTaskGroup)
-	huma.Register(api, huma.Operation{Method: http.MethodPatch, Path: "/tasks/{group_id}", Summary: "Update task group", Tags: []string{"Task"}}, handler.PatchTaskGroup)
-	huma.Register(api, huma.Operation{Method: http.MethodDelete, Path: "/tasks/{group_id}", Summary: "Delete task group", DefaultStatus: http.StatusNoContent, Tags: []string{"Task"}}, handler.DeleteTaskGroup)
-	huma.Register(api, huma.Operation{Method: http.MethodPost, Path: "/tasks/{group_id}/template", Summary: "Upload task template", DefaultStatus: http.StatusNoContent, Tags: []string{"Task"}}, handler.UploadTemplate)
-	huma.Register(api, huma.Operation{Method: http.MethodGet, Path: "/tasks/{group_id}/tasks", Summary: "Get tasks", Tags: []string{"Task"}}, handler.GetTasks)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodGet,
+			Path:    "/tasks/{group_id}",
+			Summary: "Get task group",
+			Tags:    []string{"Task"},
+		},
+		handler.GetTaskGroup,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:        http.MethodPost,
+			Path:          "/tasks",
+			Summary:       "Create task group",
+			DefaultStatus: http.StatusCreated,
+			Tags:          []string{"Task"},
+		},
+		handler.CreateTaskGroup,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodPatch,
+			Path:    "/tasks/{group_id}",
+			Summary: "Update task group",
+			Tags:    []string{"Task"},
+		},
+		handler.PatchTaskGroup,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:        http.MethodDelete,
+			Path:          "/tasks/{group_id}",
+			Summary:       "Delete task group",
+			DefaultStatus: http.StatusNoContent,
+			Tags:          []string{"Task"},
+		},
+		handler.DeleteTaskGroup,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:        http.MethodPost,
+			Path:          "/tasks/{group_id}/template",
+			Summary:       "Upload task template",
+			DefaultStatus: http.StatusNoContent,
+			Tags:          []string{"Task"},
+			MaxBodyBytes:  pkggit.MaxZipArchiveSize,
+		},
+		handler.UploadTemplate,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodGet,
+			Path:    "/tasks/{group_id}/tasks",
+			Summary: "Get tasks",
+			Tags:    []string{"Task"},
+		},
+		handler.GetTasks,
+	)
 }
