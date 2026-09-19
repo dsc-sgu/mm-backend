@@ -190,7 +190,14 @@ func main() {
 	go rebalanceWorker.Run(ctx)
 
 	blockService := blocks.NewService(pgRepo, rebalanceWorker, config.LexoRankThreshold)
-	courseService := courses.NewService(pgRepo, snapshotService, lockService, blockService, membershipService, userService)
+	courseService := courses.NewService(
+		pgRepo,
+		snapshotService,
+		lockService,
+		blockService,
+		membershipService,
+		userService,
+	)
 
 	userHandler := users.NewHandler(userService)
 	blockHandler := blocks.NewHandler(blockService)
