@@ -234,7 +234,14 @@ func (s *Service) GetDiff(
 		TaskGroupID:   one.TaskGroupID,
 		ParticipantID: one.UserID,
 	}
-	return s.git.Diff(id, one.CommitHash, two.CommitHash, patterns)
+	// A task with no patterns leaves every file in the diff visible — that's
+	// a nil include, not an always-false one, so it must not be built from
+	// an empty CompiledPatterns (whose MatchAny is always false).
+	var include func(string) bool
+	if len(patterns) > 0 {
+		include = pkggit.CompilePatterns(patterns).MatchAny
+	}
+	return s.git.Diff(id, one.CommitHash, two.CommitHash, include)
 }
 
 // SSHMiddleware serves Git repositories over SSH: it resolves the raw
