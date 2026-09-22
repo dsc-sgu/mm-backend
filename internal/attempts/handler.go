@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type Handler struct {
@@ -26,7 +27,9 @@ func handleServiceError(err error) error {
 	case errors.Is(err, ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrDifferentUsers),
-		errors.Is(err, ErrDifferentTasks):
+		errors.Is(err, ErrDifferentTasks),
+		errors.Is(err, ErrPatternMismatch),
+		errors.Is(err, pkggit.ErrInvalidArchive):
 		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
