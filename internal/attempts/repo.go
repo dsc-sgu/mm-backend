@@ -80,5 +80,5 @@ type GitManager interface {
 	RepoPath(pkggit.RepoID) string
 	ListFiles(pkggit.RepoID) ([]string, error)
 	CommitFiles(barePath string, files []pkggit.FileInfo, remove []string, message string) (string, error)
-	Diff(pkggit.RepoID, string, string, []string) ([]string, error)
+	Diff(id pkggit.RepoID, fromHash, toHash string, include func(path string) bool) ([]string, error)
 }

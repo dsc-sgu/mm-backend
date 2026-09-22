@@ -19,7 +19,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/go-git/go-billy/v6/util"
 	gogit "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	fdiff "github.com/go-git/go-git/v6/plumbing/format/diff"
 	"github.com/go-git/go-git/v6/plumbing/format/index"
@@ -62,27 +61,13 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 		_, err = gogit.PlainInit(barePath, true)
 		return err
 	}
-	tmp, err := os.MkdirTemp("", "template-*")
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := os.RemoveAll(tmp); err != nil {
-			log.Error("remove temp dir", "error", err, "path", tmp)
-		}
-	}()
-	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: templatePath})
+	_, err := gogit.PlainClone(barePath, &gogit.CloneOptions{
+		URL:            templatePath,
+		Bare:           true,
+		AllowEmptyRepo: true,
+	})
 	if err != nil {
 		return fmt.Errorf("clone template: %w", err)
-	}
-	if _, err = gogit.PlainInit(barePath, true); err != nil {
-		return fmt.Errorf("init student bare: %w", err)
-	}
-	if _, err = repo.CreateRemote(&config.RemoteConfig{Name: "student", URLs: []string{barePath}}); err != nil {
-		return fmt.Errorf("create remote: %w", err)
-	}
-	if err = repo.Push(&gogit.PushOptions{RemoteName: "student"}); err != nil {
-		return fmt.Errorf("push template: %w", err)
 	}
 	return nil
 }
@@ -128,19 +113,6 @@ func (m *Manager) ListFiles(id RepoID) ([]string, error) {
 	return paths, nil
 }
 
-// ErrInvalidArchive is returned by UnzipFiles for any way a submitted
-// archive can be malformed or violate the limits below — a corrupt zip, a
-// Zip Slip or ".git" path, or exceeding a file-count/size limit. Every
-// cause is the caller's fault (bad or malicious upload content), never a
-// server-side failure, so callers should surface it as a 400, not a 500.
-var ErrInvalidArchive = errors.New("invalid archive")
-
-// UnzipFiles extracts regular files from a submitted archive.
-// Entry names are sanitized against Zip Slip (path traversal via "../" or
-// absolute paths escaping the extraction root once files are later written
-// to disk in Manager.commitFiles), and both per-file and total decompressed
-// size are capped so a small, highly-compressed archive (a "zip bomb")
-// cannot exhaust memory or disk.
 func UnzipFiles(data []byte) ([]FileInfo, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -167,10 +139,6 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: open %s: %v", ErrInvalidArchive, f.Name, err)
 		}
-		// Read fully, failing once more than MaxZipFileSize bytes have been
-		// read. Does not trust the zip entry's declared uncompressed size,
-		// which an attacker controls independently of the actual compressed
-		// data.
 		content, err := io.ReadAll(io.LimitReader(rc, MaxZipFileSize+1))
 		if err == nil && int64(len(content)) > MaxZipFileSize {
 			err = fmt.Errorf("file exceeds the size limit of %d bytes", MaxZipFileSize)
@@ -273,24 +241,30 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	return hash.String(), nil
 }
 
-func (m *Manager) Diff(id RepoID, fromHash, toHash string, patterns []string) ([]string, error) {
+// Diff returns the unified diff between two commits, one line per string
+// element. If include is non-nil, only file patches for which it returns
+// true (plus any patch it can't name a path for) are kept; a nil include
+// means every file is included. Diff has no notion of why a file should be
+// kept — that's the caller's decision (e.g. GetDiff deciding which files a
+// task's patterns cover).
+func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path string) bool) ([]string, error) {
 	repo, err := gogit.PlainOpen(m.RepoPath(id))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open repo: %w", err)
 	}
-	from, err := repo.CommitObject(plumbing.NewHash(fromHash))
+	from, err := commitByHash(repo, fromHash)
 	if err != nil {
 		return nil, err
 	}
-	to, err := repo.CommitObject(plumbing.NewHash(toHash))
+	to, err := commitByHash(repo, toHash)
 	if err != nil {
 		return nil, err
 	}
 	patch, err := from.Patch(to)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("diff %s..%s: %w", fromHash, toHash, err)
 	}
-	if len(patterns) == 0 {
+	if include == nil {
 		return strings.Split(patch.String(), "\n"), nil
 	}
 	var fps []fdiff.FilePatch
@@ -302,7 +276,7 @@ func (m *Manager) Diff(id RepoID, fromHash, toHash string, patterns []string) ([
 		} else if fromFile != nil {
 			name = fromFile.Path()
 		}
-		if name == "" || MatchesAnyPattern(name, patterns) {
+		if name == "" || include(name) {
 			fps = append(fps, fp)
 		}
 	}
@@ -310,6 +284,22 @@ func (m *Manager) Diff(id RepoID, fromHash, toHash string, patterns []string) ([
 	_ = fdiff.NewUnifiedEncoder(buf, fdiff.DefaultContextLines).
 		Encode(&filteredPatch{message: patch.Message(), filePatches: fps})
 	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n"), nil
+}
+
+// commitByHash resolves s as a commit hash in repo, rejecting malformed
+// input outright: plumbing.NewHash silently returns a zero/partial hash for
+// a bad hex string instead of erroring, which would otherwise surface here
+// as a confusing "commit not found" instead of "invalid commit hash".
+func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
+	h, ok := plumbing.FromHex(s)
+	if !ok {
+		return nil, fmt.Errorf("invalid commit hash %q", s)
+	}
+	c, err := repo.CommitObject(h)
+	if err != nil {
+		return nil, fmt.Errorf("commit %s: %w", s, err)
+	}
+	return c, nil
 }
 
 type filteredPatch struct {
@@ -378,18 +368,4 @@ func (c CompiledPatterns) MatchAny(name string) bool {
 		}
 	}
 	return false
-}
-
-// MatchesAnyPattern reports whether name matches any of the given glob
-// patterns. Patterns are compiled with no separator characters, so '*' and
-// '?' match '/' too — the same rule the pre-receive hook applies via a shell
-// case statement (see WritePreReceiveHook), rather than filepath.Match's,
-// where '*' stops at '/'. This keeps the accept/reject decision for a
-// submission identical whether it arrives over SSH git push or through the
-// web zip upload (see the "Mask gate" in internal/attempts/README.md).
-//
-// For matching the same patterns against many names, compile once with
-// CompilePatterns instead of calling this repeatedly.
-func MatchesAnyPattern(name string, patterns []string) bool {
-	return CompilePatterns(patterns).MatchAny(name)
 }

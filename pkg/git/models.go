@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -35,6 +36,13 @@ const (
 	// larger than the decompressed content budget it is allowed to produce.
 	MaxZipArchiveSize = MaxZipTotalSize
 )
+
+// ErrInvalidArchive is returned by UnzipFiles for any way a submitted
+// archive can be malformed or violate the limits above — a corrupt zip, a
+// Zip Slip or ".git" path, or exceeding a file-count/size limit. Every
+// cause is the caller's fault (bad or malicious upload content), never a
+// server-side failure, so callers should surface it as a 400, not a 500.
+var ErrInvalidArchive = errors.New("invalid archive")
 
 // RepoID identifies a participant repository for a task group.
 type RepoID struct {
