@@ -78,6 +78,7 @@ type IdentityReader interface {
 type GitManager interface {
 	EnsureRepo(pkggit.RepoID) error
 	RepoPath(pkggit.RepoID) string
-	PushFiles(pkggit.RepoID, []pkggit.FileInfo) (string, error)
+	ListFiles(pkggit.RepoID) ([]string, error)
+	CommitFiles(barePath string, files []pkggit.FileInfo, remove []string, message string) (string, error)
 	Diff(pkggit.RepoID, string, string, []string) ([]string, error)
 }

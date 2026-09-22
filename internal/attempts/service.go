@@ -153,10 +153,11 @@ func (s *Service) PushAttempt(
 	if err != nil {
 		return "", fmt.Errorf("get task patterns: %w", err)
 	}
+	compiledPatterns := pkggit.CompilePatterns(patterns)
 	if len(patterns) > 0 {
 		matched := false
 		for _, file := range files {
-			if pkggit.MatchesAnyPattern(file.FileName, patterns) {
+			if compiledPatterns.MatchAny(file.FileName) {
 				matched = true
 				break
 			}
@@ -174,7 +175,23 @@ func (s *Service) PushAttempt(
 	if err := s.tasks.RefreshRepositoryPatterns(ctx, id); err != nil {
 		zap.L().Warn("refresh repository patterns", zap.Error(err))
 	}
-	hash, err := s.git.PushFiles(id, files)
+
+	existing, err := s.git.ListFiles(id)
+	if err != nil {
+		return "", fmt.Errorf("list current files: %w", err)
+	}
+	touched := make(map[string]bool, len(files))
+	for _, file := range files {
+		touched[file.FileName] = true
+	}
+	var remove []string
+	for _, path := range existing {
+		if !touched[path] && !compiledPatterns.MatchAny(path) {
+			remove = append(remove, path)
+		}
+	}
+
+	hash, err := s.git.CommitFiles(s.git.RepoPath(id), files, remove, "web attempt")
 	if err != nil {
 		return "", err
 	}
