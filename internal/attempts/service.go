@@ -49,6 +49,9 @@ var (
 	ErrDifferentUsers = errors.New("attempts belong to different users")
 	// ErrDifferentTasks is returned when a diff is requested between two attempts at different tasks.
 	ErrDifferentTasks = errors.New("attempts belong to different tasks")
+	// ErrPatternMismatch is returned when an uploaded archive contains none
+	// of the files a task requires.
+	ErrPatternMismatch = errors.New("no uploaded files match required patterns")
 )
 
 // GetAttempts lists a participant's attempts at a task. The caller must be
@@ -163,10 +166,7 @@ func (s *Service) PushAttempt(
 			}
 		}
 		if !matched {
-			return "", fmt.Errorf(
-				"no uploaded files match required patterns for this task (%v)",
-				patterns,
-			)
+			return "", fmt.Errorf("%w (%v)", ErrPatternMismatch, patterns)
 		}
 	}
 	if err := s.git.EnsureRepo(id); err != nil {
