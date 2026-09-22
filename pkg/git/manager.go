@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/go-git/go-billy/v6/util"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	fdiff "github.com/go-git/go-git/v6/plumbing/format/diff"
+	"github.com/go-git/go-git/v6/plumbing/format/index"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/gobwas/glob"
 	"github.com/google/uuid"
@@ -37,21 +39,6 @@ func NewManager(repoDir string) *Manager {
 
 func (m *Manager) RepoPath(id RepoID) string { return filepath.Join(m.RepoDir, id.IntoPath()+".git") }
 
-func (m *Manager) InitRepo(id RepoID) error {
-	_, err := gogit.PlainInit(m.RepoPath(id), true)
-	if err != nil {
-		return fmt.Errorf("init repo: %w", err)
-	}
-	return nil
-}
-
-func (m *Manager) RemoveRepo(id RepoID) error {
-	if err := os.RemoveAll(m.RepoPath(id)); err != nil {
-		return fmt.Errorf("remove repo: %w", err)
-	}
-	return nil
-}
-
 func (m *Manager) EnsureRepo(id RepoID) error {
 	path := m.RepoPath(id)
 	if _, err := os.Stat(path); err == nil {
@@ -64,7 +51,7 @@ func (m *Manager) EnsureRepo(id RepoID) error {
 
 func TemplateRepoName(taskGroupID uuid.UUID) string {
 	hasher := sha1.New()
-	_, _ = fmt.Fprint(hasher, "template:", taskGroupID.String())
+	hasher.Write([]byte(taskGroupID.String()))
 	return hex.EncodeToString(hasher.Sum(nil)) + ".git"
 }
 
@@ -107,15 +94,38 @@ func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error 
 			return fmt.Errorf("init template repo: %w", err)
 		}
 	}
-	_, err := m.commitFiles(path, files, "update template")
+	_, err := m.CommitFiles(path, files, nil, "update template")
 	return err
 }
 
-func (m *Manager) PushFiles(id RepoID, files []FileInfo) (string, error) {
-	if err := m.EnsureRepo(id); err != nil {
-		return "", err
+func (m *Manager) ListFiles(id RepoID) ([]string, error) {
+	repo, err := gogit.PlainOpen(m.RepoPath(id))
+	if err != nil {
+		return nil, fmt.Errorf("open repo: %w", err)
 	}
-	return m.commitFiles(m.RepoPath(id), files, "web attempt")
+	ref, err := repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve HEAD: %w", err)
+	}
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("open commit: %w", err)
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, fmt.Errorf("open tree: %w", err)
+	}
+	var paths []string
+	if err := tree.Files().ForEach(func(f *object.File) error {
+		paths = append(paths, f.Name)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("walk tree: %w", err)
+	}
+	return paths, nil
 }
 
 // UnzipFiles extracts regular files from a submitted archive.
@@ -198,7 +208,7 @@ func sanitizeZipEntryName(name string) (string, error) {
 		return "", errors.New("path escapes the archive root")
 	}
 	// A ".git" path component would land inside the metadata directory of
-	// the temporary worktree Manager.commitFiles clones the repo into,
+	// the temporary worktree Manager.CommitFiles clones the repo into,
 	// rather than the tracked content — e.g. ".git/hooks/pre-commit" or
 	// ".git/config". go-git's Worktree.Add happens to reject such paths
 	// today, but only after the file has already been written to disk, so
@@ -209,7 +219,7 @@ func sanitizeZipEntryName(name string) (string, error) {
 	return clean, nil
 }
 
-func (m *Manager) commitFiles(barePath string, files []FileInfo, message string) (string, error) {
+func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string, message string) (string, error) {
 	tmp, err := os.MkdirTemp("", "git-files-*")
 	if err != nil {
 		return "", err
@@ -219,48 +229,38 @@ func (m *Manager) commitFiles(barePath string, files []FileInfo, message string)
 			log.Error("remove temp dir", "error", err, "path", tmp)
 		}
 	}()
-	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: barePath})
+	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: barePath, AllowEmptyRepo: true, Depth: 1})
 	if err != nil {
-		if err = os.RemoveAll(tmp); err != nil {
-			return "", err
-		}
-		if err = os.MkdirAll(tmp, 0o700); err != nil {
-			return "", err
-		}
-		repo, err = gogit.PlainInit(tmp, false)
-		if err != nil {
-			return "", err
-		}
-		if _, err = repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{barePath}}); err != nil {
-			return "", err
-		}
+		return "", fmt.Errorf("clone: %w", err)
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
 		return "", err
 	}
+	for _, path := range remove {
+		if _, err := wt.Remove(path); err != nil && !errors.Is(err, index.ErrEntryNotFound) {
+			return "", fmt.Errorf("remove %s: %w", path, err)
+		}
+	}
+	fs := wt.Filesystem()
 	for _, f := range files {
-		path := filepath.Join(tmp, f.FileName)
-		if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return "", err
+		if err := util.WriteFile(fs, f.FileName, f.Content, 0o644); err != nil {
+			return "", fmt.Errorf("write %s: %w", f.FileName, err)
 		}
-		if err = os.WriteFile(path, f.Content, 0o644); err != nil {
-			return "", err
-		}
-		if _, err = wt.Add(f.FileName); err != nil {
-			return "", err
+		if err := wt.AddWithOptions(&gogit.AddOptions{Path: f.FileName, SkipStatus: true}); err != nil {
+			return "", fmt.Errorf("add %s: %w", f.FileName, err)
 		}
 	}
 	hash, err := wt.Commit(
 		message,
 		&gogit.CommitOptions{
-			Author: &object.Signature{Name: "mm-backend", Email: "mm-backend@mergeminds", When: time.Now()},
+			Author: &object.Signature{Name: "mm-backend", When: time.Now()},
 		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("commit: %w", err)
 	}
-	if err = repo.Push(&gogit.PushOptions{RemoteName: "origin"}); err != nil {
+	if err := repo.Push(&gogit.PushOptions{RemoteName: "origin"}); err != nil {
 		return "", fmt.Errorf("push: %w", err)
 	}
 	return hash.String(), nil
@@ -340,6 +340,39 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 	return os.WriteFile(PatternsFilePath(m.RepoPath(id)), []byte(content.String()), 0o644)
 }
 
+// CompiledPatterns is a set of glob patterns compiled once via
+// CompilePatterns, for matching many names without recompiling on every
+// call — useful when a caller checks the same pattern set against a large
+// list of paths (e.g. PushAttempt deciding what a resubmission should
+// prune).
+type CompiledPatterns []*glob.Pattern
+
+// CompilePatterns compiles patterns for repeated matching via
+// CompiledPatterns.MatchAny. A pattern that fails to compile is skipped,
+// same as MatchesAnyPattern does per call.
+func CompilePatterns(patterns []string) CompiledPatterns {
+	compiled := make(CompiledPatterns, 0, len(patterns))
+	for _, pattern := range patterns {
+		g, err := glob.Compile(pattern)
+		if err != nil {
+			continue
+		}
+		compiled = append(compiled, g)
+	}
+	return compiled
+}
+
+// MatchAny reports whether name matches any of the compiled patterns. See
+// MatchesAnyPattern for the matching rules.
+func (c CompiledPatterns) MatchAny(name string) bool {
+	for _, g := range c {
+		if g.Match(name) {
+			return true
+		}
+	}
+	return false
+}
+
 // MatchesAnyPattern reports whether name matches any of the given glob
 // patterns. Patterns are compiled with no separator characters, so '*' and
 // '?' match '/' too — the same rule the pre-receive hook applies via a shell
@@ -347,15 +380,9 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 // where '*' stops at '/'. This keeps the accept/reject decision for a
 // submission identical whether it arrives over SSH git push or through the
 // web zip upload (see the "Mask gate" in internal/attempts/README.md).
+//
+// For matching the same patterns against many names, compile once with
+// CompilePatterns instead of calling this repeatedly.
 func MatchesAnyPattern(name string, patterns []string) bool {
-	for _, pattern := range patterns {
-		g, err := glob.Compile(pattern)
-		if err != nil {
-			continue
-		}
-		if g.Match(name) {
-			return true
-		}
-	}
-	return false
+	return CompilePatterns(patterns).MatchAny(name)
 }
