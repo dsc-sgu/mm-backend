@@ -34,8 +34,12 @@ func NewManager(repoDir string) *Manager {
 	return &Manager{RepoDir: repoDir}
 }
 
+// Returns a string with a path of repository on server. It's a
+// deterministic local path derived by hashing id, not a
+// human-readable name.
 func (m *Manager) RepoPath(id RepoID) string { return filepath.Join(m.RepoDir, id.IntoPath()+".git") }
 
+// Checks if repository exists on the server.
 func repoExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -47,6 +51,7 @@ func repoExists(path string) (bool, error) {
 	return false, err
 }
 
+// Checks if user repository exists and creates it otherwise, using template.
 func (m *Manager) EnsureRepo(id RepoID) error {
 	exists, err := repoExists(m.RepoPath(id))
 	if err != nil {
@@ -58,6 +63,8 @@ func (m *Manager) EnsureRepo(id RepoID) error {
 	return m.initRepoWithTemplate(id)
 }
 
+// Creates an user repository based on a existing template repository for exact task group (or single task).
+// Falls back to a plain empty repository if no template exists yet for the task group.
 func (m *Manager) initRepoWithTemplate(id RepoID) error {
 	templatePath := filepath.Join(m.RepoDir, TemplateRepoName(id.TaskGroupID))
 	barePath := m.RepoPath(id)
@@ -80,6 +87,8 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 	return nil
 }
 
+// Updates existing OR initialises template repository by commiting.
+// Unlike attempt uploads, old template files are never removed — only added or overwritten.
 func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error {
 	path := filepath.Join(m.RepoDir, TemplateRepoName(taskGroupID))
 	exists, err := repoExists(path)
@@ -95,6 +104,8 @@ func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error 
 	return err
 }
 
+// Returns a list of paths to existing files in user repository.
+// Returns nil with no error if the repository has no commits yet.
 func (m *Manager) ListFiles(id RepoID) ([]string, error) {
 	repo, err := gogit.PlainOpen(m.RepoPath(id))
 	if err != nil {
@@ -125,6 +136,8 @@ func (m *Manager) ListFiles(id RepoID) ([]string, error) {
 	return paths, nil
 }
 
+// Unzips an archive of files checking for various types of errors and vulnorabilities.
+// Enforces file-count and size limits to guard against zip bombs, without trusting the archive's declared sizes.
 func UnzipFiles(data []byte) ([]FileInfo, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -176,6 +189,10 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 	return files, nil
 }
 
+// Checks for errors and attack methods that can be inside file names in archives.
+// In particular, a ".git" path component is rejected because CommitFiles later writes
+// these paths into a temporary working copy, where such a path would land inside its
+// git metadata directory instead of the tracked content.
 func sanitizeZipEntryName(name string) (string, error) {
 	if name == "" {
 		return "", errors.New("empty file name")
@@ -197,6 +214,7 @@ func sanitizeZipEntryName(name string) (string, error) {
 	return clean, nil
 }
 
+// Commites files to any (user or template) repository. Removes the files, that are passed in remove list within this commit. Also writes a message with commit. Removal happens before the writes.
 func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string, message string) (string, error) {
 	tmp, err := os.MkdirTemp("", "git-files-*")
 	if err != nil {
@@ -244,6 +262,9 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	return hash.String(), nil
 }
 
+// Returns a difference between to commits from one repository in a form of list of changedFile stuct.
+// If include is non-nil, only files for which it returns true are kept. OldText/NewText hold
+// only the removed/added lines, not the file's full content; both are empty for binary files.
 func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path string) bool) ([]ChangedFile, error) {
 	repo, err := gogit.PlainOpen(m.RepoPath(id))
 	if err != nil {
@@ -293,6 +314,7 @@ func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path str
 	return changed, nil
 }
 
+// Helper function to get refference to a commit by its hash.
 func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
 	h, ok := plumbing.FromHex(s)
 	if !ok {
