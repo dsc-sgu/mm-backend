@@ -28,8 +28,7 @@ func handleServiceError(err error) error {
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrDifferentUsers),
 		errors.Is(err, ErrDifferentTasks),
-		errors.Is(err, ErrPatternMismatch),
-		errors.Is(err, pkggit.ErrInvalidArchive):
+		errors.Is(err, ErrPatternMismatch):
 		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
@@ -41,7 +40,7 @@ type GetDiffInput struct {
 }
 
 type GetDiffOutput struct {
-	Body []string
+	Body []pkggit.ChangedFile
 }
 
 func (h *Handler) GetDiff(

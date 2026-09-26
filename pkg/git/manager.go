@@ -3,8 +3,6 @@ package git
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -38,30 +36,40 @@ func NewManager(repoDir string) *Manager {
 
 func (m *Manager) RepoPath(id RepoID) string { return filepath.Join(m.RepoDir, id.IntoPath()+".git") }
 
-func (m *Manager) EnsureRepo(id RepoID) error {
-	path := m.RepoPath(id)
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
+func repoExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
 	}
-	return m.initRepoWithTemplate(id)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
-func TemplateRepoName(taskGroupID uuid.UUID) string {
-	hasher := sha1.New()
-	hasher.Write([]byte(taskGroupID.String()))
-	return hex.EncodeToString(hasher.Sum(nil)) + ".git"
+func (m *Manager) EnsureRepo(id RepoID) error {
+	exists, err := repoExists(m.RepoPath(id))
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return m.initRepoWithTemplate(id)
 }
 
 func (m *Manager) initRepoWithTemplate(id RepoID) error {
 	templatePath := filepath.Join(m.RepoDir, TemplateRepoName(id.TaskGroupID))
 	barePath := m.RepoPath(id)
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		_, err = gogit.PlainInit(barePath, true)
+	templateExists, err := repoExists(templatePath)
+	if err != nil {
 		return err
 	}
-	_, err := gogit.PlainClone(barePath, &gogit.CloneOptions{
+	if !templateExists {
+		_, err := gogit.PlainInit(barePath, true)
+		return err
+	}
+	_, err = gogit.PlainClone(barePath, &gogit.CloneOptions{
 		URL:            templatePath,
 		Bare:           true,
 		AllowEmptyRepo: true,
@@ -74,12 +82,16 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 
 func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error {
 	path := filepath.Join(m.RepoDir, TemplateRepoName(taskGroupID))
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if _, err = gogit.PlainInit(path, true); err != nil {
+	exists, err := repoExists(path)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if _, err := gogit.PlainInit(path, true); err != nil {
 			return fmt.Errorf("init template repo: %w", err)
 		}
 	}
-	_, err := m.CommitFiles(path, files, nil, "update template")
+	_, err = m.CommitFiles(path, files, nil, "update template")
 	return err
 }
 
@@ -116,12 +128,12 @@ func (m *Manager) ListFiles(id RepoID) ([]string, error) {
 func UnzipFiles(data []byte) ([]FileInfo, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidArchive, err)
+		return nil, fmt.Errorf("invalid archive: %v", err)
 	}
 	if len(reader.File) > MaxZipFileCount {
 		return nil, fmt.Errorf(
-			"%w: archive contains %d files, exceeding the limit of %d",
-			ErrInvalidArchive, len(reader.File), MaxZipFileCount,
+			"invalid archive: contains %d files, exceeding the limit of %d",
+			len(reader.File), MaxZipFileCount,
 		)
 	}
 
@@ -133,11 +145,11 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 		}
 		name, err := sanitizeZipEntryName(f.Name)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %v", ErrInvalidArchive, f.Name, err)
+			return nil, fmt.Errorf("invalid archive: %s: %v", f.Name, err)
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, fmt.Errorf("%w: open %s: %v", ErrInvalidArchive, f.Name, err)
+			return nil, fmt.Errorf("invalid archive: open %s: %v", f.Name, err)
 		}
 		content, err := io.ReadAll(io.LimitReader(rc, MaxZipFileSize+1))
 		if err == nil && int64(len(content)) > MaxZipFileSize {
@@ -145,16 +157,16 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 		}
 		closeErr := rc.Close()
 		if err != nil {
-			return nil, fmt.Errorf("%w: read %s: %v", ErrInvalidArchive, f.Name, err)
+			return nil, fmt.Errorf("invalid archive: read %s: %v", f.Name, err)
 		}
 		if closeErr != nil {
-			return nil, fmt.Errorf("%w: close %s: %v", ErrInvalidArchive, f.Name, closeErr)
+			return nil, fmt.Errorf("invalid archive: close %s: %v", f.Name, closeErr)
 		}
 		totalSize += int64(len(content))
 		if totalSize > MaxZipTotalSize {
 			return nil, fmt.Errorf(
-				"%w: archive exceeds the total decompressed size limit of %d bytes",
-				ErrInvalidArchive, MaxZipTotalSize,
+				"invalid archive: exceeds the total decompressed size limit of %d bytes",
+				MaxZipTotalSize,
 			)
 		}
 		files = append(files, FileInfo{
@@ -164,9 +176,6 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 	return files, nil
 }
 
-// sanitizeZipEntryName validates a zip entry name and returns it cleaned.
-// Zip entries always use "/" as the separator regardless of OS (APPNOTE
-// 4.4.17.1), so cleaning is done with the "path" package, not "filepath".
 func sanitizeZipEntryName(name string) (string, error) {
 	if name == "" {
 		return "", errors.New("empty file name")
@@ -182,12 +191,6 @@ func sanitizeZipEntryName(name string) (string, error) {
 		path.IsAbs(clean) {
 		return "", errors.New("path escapes the archive root")
 	}
-	// A ".git" path component would land inside the metadata directory of
-	// the temporary worktree Manager.CommitFiles clones the repo into,
-	// rather than the tracked content — e.g. ".git/hooks/pre-commit" or
-	// ".git/config". go-git's Worktree.Add happens to reject such paths
-	// today, but only after the file has already been written to disk, so
-	// this is enforced here rather than relied on incidentally.
 	if slices.Contains(strings.Split(clean, "/"), ".git") {
 		return "", errors.New(`path contains a ".git" component`)
 	}
@@ -241,13 +244,7 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	return hash.String(), nil
 }
 
-// Diff returns the unified diff between two commits, one line per string
-// element. If include is non-nil, only file patches for which it returns
-// true (plus any patch it can't name a path for) are kept; a nil include
-// means every file is included. Diff has no notion of why a file should be
-// kept — that's the caller's decision (e.g. GetDiff deciding which files a
-// task's patterns cover).
-func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path string) bool) ([]string, error) {
+func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path string) bool) ([]ChangedFile, error) {
 	repo, err := gogit.PlainOpen(m.RepoPath(id))
 	if err != nil {
 		return nil, fmt.Errorf("open repo: %w", err)
@@ -264,32 +261,38 @@ func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path str
 	if err != nil {
 		return nil, fmt.Errorf("diff %s..%s: %w", fromHash, toHash, err)
 	}
-	if include == nil {
-		return strings.Split(patch.String(), "\n"), nil
-	}
-	var fps []fdiff.FilePatch
+	var changed []ChangedFile
 	for _, fp := range patch.FilePatches() {
 		fromFile, toFile := fp.Files()
-		name := ""
-		if toFile != nil {
-			name = toFile.Path()
-		} else if fromFile != nil {
-			name = fromFile.Path()
+		cf := ChangedFile{Binary: fp.IsBinary()}
+		switch {
+		case fromFile == nil:
+			cf.Status, cf.Path = FileAdded, toFile.Path()
+		case toFile == nil:
+			cf.Status, cf.Path = FileDeleted, fromFile.Path()
+		default:
+			cf.Status, cf.Path = FileChanged, toFile.Path()
 		}
-		if name == "" || include(name) {
-			fps = append(fps, fp)
+		if include != nil && !include(cf.Path) {
+			continue
 		}
+		if !cf.Binary {
+			var oldText, newText strings.Builder
+			for _, c := range fp.Chunks() {
+				switch c.Type() {
+				case fdiff.Delete:
+					oldText.WriteString(c.Content())
+				case fdiff.Add:
+					newText.WriteString(c.Content())
+				}
+			}
+			cf.OldText, cf.NewText = oldText.String(), newText.String()
+		}
+		changed = append(changed, cf)
 	}
-	buf := &bytes.Buffer{}
-	_ = fdiff.NewUnifiedEncoder(buf, fdiff.DefaultContextLines).
-		Encode(&filteredPatch{message: patch.Message(), filePatches: fps})
-	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n"), nil
+	return changed, nil
 }
 
-// commitByHash resolves s as a commit hash in repo, rejecting malformed
-// input outright: plumbing.NewHash silently returns a zero/partial hash for
-// a bad hex string instead of erroring, which would otherwise surface here
-// as a confusing "commit not found" instead of "invalid commit hash".
 func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
 	h, ok := plumbing.FromHex(s)
 	if !ok {
@@ -301,15 +304,6 @@ func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
 	}
 	return c, nil
 }
-
-type filteredPatch struct {
-	message     string
-	filePatches []fdiff.FilePatch
-}
-
-func (p *filteredPatch) FilePatches() []fdiff.FilePatch { return p.filePatches }
-
-func (p *filteredPatch) Message() string { return p.message }
 
 // WritePatterns writes the pre-receive hook's ".mm-patterns" file: one
 // "<task name>\t<glob>" line per required pattern. A task with no patterns
