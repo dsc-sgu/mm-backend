@@ -4,20 +4,15 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// PatternsFileName is the file consumed by the Git pre-receive hook.
-const PatternsFileName = ".mm-patterns"
-
-// Limits for archives submitted as task attempts or templates. Submissions
-// are programming assignment sources, so these are generous for that use
-// case while still bounding the memory and disk a single upload can consume.
 const (
+	// PatternsFileName is the file consumed by the Git pre-receive hook.
+	PatternsFileName = ".mm-patterns"
 	// MaxZipFileCount is the maximum number of regular files a submitted
 	// archive may contain.
 	MaxZipFileCount = 2000
@@ -25,24 +20,12 @@ const (
 	// a submitted archive.
 	MaxZipFileSize = 10 << 20 // 10 MiB
 	// MaxZipTotalSize is the maximum total decompressed size of all files
-	// in a submitted archive combined.
+	// in a submitted archive combined. Also enforced at the HTTP layer as
+	// the request body size limit (see internal/api.go): a compressed
+	// archive cannot reasonably need to be larger than the decompressed
+	// content budget it is allowed to produce.
 	MaxZipTotalSize = 50 << 20 // 50 MiB
-	// MaxZipArchiveSize is the maximum size of the archive itself, enforced
-	// at the HTTP layer via huma.Operation.MaxBodyBytes (see internal/api.go)
-	// rather than here: rejecting an oversized request body is a transport
-	// concern, and checking it only after Huma has already buffered the
-	// whole body into memory would be too late to matter. It matches
-	// MaxZipTotalSize: a compressed archive cannot reasonably need to be
-	// larger than the decompressed content budget it is allowed to produce.
-	MaxZipArchiveSize = MaxZipTotalSize
 )
-
-// ErrInvalidArchive is returned by UnzipFiles for any way a submitted
-// archive can be malformed or violate the limits above — a corrupt zip, a
-// Zip Slip or ".git" path, or exceeding a file-count/size limit. Every
-// cause is the caller's fault (bad or malicious upload content), never a
-// server-side failure, so callers should surface it as a 400, not a 500.
-var ErrInvalidArchive = errors.New("invalid archive")
 
 // RepoID identifies a participant repository for a task group.
 type RepoID struct {
@@ -58,6 +41,12 @@ func (repoID *RepoID) IntoPath() string {
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 
+func TemplateRepoName(taskGroupID uuid.UUID) string {
+	hasher := sha1.New()
+	hasher.Write([]byte(taskGroupID.String()))
+	return hex.EncodeToString(hasher.Sum(nil)) + ".git"
+}
+
 // FileInfo is a file transferred through the Git integration.
 type FileInfo struct {
 	FileName    string    `json:"fileName"    binding:"required"`
@@ -71,4 +60,25 @@ type FileInfo struct {
 
 func PatternsFilePath(repoPath string) string {
 	return filepath.Join(repoPath, PatternsFileName)
+}
+
+// FileStatus is how a file changed between the two commits Manager.Diff compares.
+type FileStatus string
+
+const (
+	FileAdded   FileStatus = "added"
+	FileDeleted FileStatus = "deleted"
+	FileChanged FileStatus = "changed"
+)
+
+// ChangedFile is one file's change between the two commits Manager.Diff
+// compares. OldText/NewText hold only the removed/added lines (with no
+// surrounding context) — not the file's full content on either side. For a
+// binary file, Binary is true and both are empty.
+type ChangedFile struct {
+	Path    string     `json:"path"`
+	Status  FileStatus `json:"status"`
+	OldText string     `json:"oldText"`
+	NewText string     `json:"newText"`
+	Binary  bool       `json:"binary"`
 }

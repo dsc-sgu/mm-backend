@@ -204,7 +204,7 @@ func (s *Service) PushAttempt(
 func (s *Service) GetDiff(
 	ctx context.Context,
 	callerID, id1, id2 uuid.UUID,
-) ([]string, error) {
+) ([]pkggit.ChangedFile, error) {
 	one, err := s.repo.GetAttemptCommitInfo(id1)
 	if err != nil {
 		return nil, fmt.Errorf("get diff: %w", err)
