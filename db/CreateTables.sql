@@ -3,8 +3,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
--- NOTE(nrydanov): Need to think of other types together
-CREATE TYPE block_type AS ENUM ('task', 'text');
+CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task');
 CREATE TYPE snapshot_status AS ENUM ('draft', 'published', 'stale');
 
 CREATE TABLE unit_types (
@@ -47,6 +46,7 @@ CREATE TABLE courses (
     active_snapshot_id uuid, -- REFERENCES course_snapshots(id)
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
+    display_name varchar(128) NOT NULL,
     -- Service info
     version integer NOT NULL DEFAULT 0,
     created_at timestamp NOT NULL,
@@ -75,11 +75,14 @@ CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
-    block_type TEXT NOT NULL,
+    block_type block_type NOT NULL,
     data jsonb NOT NULL,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
-    deleted_at timestamp
+    deleted_at timestamp,
+
+    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
+    UNIQUE (id, block_type)
 );
 
 -- NOTE(Ezhkin-Kot): pessimistic locking for course editing
@@ -182,13 +185,42 @@ CREATE TABLE course_users_groups (
     PRIMARY KEY (user_id, course_id, group_id)
 );
 
+-- NOTE(nrydanov): ephemeral entity (not a block) — groups tasks into one shared
+-- git repo; course_id is here so the SSH layer resolves <course>/<group name>
+CREATE TABLE task_groups (
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
+    course_id uuid NOT NULL REFERENCES courses(id),
+    name varchar(128) NOT NULL,
+    deleted_at timestamp
+);
+
+-- NOTE(Ezhkin-Kot): task_groups is soft-deleted (like blocks) rather than
+-- hard-deleted, since tasks from any snapshot generation, including old
+-- history, may still reference a group; a partial index keeps names unique
+-- only among the still-live groups, so a deleted name can be reused.
+CREATE UNIQUE INDEX idx_task_groups_course_name ON task_groups(course_id, name) WHERE (deleted_at IS NULL);
+
+-- NOTE(nrydanov): task is a subtype of block — the composite FK plus
+-- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
+-- NOTE(Ezhkin-Kot): a task's block gets a fresh id every time its snapshot is
+-- copied (course-editing draft creation / snapshot switch), so a task's own
+-- row is copied alongside it.
 CREATE TABLE tasks (
-    block_id uuid PRIMARY KEY REFERENCES blocks(id),
-    available_at timestamp,
-    deadline_at timestamp,
+    block_id uuid PRIMARY KEY,
+    block_type block_type NOT NULL DEFAULT 'task',
+    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
+    task_group_id uuid NOT NULL REFERENCES task_groups(id),
+    name varchar(128) NOT NULL,
+    -- glob patterns matching the files that count as this task's solution
+    patterns text[] NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
     max_attempts integer NOT NULL,
-    lead_time time
+    available_at timestamptz,
+    deadline_at timestamptz,
+
+    FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
+    CHECK (block_type = 'task'),
+    UNIQUE (snapshot_id, task_group_id, name)
 );
 
 CREATE TABLE attempts (

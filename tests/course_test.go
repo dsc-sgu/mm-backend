@@ -45,6 +45,7 @@ func TestCreateCourse(t *testing.T) {
 		&testUser,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 	require.NotZero(t, courseID)
 }
@@ -76,6 +77,7 @@ func TestGetCourseByID(t *testing.T) {
 		&backendPort,
 		&testUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 	require.NotZero(t, courseID)
@@ -124,6 +126,17 @@ func TestGetPaginatedCourse(t *testing.T) {
 	)
 	require.NotZero(t, testUser.ID)
 
+	testUser2 := CreateAndLoginUser(
+		t,
+		&backendPort,
+		"Test First Name 2",
+		"Test Last Name 2",
+		"Username 2",
+		"test2@email.com",
+		"password 2",
+	)
+	require.NotZero(t, testUser2.ID)
+
 	disciplineID := CreateTestDiscipline(
 		t,
 		&backendPort,
@@ -132,18 +145,37 @@ func TestGetPaginatedCourse(t *testing.T) {
 	)
 	require.NotZero(t, disciplineID)
 
+	disciplineID2 := CreateTestDiscipline(
+		t,
+		&backendPort,
+		&testUser2,
+		"Test Discipline 2",
+	)
+	require.NotZero(t, disciplineID2)
+
 	for i := range 5 {
+		id2 := CreateTestCourse(
+			t,
+			&backendPort,
+			&testUser2,
+			disciplineID2,
+			fmt.Sprintf("Course2 %d", i),
+			"Test Course",
+		)
+		require.NotZero(t, id2)
+
 		id := CreateTestCourse(
 			t,
 			&backendPort,
 			&testUser,
 			disciplineID,
 			fmt.Sprintf("Course %d", i),
+			"Test Course",
 		)
 		require.NotZero(t, id)
 	}
 
-	limit := 2
+	limit := 3
 	lastID := uuid.Nil
 
 	url := fmt.Sprintf(
@@ -153,6 +185,31 @@ func TestGetPaginatedCourse(t *testing.T) {
 		lastID,
 	)
 
+	url2 := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_teacher=true",
+		backendPort.Port(),
+		limit,
+		lastID,
+		disciplineID2,
+	)
+
+	url3 := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=false&is_teacher=false",
+		backendPort.Port(),
+		limit,
+		lastID,
+		disciplineID,
+	)
+
+	url4 := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses?limit=%d&last_id=%s&discipline_id=%s&is_student=true",
+		backendPort.Port(),
+		limit,
+		lastID,
+		disciplineID,
+	)
+
+	// 1 url test
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
 
@@ -174,6 +231,76 @@ func TestGetPaginatedCourse(t *testing.T) {
 
 	require.Equal(t, "Course 0", receivedCourses[0].Name)
 	require.Equal(t, "Course 1", receivedCourses[1].Name)
+	require.Equal(t, "Course 2", receivedCourses[2].Name)
+
+	// 2 url test
+	req, err = http.NewRequest(http.MethodGet, url2, nil)
+	require.NoError(t, err)
+
+	resp, err = testUser2.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var receivedCourses2 []*courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedCourses2))
+
+	require.Len(t, receivedCourses2, limit)
+
+	require.Equal(t, "Course2 0", receivedCourses2[0].Name)
+	require.Equal(t, "Course2 1", receivedCourses2[1].Name)
+	require.Equal(t, "Course2 2", receivedCourses2[2].Name)
+
+	// 3 url test
+	req, err = http.NewRequest(http.MethodGet, url3, nil)
+	require.NoError(t, err)
+
+	resp, err = testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var receivedCourses3 []*courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedCourses3))
+
+	require.Len(t, receivedCourses3, limit)
+
+	require.Equal(t, "Course 0", receivedCourses3[0].Name)
+	require.Equal(t, "Course 1", receivedCourses3[1].Name)
+	require.Equal(t, "Course 2", receivedCourses3[2].Name)
+
+	// 4 url test
+	req, err = http.NewRequest(http.MethodGet, url4, nil)
+	require.NoError(t, err)
+
+	resp, err = testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		err := resp.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var receivedCourses4 []*courses.Course
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedCourses4))
+
+	require.Len(t, receivedCourses4, 0)
+
 }
 
 func TestUpdateCourse(t *testing.T) {
@@ -204,6 +331,7 @@ func TestUpdateCourse(t *testing.T) {
 		&testUser,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 	require.NotZero(t, courseID)
 
@@ -215,8 +343,8 @@ func TestUpdateCourse(t *testing.T) {
 
 	updatedName := "Updated Test Course"
 	body, _ := json.Marshal(courses.UpdateCourse{
-		OwnerID: &testUser.ID,
-		Name:    &updatedName,
+		OwnerID:     &testUser.ID,
+		DisplayName: &updatedName,
 	})
 
 	req, err := http.NewRequest(
@@ -242,7 +370,7 @@ func TestUpdateCourse(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updatedCourse))
 
 	require.Equal(t, courseID, updatedCourse.ID)
-	require.Equal(t, "Updated Test Course", updatedCourse.Name)
+	require.Equal(t, "Updated Test Course", updatedCourse.DisplayName)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
 	require.NotNil(t, updatedCourse.ActiveSnapshotID)
 	require.Equal(t, 1, updatedCourse.Version)
@@ -283,6 +411,7 @@ func TestCourseInviteWorkflow(t *testing.T) {
 		&backendPort,
 		&teacherTestUser,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 
@@ -492,6 +621,7 @@ func TestDeleteCourse(t *testing.T) {
 		&backendPort,
 		&teacher,
 		disciplineID,
+		"Test Course",
 		"Test Course",
 	)
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,36 +18,27 @@ import (
 
 const (
 	createCourseSQL = `
-		INSERT INTO courses (discipline_id, owner_id, name, created_at)
-		VALUES (:discipline_id, :owner_id, :name, :created_at)
+		INSERT INTO courses (discipline_id, owner_id, name, display_name, created_at)
+		VALUES (:discipline_id, :owner_id, :name, :display_name, :created_at)
 		RETURNING id
 	`
 
 	getCourseByIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
 	`
-
 	getCourseByNameSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 		FROM courses
 		WHERE name = $1 AND deleted_at IS NULL
 	`
 
-	getAllCoursesByCourseIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
-		FROM courses
-		WHERE id > $2 AND deleted_at IS NULL
-		ORDER BY id
-		LIMIT $1
-	`
-
 	updateCourseByIDSQL = `
 		UPDATE courses
-		SET owner_id = COALESCE($1, owner_id), name = COALESCE($2, name)
-		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, version, created_at, deleted_at
+		SET owner_id = COALESCE($1, owner_id), name = COALESCE($2, name), display_name = COALESCE($3, display_name)
+		WHERE id = $4 AND deleted_at IS NULL
+		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
 	`
 
 	publishSnapshotToCourseSQL = `
@@ -147,6 +139,7 @@ func (r *PGRepo) createCourseTx(
 		DisciplineID: model.DisciplineID,
 		OwnerID:      ownerID,
 		Name:         model.Name,
+		DisplayName:  model.DisplayName,
 		CreatedAt:    time.Now(),
 	}
 
@@ -218,39 +211,68 @@ func (r *PGRepo) GetCourseByID(
 	return &course, nil
 }
 
-func (r *PGRepo) GetCourseByName(
-	ctx context.Context,
-	name string,
-) (*courses.Course, error) {
+func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
 	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
 
 	var course courses.Course
-	err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
+	if err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name); err != nil {
 		return nil, err
 	}
 	return &course, nil
 }
 
+// GetPaginatedCourses lists courses in a stable, gapless order using keyset
+// (seek) pagination. The cursor condition must compare the same columns the
+// results are ordered by - here (name, id), with id as a tie-breaker since
+// name alone is not unique - or pages can silently skip or repeat rows: a
+// cursor on a column that isn't the sort key partitions the *unsorted* table,
+// which has no consistent relationship to a page boundary drawn by name.
 func (r *PGRepo) GetPaginatedCourses(
 	ctx context.Context,
 	limit int,
 	lastID uuid.UUID,
+	lastName string,
+	filter courses.CourseFilter,
 ) ([]courses.Course, error) {
-	zap.L().
-		Debug("Executing query", zap.String("query", getAllCoursesByCourseIDSQL))
+	join := ""
+	conditions := []string{"(c.name, c.id) > ($2, $3)", "c.deleted_at IS NULL"}
+	args := []any{limit, lastName, lastID}
 
+	if filter.DisciplineID != uuid.Nil {
+		args = append(args, filter.DisciplineID)
+		conditions = append(conditions, fmt.Sprintf("c.discipline_id = $%d", len(args)))
+	}
+
+	if filter.IsTeacher || filter.IsStudent {
+		var roles []string
+		if filter.IsTeacher {
+			roles = append(roles, "'TEACHER'")
+		}
+		if filter.IsStudent {
+			roles = append(roles, "'STUDENT'")
+		}
+
+		join = "JOIN course_members cm ON cm.course_id = c.id"
+		args = append(args, filter.UserID)
+		conditions = append(conditions,
+			fmt.Sprintf("cm.user_id = $%d", len(args)),
+			fmt.Sprintf("cm.role IN (%s)", strings.Join(roles, ", ")),
+		)
+	}
+
+	getCoursesByFilter := fmt.Sprintf(`
+		SELECT c.id, c.discipline_id, c.owner_id, c.name, c.display_name, c.created_at
+		FROM courses c
+		%s
+		WHERE %s
+		ORDER BY c.name, c.id
+		LIMIT $1
+	`, join, strings.Join(conditions, " AND "))
+
+	zap.L().Debug("Executing query", zap.String("query", getCoursesByFilter))
 	var course courses.Course
 	var courseList []courses.Course
-	rows, err := r.db.QueryxContext(
-		ctx,
-		getAllCoursesByCourseIDSQL,
-		limit,
-		lastID,
-	)
+	rows, err := r.db.QueryxContext(ctx, getCoursesByFilter, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +298,7 @@ func (r *PGRepo) UpdateCourseByID(
 	zap.L().Debug("Executing query", zap.String("query", updateCourseByIDSQL))
 
 	var course courses.Course
-	err := r.db.QueryRowxContext(ctx, updateCourseByIDSQL, update.OwnerID, update.Name, id).
+	err := r.db.QueryRowxContext(ctx, updateCourseByIDSQL, update.OwnerID, update.Name, update.DisplayName, id).
 		StructScan(&course)
 	if err != nil {
 		return nil, err
