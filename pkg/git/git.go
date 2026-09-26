@@ -73,9 +73,8 @@ const (
 type GitCmd string
 
 const (
-	GitUploadPack    GitCmd = "git-upload-pack"
-	GitUploadArchive GitCmd = "git-upload-archive"
-	GitReceivePack   GitCmd = "git-receive-pack"
+	GitUploadPack  GitCmd = "git-upload-pack"
+	GitReceivePack GitCmd = "git-receive-pack"
 )
 
 const defaultWorkDir = ""
@@ -84,7 +83,7 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
 	switch GitCmd(gitCmd) {
-	case GitUploadArchive, GitUploadPack:
+	case GitUploadPack:
 		exists, err := FileExists(rp)
 		if !exists {
 			return ErrInvalidRepo

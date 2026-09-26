@@ -292,7 +292,7 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 				default:
 					pkggit.Fatal(sess, pkggit.ErrNotAuthed)
 				}
-			case pkggit.GitUploadPack, pkggit.GitUploadArchive:
+			case pkggit.GitUploadPack:
 				switch access {
 				case pkggit.ReadOnlyAccess,
 					pkggit.ReadWriteAccess,
