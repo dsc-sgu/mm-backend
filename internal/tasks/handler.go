@@ -9,7 +9,6 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
-	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type Handler struct {
@@ -30,8 +29,6 @@ func handleServiceError(err error) error {
 	case errors.Is(err, membership.ErrNotFound),
 		errors.Is(err, membership.ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
-	case errors.Is(err, pkggit.ErrInvalidArchive):
-		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
 }

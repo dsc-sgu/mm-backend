@@ -294,7 +294,7 @@ func setupAttemptRoutes(api huma.API, handler *attempt.Handler) {
 			Summary:       "Push attempt",
 			DefaultStatus: http.StatusCreated,
 			Tags:          []string{"Attempt"},
-			MaxBodyBytes:  pkggit.MaxZipArchiveSize,
+			MaxBodyBytes:  pkggit.MaxZipTotalSize,
 		},
 		handler.PushAttempt,
 	)
@@ -351,7 +351,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 			Summary:       "Upload task template",
 			DefaultStatus: http.StatusNoContent,
 			Tags:          []string{"Task"},
-			MaxBodyBytes:  pkggit.MaxZipArchiveSize,
+			MaxBodyBytes:  pkggit.MaxZipTotalSize,
 		},
 		handler.UploadTemplate,
 	)
