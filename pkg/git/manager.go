@@ -21,7 +21,6 @@ import (
 	fdiff "github.com/go-git/go-git/v6/plumbing/format/diff"
 	"github.com/go-git/go-git/v6/plumbing/format/index"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/gobwas/glob"
 	"github.com/google/uuid"
 )
 
@@ -351,37 +350,4 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 		}
 	}
 	return os.WriteFile(PatternsFilePath(m.RepoPath(id)), []byte(content.String()), 0o644)
-}
-
-// CompiledPatterns is a set of glob patterns compiled once via
-// CompilePatterns, for matching many names without recompiling on every
-// call — useful when a caller checks the same pattern set against a large
-// list of paths (e.g. PushAttempt deciding what a resubmission should
-// prune).
-type CompiledPatterns []*glob.Pattern
-
-// CompilePatterns compiles patterns for repeated matching via
-// CompiledPatterns.MatchAny. A pattern that fails to compile is skipped,
-// same as MatchesAnyPattern does per call.
-func CompilePatterns(patterns []string) CompiledPatterns {
-	compiled := make(CompiledPatterns, 0, len(patterns))
-	for _, pattern := range patterns {
-		g, err := glob.Compile(pattern)
-		if err != nil {
-			continue
-		}
-		compiled = append(compiled, g)
-	}
-	return compiled
-}
-
-// MatchAny reports whether name matches any of the compiled patterns. See
-// MatchesAnyPattern for the matching rules.
-func (c CompiledPatterns) MatchAny(name string) bool {
-	for _, g := range c {
-		if g.Match(name) {
-			return true
-		}
-	}
-	return false
 }
