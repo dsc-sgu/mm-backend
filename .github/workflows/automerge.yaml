@@ -1,7 +1,7 @@
 name: automerge
 on:
   pull_request_target:
-    types: [ opened, reopened, ready_for_review ]
+    types: [ opened, reopened, ready_for_review, synchronize ]
 
 permissions:
   contents: write
@@ -12,9 +12,19 @@ jobs:
     name: Enable auto-merge
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
+    env:
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        if: ${{ github.actor == 'dependabot[bot]' }}
+        uses: dependabot/fetch-metadata@v3
+      - name: Approve patch and minor Dependabot updates
+        if: >-
+          ${{ steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' }}
+        run: gh pr review --approve "$PR_URL"
       - name: Enable auto-merge
+        if: ${{ github.event.action != 'synchronize' }}
         run: gh pr merge --auto --rebase "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
