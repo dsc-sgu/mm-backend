@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	mobynetwork "github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -35,7 +35,7 @@ type TestUser struct {
 func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *mobynetwork.Port, error) {
 	return initBackendWithEnv(ctx, net, nil)
 }
 
@@ -43,8 +43,8 @@ func initBackendWithEnv(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
 	additionalEnv map[string]string,
-) (testcontainers.Container, *nat.Port, error) {
-	basePort := nat.Port("80/tcp")
+) (testcontainers.Container, *mobynetwork.Port, error) {
+	basePort := mobynetwork.MustParsePort("80/tcp")
 
 	env := map[string]string{
 		"HOST":          "0.0.0.0",
@@ -64,7 +64,7 @@ func initBackendWithEnv(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{string(basePort)},
+		ExposedPorts: []string{basePort.String()},
 		Env:          env,
 		WaitingFor:   wait.ForLog("Server running"),
 		Networks:     []string{net.Name},
@@ -81,7 +81,7 @@ func initBackendWithEnv(
 		return nil, nil, err
 	}
 
-	port, err := container.MappedPort(ctx, nat.Port(basePort))
+	port, err := container.MappedPort(ctx, basePort.String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -92,11 +92,11 @@ func initBackendWithEnv(
 func initPostgres(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
+) (testcontainers.Container, *mobynetwork.Port, error) {
 	dbUser := "postgres"
 	dbPassword := "postgres"
 	dbName := "postgres"
-	pgPort := nat.Port("5432/tcp")
+	pgPort := "5432/tcp"
 	SQLPath, err := filepath.Abs("../db/CreateTables.sql")
 	if err != nil {
 		return nil, nil, err
@@ -105,7 +105,7 @@ func initPostgres(
 
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:18.1",
-		ExposedPorts: []string{string(pgPort)},
+		ExposedPorts: []string{pgPort},
 		Env: map[string]string{
 			"POSTGRES_USER":     dbUser,
 			"POSTGRES_PASSWORD": dbPassword,
@@ -151,12 +151,12 @@ func initPostgres(
 func initRedis(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *nat.Port, error) {
-	redisPort := nat.Port("6379/tcp")
+) (testcontainers.Container, *mobynetwork.Port, error) {
+	redisPort := "6379/tcp"
 
 	req := testcontainers.ContainerRequest{
 		Image:          "valkey/valkey:8",
-		ExposedPorts:   []string{string(redisPort)},
+		ExposedPorts:   []string{redisPort},
 		WaitingFor:     wait.ForListeningPort(redisPort),
 		Networks:       []string{net.Name},
 		NetworkAliases: map[string][]string{net.Name: {"mm-redis"}},
@@ -216,7 +216,7 @@ func clearDatabases(t *testing.T) {
 
 func CreateTestUser(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	firstName, lastName, username, email, password string,
 ) uuid.UUID {
 	t.Helper()
@@ -261,7 +261,7 @@ func CreateTestUser(
 
 func LoginUser(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	email, password string,
 ) TestUser {
 	t.Helper()
@@ -322,7 +322,7 @@ func LoginUser(
 
 func CreateAndLoginUser(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	firstName, lastName, username, email, password string,
 ) TestUser {
 	t.Helper()
@@ -344,7 +344,7 @@ func CreateAndLoginUser(
 
 func CreateTestDiscipline(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	name string,
 ) uuid.UUID {
@@ -389,7 +389,7 @@ func CreateTestDiscipline(
 
 func CreateTestCourse(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	disciplineID uuid.UUID,
 	name string,
@@ -433,7 +433,7 @@ func CreateTestCourse(
 
 func CreateTestBlock(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID, snapshotID uuid.UUID,
 ) uuid.UUID {
@@ -442,7 +442,7 @@ func CreateTestBlock(
 
 func CreateTestBlockAfter(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID, snapshotID uuid.UUID,
 	afterBlockID *uuid.UUID,
@@ -491,7 +491,7 @@ func CreateTestBlockAfter(
 
 func MoveBlockAfter(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID, snapshotID, blockToMoveID uuid.UUID,
 	afterBlockID *uuid.UUID,
@@ -531,7 +531,7 @@ func MoveBlockAfter(
 
 func GetBlockByID(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID, snapshotID, blockID uuid.UUID,
 ) blocks.Block {
@@ -575,7 +575,7 @@ func GetBlockByID(
 
 func GetRoleInCourse(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 ) *membership.Role {
@@ -618,7 +618,7 @@ type LockCourseResult struct {
 
 func LockCourse(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 ) LockCourseResult {

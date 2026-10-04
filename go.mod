@@ -6,10 +6,10 @@ require (
 	github.com/charmbracelet/log v1.0.0
 	github.com/charmbracelet/ssh v0.0.0-20250128164007-98fd5ae11894
 	github.com/danielgtaylor/huma/v2 v2.39.1
-	github.com/docker/go-connections v0.7.0
 	github.com/go-git/go-git/v5 v5.18.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/moby/moby/api v1.55.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.28.0
@@ -48,6 +48,7 @@ require (
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
+	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
@@ -81,7 +82,6 @@ require (
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/moby/api v1.55.0 // indirect
 	github.com/moby/moby/client v0.5.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
