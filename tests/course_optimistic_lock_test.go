@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	mobynetwork "github.com/moby/moby/api/types/network"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/network"
@@ -204,7 +204,7 @@ func TestOptimisticLockingConflictScenario(t *testing.T) {
 // Minimal helpers for this isolated test to avoid circular dependencies if moved.
 func createInvite(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	user *TestUser,
 	courseID uuid.UUID,
 	role membership.Role,
@@ -253,7 +253,7 @@ func createInvite(
 
 func joinCourse(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	user *TestUser,
 	inviteID uuid.UUID,
 ) error {

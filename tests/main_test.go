@@ -8,14 +8,14 @@ import (
 	"os"
 	"testing"
 
-	"github.com/docker/go-connections/nat"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	mobynetwork "github.com/moby/moby/api/types/network"
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go/network"
 )
 
 var (
-	backendPort  nat.Port
+	backendPort  mobynetwork.Port
 	testPostgres *sql.DB
 	testRedis    *redis.Client
 )

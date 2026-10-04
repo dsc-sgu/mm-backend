@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
+	mobynetwork "github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
@@ -20,7 +20,7 @@ import (
 // Helper to get course content from the active snapshot
 func GetCourseContent(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 ) courses.CourseContentResponse {
@@ -51,7 +51,7 @@ func GetCourseContent(
 // Helper to get snapshot blocks
 func GetSnapshotBlocks(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID, snapshotID uuid.UUID,
 ) []*blocks.Block {
@@ -83,7 +83,7 @@ func GetSnapshotBlocks(
 // Helper to send heartbeat
 func SendHeartbeat(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 ) int {
@@ -110,7 +110,7 @@ func SendHeartbeat(
 // Helper to publish draft
 func PublishDraft(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 	draftSnapshotID uuid.UUID,
@@ -145,7 +145,7 @@ func PublishDraft(
 // Helper to cancel edit
 func CancelEdit(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 ) int {
@@ -172,7 +172,7 @@ func CancelEdit(
 // Helper to switch snapshot
 func SwitchSnapshot(
 	t *testing.T,
-	port *nat.Port,
+	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
 	targetSnapshotID uuid.UUID,
