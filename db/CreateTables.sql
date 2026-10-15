@@ -238,11 +238,9 @@ CREATE TABLE attempt_transitions (
 );
 
 CREATE TABLE ssh_keys (
+    fingerprint TEXT PRIMARY KEY,
     owner_id uuid NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
     key TEXT NOT NULL,
-    fingerprint TEXT NOT NULL,
-    created_at timestamp NOT NULL,
-
-    PRIMARY KEY (owner_id, fingerprint)
+    created_at timestamp NOT NULL
 );

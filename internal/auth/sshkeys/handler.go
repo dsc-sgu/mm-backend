@@ -2,6 +2,7 @@ package sshkeys
 
 import (
 	"context"
+	"errors"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -21,6 +22,9 @@ func (h *Handler) Add(ctx context.Context, input *AddInput) (*struct{}, error) {
 		return nil, huma.Error401Unauthorized("")
 	}
 	if err := h.service.Add(userID, input.Body); err != nil {
+		if errors.Is(err, ErrKeyAlreadyRegistered) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 	return nil, nil

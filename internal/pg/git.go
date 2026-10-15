@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 
 	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
@@ -78,6 +80,10 @@ func (r *PGRepo) AddSSHKey(model *sshkeys.SSHKey) error {
 	zap.L().Debug("Executing query", zap.String("query", addSSHKeySQL))
 
 	if _, err := r.db.NamedExec(addSSHKeySQL, model); err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return sshkeys.ErrKeyAlreadyRegistered
+		}
 		return err
 	}
 

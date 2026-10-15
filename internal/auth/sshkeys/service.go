@@ -23,6 +23,8 @@ type AddSSHKey struct {
 	Key  string `json:"key"  binding:"required"`
 }
 
+var ErrKeyAlreadyRegistered = errors.New("SSH key is already registered")
+
 type Service struct{ repo Repo }
 
 func NewService(repo Repo) *Service { return &Service{repo: repo} }
