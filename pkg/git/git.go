@@ -35,13 +35,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
+	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
 // ErrNotAuthed represents unauthorized access.
@@ -80,7 +80,6 @@ const (
 const defaultWorkDir = ""
 
 func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
-	cmd := strings.TrimPrefix(gitCmd, "git-")
 	rp := filepath.Join(repoDir, repo)
 	switch GitCmd(gitCmd) {
 	case GitUploadPack:
@@ -91,12 +90,26 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 		if err != nil {
 			return err
 		}
-		return RunGit(s, defaultWorkDir, cmd, rp)
-	case GitReceivePack:
-		if err := EnsureRepo(repoDir, repo); err != nil {
+		gitRepo, err := gogit.PlainOpen(rp)
+		if err != nil {
 			return err
 		}
-		if err := RunGit(s, defaultWorkDir, "-c", "receive.advertisePushOptions=true", "receive-pack", rp); err != nil {
+		return transport.UploadPack(
+			s.Context(), gitRepo.Storer, io.NopCloser(s), s,
+			&transport.UploadPackRequest{},
+		)
+	case GitReceivePack:
+		if err := WritePostReceiveHook(rp); err != nil {
+			return fmt.Errorf("write post-receive hook: %w", err)
+		}
+		if err := WritePreReceiveHook(rp); err != nil {
+			return fmt.Errorf("write pre-receive hook: %w", err)
+		}
+		if err := RunGit(s, defaultWorkDir,
+			"-c", "receive.advertisePushOptions=true",
+			"-c", "receive.denyNonFastForwards=true",
+			"receive-pack", rp,
+		); err != nil {
 			return err
 		}
 		if err := EnsureDefaultBranch(s, rp); err != nil {
@@ -127,42 +140,6 @@ func Fatal(s ssh.Session, v ...interface{}) {
 	pktLine := fmt.Sprintf("%04x%s\n", len(msg)+5, msg)
 	_, _ = wish.WriteString(s, pktLine)
 	s.Exit(1) // nolint: errcheck
-}
-
-// EnsureRepo makes sure the given repo exists within the given dir, and that
-// it is git repository.
-//
-// If path does not exist, it'll be created.
-// If the path is not a git repo, it will be git init-ed as a bare repository.
-func EnsureRepo(dir, repo string) error {
-	exists, err := FileExists(dir)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		err = os.MkdirAll(dir, os.ModeDir|os.FileMode(0o700))
-		if err != nil {
-			return err
-		}
-	}
-	rp := filepath.Join(dir, repo)
-	exists, err = FileExists(rp)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		_, err := git.PlainInit(rp, true)
-		if err != nil {
-			return err
-		}
-	}
-	if err := WritePostReceiveHook(rp); err != nil {
-		return fmt.Errorf("write post-receive hook: %w", err)
-	}
-	if err := WritePreReceiveHook(rp); err != nil {
-		return fmt.Errorf("write pre-receive hook: %w", err)
-	}
-	return nil
 }
 
 // WritePreReceiveHook writes a pre-receive hook that checks tag pushes for
@@ -300,7 +277,7 @@ func RunGit(s ssh.Session, dir string, args ...string) error {
 }
 
 func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
-	r, err := git.PlainOpen(repoPath)
+	r, err := gogit.PlainOpen(repoPath)
 	if err != nil {
 		return err
 	}
