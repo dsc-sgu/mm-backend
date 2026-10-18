@@ -249,7 +249,8 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	hash, err := wt.Commit(
 		message,
 		&gogit.CommitOptions{
-			Author: &object.Signature{Name: "mm-backend", When: time.Now()},
+			Author:            &object.Signature{Name: "mm-backend", When: time.Now()},
+			AllowEmptyCommits: true,
 		},
 	)
 	if err != nil {
@@ -261,9 +262,8 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	return hash.String(), nil
 }
 
-// Returns a difference between to commits from one repository in a form of list of changedFile stuct.
-// If include is non-nil, only files for which it returns true are kept. OldText/NewText hold
-// only the removed/added lines, not the file's full content; both are empty for binary files.
+// Returns a difference between two commits from one repository in a form of list of changedFile struct.
+// If include is non-nil, only files for which it returns true are kept.
 func (m *Manager) Diff(id RepoID, fromHash, toHash string, include func(path string) bool) ([]ChangedFile, error) {
 	repo, err := gogit.PlainOpen(m.RepoPath(id))
 	if err != nil {
