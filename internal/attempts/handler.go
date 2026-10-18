@@ -28,7 +28,8 @@ func handleServiceError(err error) error {
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrDifferentUsers),
 		errors.Is(err, ErrDifferentTasks),
-		errors.Is(err, ErrPatternMismatch):
+		errors.Is(err, ErrPatternMismatch),
+		errors.Is(err, ErrEmptyArchive):
 		return huma.Error400BadRequest(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())

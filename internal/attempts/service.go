@@ -52,6 +52,8 @@ var (
 	// ErrPatternMismatch is returned when an uploaded archive contains none
 	// of the files a task requires.
 	ErrPatternMismatch = errors.New("no uploaded files match required patterns")
+	// ErrEmptyArchive is returned when an uploaded archive contains no files.
+	ErrEmptyArchive = errors.New("uploaded archive contains no files")
 )
 
 // GetAttempts lists a participant's attempts at a task. The caller must be
@@ -139,6 +141,7 @@ func (s *Service) recordAttempt(
 	return nil
 }
 
+// Pushes files from added zip to a repo and makes an attempt by those rules: if zip is empty or all files from it dont match any patterns then user gets error and PushAttempt falls. Files from existing user repo get deleted if they dont match patterns. All files from zip get to repo.
 func (s *Service) PushAttempt(
 	ctx context.Context,
 	taskID, participantID uuid.UUID,
@@ -151,6 +154,9 @@ func (s *Service) PushAttempt(
 	files, err := pkggit.UnzipFiles(zipData)
 	if err != nil {
 		return "", fmt.Errorf("extract zip: %w", err)
+	}
+	if len(files) == 0 {
+		return "", ErrEmptyArchive
 	}
 	patterns, err := s.tasks.GetTaskPatternsByTaskID(ctx, taskID)
 	if err != nil {
