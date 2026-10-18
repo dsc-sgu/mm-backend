@@ -73,8 +73,7 @@ const (
 
 // ChangedFile is one file's change between the two commits Manager.Diff
 // compares. OldText/NewText hold only the removed/added lines (with no
-// surrounding context) — not the file's full content on either side. For a
-// binary file, Binary is true and both are empty.
+// surrounding context). For a binary files, Binary is true and both are empty.
 type ChangedFile struct {
 	Path    string     `json:"path"`
 	Status  FileStatus `json:"status"`
