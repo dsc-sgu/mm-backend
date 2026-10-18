@@ -622,30 +622,10 @@ func TestUploadTemplate(t *testing.T) {
 	)
 	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
-	zipData := buildTestZip(t, map[string]string{
+	UploadTestTemplate(t, &backendPort, &testUser, groupID, map[string]string{
 		"main.go":   "package main\n\nfunc main() {}\n",
 		"README.md": "template readme",
 	})
-
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
-		backendPort.Port(),
-		groupID,
-	)
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(zipData))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/zip")
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
 func TestUploadTemplateEmptyBody(t *testing.T) {
@@ -708,27 +688,9 @@ func TestPushAttemptRejectsUnpublishedTask(t *testing.T) {
 	)
 	// Note: the draft created by setupCourseForTasks is never published.
 
-	zipData := buildTestZip(t, map[string]string{
-		"solution.go": "package main\n\nfunc main() {}\n",
-	})
-
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/attempts?taskID=%s",
-		backendPort.Port(),
-		taskID,
-	)
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(zipData))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/zip")
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.NotEqual(t, http.StatusCreated, resp.StatusCode)
+	require.NotEqual(t, http.StatusCreated, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, map[string]string{
+			"solution.go": "package main\n\nfunc main() {}\n",
+		},
+	))
 }
