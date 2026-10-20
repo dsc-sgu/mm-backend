@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -49,12 +50,6 @@ const (
 		SELECT patterns FROM tasks WHERE id = $1
 	`
 
-	createTaskGroupSQL = `
-		INSERT INTO task_groups (course_id, name)
-		VALUES ($1, $2)
-		RETURNING id, course_id, name
-	`
-
 	getTaskGroupByIDSQL = `
 		SELECT id, course_id, name FROM task_groups
 		WHERE id = $1 AND deleted_at IS NULL
@@ -70,13 +65,6 @@ const (
 		UPDATE task_groups SET name = $1
 		WHERE id = $2 AND deleted_at IS NULL
 		RETURNING id, course_id, name
-	`
-
-	// Soft-deleted, like blocks: tasks from any snapshot generation, including
-	// history, may still reference the group.
-	deleteTaskGroupSQL = `
-		UPDATE task_groups SET deleted_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	getTaskByIDSQL = `
@@ -169,21 +157,6 @@ func (r *PGRepo) GetTaskGroupIDByName(
 	return groupID, nil
 }
 
-func (r *PGRepo) CreateTaskGroup(
-	ctx context.Context,
-	model *tasks.CreateTaskGroup,
-) (*tasks.TaskGroup, error) {
-	zap.L().Debug("Executing query", zap.String("query", createTaskGroupSQL))
-
-	var tg tasks.TaskGroup
-	err := r.db.QueryRowContext(ctx, createTaskGroupSQL, model.CourseID, model.Name).
-		Scan(&tg.ID, &tg.CourseID, &tg.Name)
-	if err != nil {
-		return nil, fmt.Errorf("create task group: %w", err)
-	}
-	return &tg, nil
-}
-
 func (r *PGRepo) GetTaskGroupByID(
 	ctx context.Context,
 	id uuid.UUID,
@@ -231,8 +204,12 @@ func (r *PGRepo) UpdateTaskGroup(
 	zap.L().Debug("Executing query", zap.String("query", updateTaskGroupSQL))
 
 	var tg tasks.TaskGroup
-	err := r.db.QueryRowContext(ctx, updateTaskGroupSQL, *update.Name, id).
+	err := r.db.QueryRowContext(ctx, updateTaskGroupSQL, update.Name, id).
 		Scan(&tg.ID, &tg.CourseID, &tg.Name)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+		return nil, tasks.ErrTaskGroupNameTaken
+	}
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("task group %s: not found", id)
@@ -240,16 +217,6 @@ func (r *PGRepo) UpdateTaskGroup(
 		return nil, fmt.Errorf("update task group: %w", err)
 	}
 	return &tg, nil
-}
-
-func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
-	zap.L().Debug("Executing query", zap.String("query", deleteTaskGroupSQL))
-
-	_, err := r.db.ExecContext(ctx, deleteTaskGroupSQL, id)
-	if err != nil {
-		return fmt.Errorf("delete task group: %w", err)
-	}
-	return nil
 }
 
 func (r *PGRepo) GetTaskByID(

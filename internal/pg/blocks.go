@@ -3,6 +3,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -132,6 +133,12 @@ const (
 		RETURNING id
 	`
 
+	createTaskGroupSQL = `
+		INSERT INTO task_groups (course_id, name)
+		VALUES ($1, $2)
+		RETURNING id
+	`
+
 	createTaskBlockSQL = `
 		INSERT INTO task_blocks (block_id, task_id)
 		VALUES ($1, $2)
@@ -151,22 +158,38 @@ const (
 	// Soft-deletes the tasks of snapshotID's deleted blocks that no live
 	// block of any snapshot links to anymore: a task created in a draft and
 	// dropped before being published. A task a published snapshot links to
-	// stays, since attempts may point at it.
+	// stays, since attempts may point at it. A task group left without live
+	// tasks is deleted with its last task. The final UPDATE does not see the
+	// CTE's changes, so the tasks deleted by it are excluded by id.
 	deleteUnlinkedTasksSQL = `
-		UPDATE tasks t
+		WITH deleted_tasks AS (
+			UPDATE tasks t
+			SET deleted_at = NOW()
+			WHERE t.deleted_at IS NULL
+			  AND t.id IN (
+				SELECT tb.task_id
+				FROM task_blocks tb
+				JOIN blocks b ON b.id = tb.block_id
+				WHERE b.snapshot_id = $1
+			  )
+			  AND NOT EXISTS (
+				SELECT 1
+				FROM task_blocks tb
+				JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
+				WHERE tb.task_id = t.id
+			  )
+			RETURNING t.id, t.task_group_id
+		)
+		UPDATE task_groups g
 		SET deleted_at = NOW()
-		WHERE t.deleted_at IS NULL
-		  AND t.id IN (
-			SELECT tb.task_id
-			FROM task_blocks tb
-			JOIN blocks b ON b.id = tb.block_id
-			WHERE b.snapshot_id = $1
-		  )
+		WHERE g.deleted_at IS NULL
+		  AND g.id IN (SELECT task_group_id FROM deleted_tasks)
 		  AND NOT EXISTS (
 			SELECT 1
-			FROM task_blocks tb
-			JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
-			WHERE tb.task_id = t.id
+			FROM tasks t
+			WHERE t.task_group_id = g.id
+			  AND t.deleted_at IS NULL
+			  AND t.id NOT IN (SELECT id FROM deleted_tasks)
 		  )
 	`
 
@@ -434,21 +457,11 @@ func (r *PGRepo) CreateBlock(
 		}
 		task := command.Task
 
-		var groupCourseID uuid.UUID
-		if err := tx.GetContext(
-			ctx,
-			&groupCourseID,
-			getCourseIDByTaskGroupSQL,
-			task.TaskGroupID,
-		); err != nil {
-			if err == sql.ErrNoRows {
-				return blocks.ErrTaskGroupNotFound
-			}
-			return fmt.Errorf("get task group course: %w", err)
+		groupID, err := resolveTaskGroup(ctx, tx, command.CourseID, task.TaskGroup)
+		if err != nil {
+			return err
 		}
-		if groupCourseID != command.CourseID {
-			return blocks.ErrTaskGroupNotFound
-		}
+		result.TaskGroupID = &groupID
 
 		var taken bool
 		if err := tx.GetContext(
@@ -456,7 +469,7 @@ func (r *PGRepo) CreateBlock(
 			&taken,
 			taskNameTakenSQL,
 			snapshot.ID,
-			task.TaskGroupID,
+			groupID,
 			task.Name,
 		); err != nil {
 			return fmt.Errorf("check task name: %w", err)
@@ -480,7 +493,7 @@ func (r *PGRepo) CreateBlock(
 			ctx,
 			&taskID,
 			createTaskSQL,
-			task.TaskGroupID,
+			groupID,
 			task.Name,
 			statement,
 			pq.StringArray(patterns),
@@ -503,6 +516,45 @@ func (r *PGRepo) CreateBlock(
 		return nil, err
 	}
 	return &result, nil
+}
+
+// resolveTaskGroup returns the id of the group a new task goes to: the
+// existing group ref.ID of courseID, or a group created from ref.New.
+func resolveTaskGroup(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	courseID uuid.UUID,
+	ref blocks.TaskGroupRef,
+) (uuid.UUID, error) {
+	if ref.New != nil {
+		var groupID uuid.UUID
+		err := tx.GetContext(ctx, &groupID, createTaskGroupSQL, courseID, ref.New.Name)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return uuid.Nil, blocks.ErrTaskGroupNameTaken
+		}
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("create task group: %w", err)
+		}
+		return groupID, nil
+	}
+
+	var groupCourseID uuid.UUID
+	if err := tx.GetContext(
+		ctx,
+		&groupCourseID,
+		getCourseIDByTaskGroupSQL,
+		*ref.ID,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return uuid.Nil, blocks.ErrTaskGroupNotFound
+		}
+		return uuid.Nil, fmt.Errorf("get task group course: %w", err)
+	}
+	if groupCourseID != courseID {
+		return uuid.Nil, blocks.ErrTaskGroupNotFound
+	}
+	return *ref.ID, nil
 }
 
 // PatchBlock updates a block's own data, gated by the same editable-snapshot

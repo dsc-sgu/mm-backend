@@ -28,7 +28,8 @@ func handleServiceError(err error) error {
 		errors.Is(err, ErrBlockNotFound),
 		errors.Is(err, ErrTaskGroupNotFound):
 		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, ErrTaskNameTaken):
+	case errors.Is(err, ErrTaskNameTaken),
+		errors.Is(err, ErrTaskGroupNameTaken):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
@@ -37,6 +38,7 @@ func handleServiceError(err error) error {
 		errors.Is(err, ErrInvalidBlockForMoveAfter),
 		errors.Is(err, ErrInvalidBlockData),
 		errors.Is(err, ErrInvalidBlockType),
+		errors.Is(err, ErrInvalidTaskGroup),
 		errors.Is(err, ErrBlockTypeChanged):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, locks.ErrLockHeldByAnother),
@@ -54,8 +56,9 @@ type CreateBlockInput struct {
 
 type CreateBlockOutput struct {
 	Body struct {
-		ID     uuid.UUID  `json:"id"`
-		TaskID *uuid.UUID `json:"taskID,omitempty"`
+		ID          uuid.UUID  `json:"id"`
+		TaskID      *uuid.UUID `json:"taskID,omitempty"`
+		TaskGroupID *uuid.UUID `json:"taskGroupID,omitempty"`
 	}
 }
 
@@ -87,6 +90,7 @@ func (h *Handler) CreateBlock(
 	output := &CreateBlockOutput{}
 	output.Body.ID = created.BlockID
 	output.Body.TaskID = created.TaskID
+	output.Body.TaskGroupID = created.TaskGroupID
 	return output, nil
 }
 

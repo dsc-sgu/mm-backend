@@ -29,7 +29,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type TestUser struct {
@@ -589,51 +588,29 @@ func GetBlockByID(
 	return returnedBlock
 }
 
-func CreateTestTaskGroup(
+// CreateTestTaskInNewGroup creates a task together with a new task group
+// named groupName and returns the ids of both.
+func CreateTestTaskInNewGroup(
 	t *testing.T,
 	port *nat.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
-	name string,
-) uuid.UUID {
+	groupName, name string,
+	patterns ...string,
+) (groupID, taskID uuid.UUID) {
 	t.Helper()
 
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/task-groups",
-		port.Port(),
-	)
-
-	body, err := json.Marshal(tasks.CreateTaskGroup{
-		CourseID: courseID,
-		Name:     name,
-		Data:     []byte("true"),
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var created tasks.CreateTaskGroupResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-
-	return created.ID
+	created := createTestTaskBlock(t, port, testUser, courseID, blocks.TaskGroupRef{
+		New: &blocks.NewTaskGroup{Name: groupName},
+	}, name, patterns)
+	require.NotNil(t, created.TaskGroupID)
+	return *created.TaskGroupID, created.TaskID
 }
 
-// CreateTestTask creates a task by creating a "task"-typed block in the
-// course's current draft, mirroring how the API unifies task and content
-// creation, and returns the task's id. Patterns are optional; with none the
-// task accepts any files.
+// CreateTestTask creates a task in an existing group by creating a
+// "task"-typed block in the course's current draft, mirroring how the API
+// unifies task and content creation, and returns the task's id. Patterns are
+// optional; with none the task accepts any files.
 func CreateTestTask(
 	t *testing.T,
 	port *nat.Port,
@@ -642,6 +619,27 @@ func CreateTestTask(
 	name string,
 	patterns ...string,
 ) uuid.UUID {
+	t.Helper()
+
+	return createTestTaskBlock(t, port, testUser, courseID, blocks.TaskGroupRef{
+		ID: &groupID,
+	}, name, patterns).TaskID
+}
+
+type createdTestTask struct {
+	TaskID      uuid.UUID  `json:"taskID"`
+	TaskGroupID *uuid.UUID `json:"taskGroupID"`
+}
+
+func createTestTaskBlock(
+	t *testing.T,
+	port *nat.Port,
+	testUser *TestUser,
+	courseID uuid.UUID,
+	group blocks.TaskGroupRef,
+	name string,
+	patterns []string,
+) createdTestTask {
 	t.Helper()
 
 	url := fmt.Sprintf(
@@ -653,7 +651,7 @@ func CreateTestTask(
 	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
 		Task: &blocks.TaskData{
-			TaskGroupID: groupID,
+			TaskGroup:   group,
 			Name:        name,
 			Patterns:    patterns,
 			MaxGrade:    100,
@@ -676,13 +674,11 @@ func CreateTestTask(
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var created struct {
-		TaskID *uuid.UUID `json:"taskID"`
-	}
+	var created createdTestTask
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	require.NotNil(t, created.TaskID)
+	require.NotZero(t, created.TaskID)
 
-	return *created.TaskID
+	return created
 }
 
 type sshIdentity struct {

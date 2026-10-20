@@ -45,6 +45,12 @@ var (
 	ErrTaskNameTaken     = errors.New(
 		"a task with this name already exists in the task group",
 	)
+	ErrTaskGroupNameTaken = errors.New(
+		"a task group with this name already exists in the course",
+	)
+	ErrInvalidTaskGroup = errors.New(
+		"task group must have either an id or a new name of 1 to 128 characters",
+	)
 	ErrInvalidBlockType = errors.New(
 		"block type must be 1 to 64 characters of a-z, 0-9 and -",
 	)
@@ -57,9 +63,21 @@ var (
 const (
 	taskBlockType    = "task"
 	maxBlockDataSize = 64 << 10
+	maxTaskGroupName = 128
 )
 
 var blockTypeRegexp = regexp.MustCompile(`^[a-z0-9-]{1,64}$`)
+
+func validateTaskGroupRef(ref TaskGroupRef) error {
+	if (ref.ID == nil) == (ref.New == nil) {
+		return ErrInvalidTaskGroup
+	}
+	if ref.New != nil &&
+		(ref.New.Name == "" || len([]rune(ref.New.Name)) > maxTaskGroupName) {
+		return ErrInvalidTaskGroup
+	}
+	return nil
+}
 
 // validateBlockData checks the only things the backend knows about a block's
 // content: it is a JSON object carrying an integer version and is not too
@@ -91,6 +109,9 @@ func (s *Service) CreateBlock(
 	if command.BlockType == taskBlockType {
 		if len(command.Data) > 0 || command.Task == nil {
 			return nil, ErrInvalidBlockData
+		}
+		if err := validateTaskGroupRef(command.Task.TaskGroup); err != nil {
+			return nil, err
 		}
 	} else if err := validateBlockData(command.Data); err != nil {
 		return nil, err

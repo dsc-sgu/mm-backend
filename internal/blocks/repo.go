@@ -23,7 +23,7 @@ type CreateBlockCommand struct {
 // TaskData is the input shape for the task created together with a
 // task-type block.
 type TaskData struct {
-	TaskGroupID uuid.UUID       `json:"taskGroupId"`
+	TaskGroup   TaskGroupRef    `json:"taskGroup"`
 	Name        string          `json:"name"`
 	Statement   json.RawMessage `json:"statement,omitempty"`
 	Patterns    []string        `json:"patterns,omitempty"`
@@ -31,6 +31,17 @@ type TaskData struct {
 	MaxAttempts int             `json:"maxAttempts"`
 	AvailableAt *time.Time      `json:"availableAt,omitempty"`
 	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
+}
+
+// TaskGroupRef picks the task group of a new task: an existing group by ID,
+// or a new group created together with the task. Exactly one is set.
+type TaskGroupRef struct {
+	ID  *uuid.UUID    `json:"id,omitempty"`
+	New *NewTaskGroup `json:"new,omitempty"`
+}
+
+type NewTaskGroup struct {
+	Name string `json:"name"`
 }
 
 // PatchBlockCommand is the input for patching a block's own data. BlockType
@@ -49,6 +60,7 @@ type PatchBlockCommand struct {
 type CreatedBlock struct {
 	BlockID        uuid.UUID
 	TaskID         *uuid.UUID
+	TaskGroupID    *uuid.UUID
 	SnapshotID     uuid.UUID
 	PositionLength int
 }

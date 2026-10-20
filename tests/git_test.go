@@ -52,24 +52,16 @@ func setupGitTask(
 		"gitcourse",
 		"Git Course",
 	)
-	groupID := CreateTestTaskGroup(
+	// Creating a task creates a "task"-typed block, which requires a draft
+	// snapshot to exist for the course.
+	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
+
+	groupID, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"group1",
-	)
-
-	// Creating a task creates a "task"-typed block, which requires a draft
-	// snapshot to exist for the course.
-	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
-
-	taskID = CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"taskA",
 		patterns...,
 	)

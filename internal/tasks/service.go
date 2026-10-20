@@ -48,8 +48,11 @@ func NewService(
 }
 
 var (
-	ErrTaskGroupNotFound = errors.New("task group not found")
-	ErrTaskNotFound      = errors.New("task not found")
+	ErrTaskGroupNotFound  = errors.New("task group not found")
+	ErrTaskNotFound       = errors.New("task not found")
+	ErrTaskGroupNameTaken = errors.New(
+		"a task group with this name already exists in the course",
+	)
 )
 
 // requireMember ensures userID is any active member (student or teacher) of courseID.
@@ -74,19 +77,6 @@ func (s *Service) requireTeacher(
 		return membership.ErrPermissionDenied
 	}
 	return nil
-}
-
-// CreateTaskGroup requires the caller to be an active teacher of the course
-// the group is being created in.
-func (s *Service) CreateTaskGroup(
-	ctx context.Context,
-	userID uuid.UUID,
-	model *CreateTaskGroup,
-) (*TaskGroup, error) {
-	if err := s.requireTeacher(ctx, userID, model.CourseID); err != nil {
-		return nil, err
-	}
-	return s.repo.CreateTaskGroup(ctx, model)
 }
 
 // GetTaskGroup returns a task group with its tasks for any active course
@@ -185,21 +175,6 @@ func (s *Service) UpdateTask(
 		return nil, err
 	}
 	return s.repo.UpdateTask(ctx, taskID, update)
-}
-
-// DeleteTaskGroup requires the caller to be an active teacher of the group's course.
-func (s *Service) DeleteTaskGroup(
-	ctx context.Context,
-	userID, groupID uuid.UUID,
-) error {
-	courseID, err := s.repo.GetCourseIDByTaskGroup(ctx, groupID)
-	if err != nil {
-		return err
-	}
-	if err := s.requireTeacher(ctx, userID, courseID); err != nil {
-		return err
-	}
-	return s.repo.DeleteTaskGroup(ctx, groupID)
 }
 
 // UploadTemplate requires the caller to be an active teacher of the group's

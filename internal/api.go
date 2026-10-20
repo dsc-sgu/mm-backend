@@ -314,34 +314,12 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 	huma.Register(
 		api,
 		huma.Operation{
-			Method:        http.MethodPost,
-			Path:          "/task-groups",
-			Summary:       "Create task group",
-			DefaultStatus: http.StatusCreated,
-			Tags:          []string{"Task"},
-		},
-		handler.CreateTaskGroup,
-	)
-	huma.Register(
-		api,
-		huma.Operation{
 			Method:  http.MethodPatch,
 			Path:    "/task-groups/{group_id}",
 			Summary: "Update task group",
 			Tags:    []string{"Task"},
 		},
 		handler.PatchTaskGroup,
-	)
-	huma.Register(
-		api,
-		huma.Operation{
-			Method:        http.MethodDelete,
-			Path:          "/task-groups/{group_id}",
-			Summary:       "Delete task group",
-			DefaultStatus: http.StatusNoContent,
-			Tags:          []string{"Task"},
-		},
-		handler.DeleteTaskGroup,
 	)
 	huma.Register(
 		api,

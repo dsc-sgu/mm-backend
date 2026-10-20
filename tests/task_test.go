@@ -55,19 +55,101 @@ func setupCourseForTasks(
 	return testUser, disciplineID, courseID, lockResult.DraftSnapshotID
 }
 
-func TestCreateTaskGroup(t *testing.T) {
+// postTestTaskBlock sends a task block creation request and returns the
+// response status.
+func postTestTaskBlock(
+	t *testing.T,
+	testUser *TestUser,
+	courseID uuid.UUID,
+	task blocks.TaskData,
+) int {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
+		backendPort.Port(),
+		courseID,
+	)
+	body, err := json.Marshal(blocks.CreateBlockCommand{
+		BlockType: "task",
+		Task:      &task,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	return resp.StatusCode
+}
+
+// TestCreateTaskRequiresOneTaskGroup checks that a new task names either an
+// existing group or a new one, not both and not neither.
+func TestCreateTaskRequiresOneTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	require.NotZero(t, groupID)
+
+	for name, group := range map[string]blocks.TaskGroupRef{
+		"neither": {},
+		"both": {
+			ID:  &groupID,
+			New: &blocks.NewTaskGroup{Name: "Group 2"},
+		},
+		"empty new name": {New: &blocks.NewTaskGroup{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, http.StatusBadRequest, postTestTaskBlock(
+				t, &testUser, courseID, blocks.TaskData{
+					TaskGroup: group,
+					Name:      "Task 2",
+					MaxGrade:  100,
+				},
+			))
+		})
+	}
+}
+
+// TestCreateTaskRejectsTakenTaskGroupName checks that a new task group cannot
+// take the name of a live group of the course.
+func TestCreateTaskRejectsTakenTaskGroupName(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	CreateTestTaskInNewGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+		"Task 1",
+	)
+
+	require.Equal(t, http.StatusConflict, postTestTaskBlock(
+		t, &testUser, courseID, blocks.TaskData{
+			TaskGroup: blocks.TaskGroupRef{
+				New: &blocks.NewTaskGroup{Name: "Group 1"},
+			},
+			Name:     "Task 2",
+			MaxGrade: 100,
+		},
+	))
 }
 
 func TestGetTaskGroup(t *testing.T) {
@@ -75,21 +157,12 @@ func TestGetTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	require.NotZero(t, groupID)
-
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	require.NotZero(t, taskID)
@@ -153,12 +226,13 @@ func TestUpdateTaskGroup(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
 
 	url := fmt.Sprintf(
@@ -168,7 +242,7 @@ func TestUpdateTaskGroup(t *testing.T) {
 	)
 
 	newName := "Renamed Group"
-	body, _ := json.Marshal(tasks.UpdateTaskGroup{Name: &newName})
+	body, _ := json.Marshal(tasks.UpdateTaskGroup{Name: newName})
 
 	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
 	require.NoError(t, err)
@@ -191,28 +265,32 @@ func TestUpdateTaskGroup(t *testing.T) {
 	require.Equal(t, newName, updated.Name)
 }
 
-func TestDeleteTaskGroup(t *testing.T) {
+// TestCancelEditDeletesDraftTaskGroup checks that a task group created in a
+// draft is deleted together with its last task when the draft is discarded.
+func TestCancelEditDeletesDraftTaskGroup(t *testing.T) {
 	clearDatabases(t)
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
+	require.Equal(t, http.StatusNoContent, CancelEdit(
+		t, &backendPort, &testUser, courseID,
+	))
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		groupID,
 	)
-
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)
-
 	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
@@ -220,74 +298,7 @@ func TestDeleteTaskGroup(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	// Group should no longer be retrievable.
-	getReq, err := http.NewRequest(http.MethodGet, url, nil)
-	require.NoError(t, err)
-
-	getResp, err := testUser.Client.Do(getReq)
-	require.NoError(t, err)
-	defer func() {
-		if err := getResp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusNotFound, getResp.StatusCode)
-}
-
-// TestDeleteTaskGroupWithTasks is a regression test for a bug where deleting
-// a task group that still had tasks referencing it (from any snapshot
-// generation) crashed with a raw foreign key violation instead of succeeding
-// via soft-delete.
-func TestDeleteTaskGroupWithTasks(t *testing.T) {
-	clearDatabases(t)
-
-	testUser, _, courseID, _ := setupCourseForTasks(t)
-
-	groupID := CreateTestTaskGroup(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		"Group 1",
-	)
-	CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
-
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/task-groups/%s",
-		backendPort.Port(),
-		groupID,
-	)
-
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
-	require.NoError(t, err)
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	// Group should no longer be retrievable.
-	getReq, err := http.NewRequest(http.MethodGet, url, nil)
-	require.NoError(t, err)
-
-	getResp, err := testUser.Client.Do(getReq)
-	require.NoError(t, err)
-	defer func() {
-		if err := getResp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusNotFound, getResp.StatusCode)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
 // TestCreateTaskGroupReusesDeletedName checks that a task group name freed up
@@ -298,38 +309,27 @@ func TestCreateTaskGroupReusesDeletedName(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	firstGroupID := CreateTestTaskGroup(
+	firstGroupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
+	require.Equal(t, http.StatusNoContent, CancelEdit(
+		t, &backendPort, &testUser, courseID,
+	))
+	LockCourse(t, &backendPort, &testUser, courseID)
 
-	deleteURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/task-groups/%s",
-		backendPort.Port(),
-		firstGroupID,
-	)
-	deleteReq, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
-	require.NoError(t, err)
-	deleteResp, err := testUser.Client.Do(deleteReq)
-	require.NoError(t, err)
-	defer func() {
-		if err := deleteResp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-	require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
-
-	secondGroupID := CreateTestTaskGroup(
+	secondGroupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	require.NotZero(t, secondGroupID)
 	require.NotEqual(t, firstGroupID, secondGroupID)
 }
 
@@ -338,20 +338,12 @@ func TestCreateTask(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	require.NotZero(t, taskID)
@@ -367,51 +359,21 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		"Group 1",
-	)
-
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
-		backendPort.Port(),
-		courseID,
-	)
-
-	body, err := json.Marshal(blocks.CreateBlockCommand{
-		BlockType: "task",
-		Task: &blocks.TaskData{
-			TaskGroupID: groupID,
-			Name:        "Task NoPatternsField",
-			MaxGrade:    100,
-			MaxAttempts: 5,
+	task := blocks.TaskData{
+		TaskGroup: blocks.TaskGroupRef{
+			New: &blocks.NewTaskGroup{Name: "Group 1"},
 		},
-	})
+		Name:        "Task NoPatternsField",
+		MaxGrade:    100,
+		MaxAttempts: 5,
+	}
+	body, err := json.Marshal(task)
 	require.NoError(t, err)
 	require.NotContains(t, string(body), "patterns")
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var created struct {
-		ID uuid.UUID `json:"id"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	require.NotZero(t, created.ID)
+	require.Equal(t, http.StatusCreated, postTestTaskBlock(
+		t, &testUser, courseID, task,
+	))
 }
 
 // TestCreateTaskBlockRejectsData checks that a task block takes no content:
@@ -420,14 +382,6 @@ func TestCreateTaskBlockRejectsData(t *testing.T) {
 	clearDatabases(t)
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
-
-	groupID := CreateTestTaskGroup(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		"Group 1",
-	)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
@@ -438,7 +392,9 @@ func TestCreateTaskBlockRejectsData(t *testing.T) {
 		BlockType: "task",
 		Data:      []byte("true"),
 		Task: &blocks.TaskData{
-			TaskGroupID: groupID,
+			TaskGroup: blocks.TaskGroupRef{
+				New: &blocks.NewTaskGroup{Name: "Group 1"},
+			},
 			Name:        "Task 1",
 			MaxGrade:    100,
 			MaxAttempts: 5,
@@ -459,27 +415,19 @@ func TestCreateTaskBlockRejectsData(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-// TestTaskBlockDataReferencesTask checks that a task block reads as a
-// reference to its task, which is what the frontend stores for every other
-// block type in data.
+// TestTaskBlockDataReferencesTask checks that a task block's data reads as a
+// reference to its task.
 func TestTaskBlockDataReferencesTask(t *testing.T) {
 	clearDatabases(t)
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	require.Equal(t, http.StatusNoContent, PublishDraft(
@@ -501,20 +449,12 @@ func TestGetTasks(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, taskID1 := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-
-	taskID1 := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	taskID2 := CreateTestTask(
@@ -563,19 +503,12 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 
@@ -666,19 +599,12 @@ func TestUpdateTask(t *testing.T) {
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	// Publishing releases the course edit lock.
@@ -709,19 +635,12 @@ func TestAttemptsSurviveRepublish(t *testing.T) {
 
 	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	require.Equal(t, http.StatusNoContent, PublishDraft(
@@ -754,19 +673,12 @@ func TestCancelEditDeletesDraftTask(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 
@@ -788,42 +700,22 @@ func TestCreateTaskRejectsTakenName(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
-		backendPort.Port(),
-		courseID,
-	)
-	body, err := json.Marshal(blocks.CreateBlockCommand{
-		BlockType: "task",
-		Task: &blocks.TaskData{
-			TaskGroupID: groupID,
-			Name:        "Task 1",
-			MaxGrade:    100,
-			MaxAttempts: 5,
+	require.Equal(t, http.StatusConflict, postTestTaskBlock(
+		t, &testUser, courseID, blocks.TaskData{
+			TaskGroup: blocks.TaskGroupRef{ID: &groupID},
+			Name:      "Task 1",
+			MaxGrade:  100,
 		},
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	))
 }
 
 func TestUploadTemplate(t *testing.T) {
@@ -831,14 +723,14 @@ func TestUploadTemplate(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	UploadTestTemplate(t, &backendPort, &testUser, groupID, map[string]string{
 		"main.go":   "package main\n\nfunc main() {}\n",
@@ -849,17 +741,21 @@ func TestUploadTemplate(t *testing.T) {
 func TestUploadTemplateRequiresLock(t *testing.T) {
 	clearDatabases(t)
 
-	testUser, _, courseID, _ := setupCourseForTasks(t)
+	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
-	require.Equal(t, http.StatusNoContent, CancelEdit(t, &backendPort, &testUser, courseID))
+	// Publishing releases the course edit lock and keeps the group, which
+	// cancelling the draft would delete with its only task.
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, draftSnapshotID,
+	))
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/task-groups/%s/template",
@@ -876,14 +772,14 @@ func TestUploadTemplateEmptyBody(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	groupID, _ := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
+		"Task 1",
 	)
-	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/task-groups/%s/template",
@@ -914,19 +810,12 @@ func TestPushAttemptRejectsUnpublishedTask(t *testing.T) {
 
 	testUser, _, courseID, _ := setupCourseForTasks(t)
 
-	groupID := CreateTestTaskGroup(
+	_, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"Group 1",
-	)
-	taskID := CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"Task 1",
 	)
 	// Note: the draft created by setupCourseForTasks is never published.

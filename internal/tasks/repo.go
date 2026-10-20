@@ -39,18 +39,8 @@ type TaskUpdate struct {
 	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }
 
-type CreateTaskGroup struct {
-	CourseID uuid.UUID       `json:"courseID" binding:"required"`
-	Name     string          `json:"name"     binding:"required"`
-	Data     json.RawMessage `json:"data"     binding:"required" swaggertype:"object"`
-}
-
 type UpdateTaskGroup struct {
-	Name *string `json:"name"`
-}
-
-type CreateTaskGroupResponse struct {
-	ID uuid.UUID `json:"id"`
+	Name string `json:"name" minLength:"1" maxLength:"128"`
 }
 
 type TaskGroupWithTasks struct {
@@ -60,10 +50,6 @@ type TaskGroupWithTasks struct {
 
 type Repo interface {
 	// TaskGroups
-	CreateTaskGroup(
-		ctx context.Context,
-		model *CreateTaskGroup,
-	) (*TaskGroup, error)
 	GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*TaskGroup, error)
 	GetTaskGroupByName(
 		ctx context.Context,
@@ -75,7 +61,6 @@ type Repo interface {
 		id uuid.UUID,
 		update *UpdateTaskGroup,
 	) (*TaskGroup, error)
-	DeleteTaskGroup(ctx context.Context, id uuid.UUID) error
 
 	// Tasks
 	GetTaskByID(ctx context.Context, taskID uuid.UUID) (*Task, error)
