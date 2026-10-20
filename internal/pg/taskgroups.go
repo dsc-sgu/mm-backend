@@ -14,25 +14,6 @@ import (
 )
 
 const (
-	// Scoped to the active snapshot, same as getTaskByNameSQL: a task the
-	// active snapshot no longer links to is not live, even though older
-	// snapshots still link to it.
-	//
-	// Deliberately not filtered to tasks with a non-empty patterns array:
-	// the pre-receive hook needs every live task name, including
-	// pattern-less ones, to tell "no patterns required" apart from "no such
-	// task" for an "-o submit=<name>" it doesn't recognize.
-	getTaskPatternsSQL = `
-		SELECT t.name, t.patterns
-		FROM tasks t
-		JOIN task_blocks tb ON tb.task_id = t.id
-		JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
-		JOIN course_snapshots cs ON cs.id = b.snapshot_id
-		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = b.snapshot_id
-		WHERE t.task_group_id = $1 AND t.deleted_at IS NULL
-		ORDER BY t.name
-	`
-
 	// Only resolves a task if its block is part of the course's currently
 	// active (published) snapshot, so a git push can't target a task that
 	// only exists in an unpublished draft.
@@ -361,34 +342,6 @@ func (r *PGRepo) GetCourseIDByTaskGroup(
 // that doesn't require any. The presence of the key, not just its length,
 // is what lets a caller distinguish a real task with no pattern
 // requirements from a name that doesn't exist at all.
-func (r *PGRepo) GetTaskPatterns(
-	ctx context.Context,
-	taskGroupID uuid.UUID,
-) (map[string][]string, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsSQL))
-
-	rows, err := r.db.QueryxContext(ctx, getTaskPatternsSQL, taskGroupID)
-	if err != nil {
-		return nil, fmt.Errorf("get task patterns: %w", err)
-	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			zap.L().Warn("close task patterns rows", zap.Error(err))
-		}
-	}()
-
-	result := make(map[string][]string)
-	for rows.Next() {
-		var name string
-		var patterns pq.StringArray
-		if err := rows.Scan(&name, &patterns); err != nil {
-			return nil, fmt.Errorf("scan task patterns: %w", err)
-		}
-		result[name] = patterns
-	}
-	return result, rows.Err()
-}
-
 func (r *PGRepo) GetTaskByName(
 	ctx context.Context,
 	taskGroupID uuid.UUID,
@@ -402,9 +355,10 @@ func (r *PGRepo) GetTaskByName(
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return uuid.Nil, fmt.Errorf(
-				"task %q in group %s: not found",
+				"task %q in group %s: %w",
 				name,
 				taskGroupID,
+				tasks.ErrTaskNotFound,
 			)
 		}
 		return uuid.Nil, fmt.Errorf("get task by name: %w", err)

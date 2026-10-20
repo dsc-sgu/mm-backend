@@ -64,6 +64,9 @@ type Config struct {
 	Host     string `env:"HOST,                  default=0.0.0.0"`
 	HTTPPort int    `env:"HTTP_PORT,             default=8034"`
 	SSHPort  int    `env:"PORT,                  default=2222"`
+	// HookSocket is the unix socket the git hooks of SSH pushes reach the
+	// server through
+	HookSocket string `env:"HOOK_SOCKET, default=/tmp/mm-hooks.sock"`
 
 	CourseLockTTLSeconds int `env:"COURSE_LOCK_TTL_SECONDS, default=60"`
 	LexoRankThreshold    int `env:"LEXO_RANK_THRESHOLD,     default=20"`

@@ -10,7 +10,7 @@ func TestCompiledPatternsMatchAny(t *testing.T) {
 	patterns := CompilePatterns([]string{"a/*", "*.go"})
 	for name, want := range map[string]bool{
 		"a/x":       true,
-		"a/b/c.txt": true, // '*' matches '/', like the pre-receive hook's case
+		"a/b/c.txt": true, // '*' matches '/'
 		"x.go":      true,
 		"dir/x.go":  true,
 		"b/x.txt":   false,

@@ -211,15 +211,6 @@ func (s *Service) UploadTemplate(
 	return s.repositories.UpdateTemplate(tg.ID, files)
 }
 
-// GetGroupPatterns maps every live task of taskGroupID by name to its file
-// patterns.
-func (s *Service) GetGroupPatterns(
-	ctx context.Context,
-	taskGroupID uuid.UUID,
-) (map[string][]string, error) {
-	return s.repo.GetTaskPatterns(ctx, taskGroupID)
-}
-
 func (s *Service) GetTaskGroupIDByName(
 	ctx context.Context,
 	name string,

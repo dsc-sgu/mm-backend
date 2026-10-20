@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"os/signal"
 	"strconv"
 	"sync"
@@ -47,6 +48,7 @@ type App struct {
 	database   *sqlx.DB
 	httpServer *http.Server
 	sshServer  *ssh.Server
+	hookServer *http.Server
 }
 
 func (app *App) onShutdown(
@@ -55,7 +57,7 @@ func (app *App) onShutdown(
 	ctx context.Context,
 ) error {
 	wg := sync.WaitGroup{}
-	wg.Add(4)
+	wg.Add(5)
 
 	errCh := make(chan error)
 
@@ -89,6 +91,14 @@ func (app *App) onShutdown(
 	})
 
 	wg.Go(func() {
+		zap.S().Info("Closing hook server")
+		if err := app.hookServer.Shutdown(ctx); err != nil {
+			errCh <- err
+			zap.S().Errorw("Could not stop server", "error", err)
+		}
+	})
+
+	wg.Go(func() {
 		zap.S().Info("Closing HTTP server")
 		if err := app.httpServer.Shutdown(ctx); err != nil {
 			errCh <- err
@@ -109,7 +119,29 @@ func (app *App) onShutdown(
 	return errors.Join(errs...)
 }
 
+// listenHookSocket listens on the unix socket at path, replacing a socket
+// left over from a previous run. Only the server's own user may connect.
+func listenHookSocket(path string) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
+	return listener, nil
+}
+
 func main() {
+	// git runs the hooks of an SSH push as "<server> hook <name>"
+	if len(os.Args) == 3 && os.Args[1] == "hook" {
+		os.Exit(pkggit.RunHook(os.Args[2], os.Stdin, os.Stderr))
+	}
+
 	config, err := config.LoadFromEnv()
 	if err != nil {
 		panic(err)
@@ -238,7 +270,7 @@ func main() {
 		ssh.PublicKeyAuth(sshKeyService.CheckPublicKeyAuth),
 		ssh.PasswordAuth(sshKeyService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			attemptService.SSHMiddleware("repos"),
+			attemptService.SSHMiddleware("repos", config.HookSocket),
 			logging.Middleware(),
 		),
 	)
@@ -246,11 +278,18 @@ func main() {
 		zap.S().Errorw("Could not create server", "error", err)
 	}
 
+	hookListener, err := listenHookSocket(config.HookSocket)
+	if err != nil {
+		zap.S().Fatalf("listening on hook socket: %s", err.Error())
+	}
+	hookServer := &http.Server{Handler: attemptService.HookHandler()}
+
 	app := App{
 		redis:      redisClient,
 		database:   dbConn,
 		httpServer: httpServer,
 		sshServer:  sshServer,
+		hookServer: hookServer,
 	}
 
 	wg := sync.WaitGroup{}
@@ -266,6 +305,13 @@ func main() {
 	wg.Go(func() {
 		if err := sshServer.ListenAndServe(); err != nil && !errors.Is(err, ssh.ErrServerClosed) {
 			zap.S().Errorw("Could not start server", "error", err)
+		}
+	})
+
+	zap.S().Infof("Serving git hooks on %s", config.HookSocket)
+	wg.Go(func() {
+		if err := hookServer.Serve(hookListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			zap.S().Errorw("Could not serve git hooks", "error", err)
 		}
 	})
 

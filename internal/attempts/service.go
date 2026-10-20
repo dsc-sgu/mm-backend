@@ -5,14 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/charmbracelet/ssh"
 	"github.com/charmbracelet/wish"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
 	gossh "golang.org/x/crypto/ssh"
 
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
@@ -274,9 +272,11 @@ func (s *Service) GetDiff(
 }
 
 // SSHMiddleware serves Git repositories over SSH: it resolves the raw
-// course/group SSH path to a RepoID, checks course membership, runs the
-// git command, and records pushed attempts. Repos are stored under repoDir.
-func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
+// course/group SSH path to a RepoID, checks course membership and runs the
+// git command. The hooks of a push reach the service through hookSocket
+// (see HookHandler), which checks and records the pushed attempts. Repos are
+// stored under repoDir.
+func (s *Service) SSHMiddleware(repoDir, hookSocket string) wish.Middleware {
 	return func(sh ssh.Handler) ssh.Handler {
 		return func(sess ssh.Session) {
 			cmd := sess.Command()
@@ -301,9 +301,9 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 			case pkggit.GitReceivePack:
 				switch access {
 				case pkggit.ReadWriteAccess, pkggit.AdminAccess:
-					patterns, err := s.groupPatterns(sess.Context(), rawRepo, pk)
+					id, err := s.GetRepoID(sess.Context(), rawRepo, gossh.FingerprintSHA256(pk))
 					if err != nil {
-						log.Error("get group patterns", "error", err, "repo", rawRepo)
+						log.Error("resolve pushed repository", "error", err, "repo", rawRepo)
 						pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
 						return
 					}
@@ -312,7 +312,7 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 						gc,
 						repoDir,
 						repo,
-						patterns,
+						pkggit.HookEnv(hookSocket, id),
 					); err != nil {
 						log.Error(
 							"git push failed",
@@ -322,8 +322,6 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 							rawRepo,
 						)
 						pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
-					} else {
-						s.onPush(sess.Context(), rawRepo, repo, pk)
 					}
 				default:
 					pkggit.Fatal(sess, pkggit.ErrNotAuthed)
@@ -375,20 +373,6 @@ func (s *Service) repoRename(
 	return id.IntoPath() + ".git", nil
 }
 
-// groupPatterns returns the patterns of every live task in the pushed
-// repository's group, read from the database on each push.
-func (s *Service) groupPatterns(
-	ctx context.Context,
-	original string,
-	key ssh.PublicKey,
-) (map[string][]string, error) {
-	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
-	if err != nil {
-		return nil, err
-	}
-	return s.tasks.GetGroupPatterns(ctx, id.TaskGroupID)
-}
-
 func (s *Service) authRepo(
 	ctx context.Context,
 	original, repo string,
@@ -402,52 +386,6 @@ func (s *Service) authRepo(
 		return pkggit.NoAccess
 	}
 	return pkggit.ReadWriteAccess
-}
-
-func (s *Service) onPush(
-	ctx context.Context,
-	original, repo string,
-	key ssh.PublicKey,
-) {
-	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
-	if err != nil {
-		zap.L().Error("resolve pushed repository", zap.Error(err))
-		return
-	}
-	base := s.git.RepoPath(id)
-	options, err := os.ReadFile(filepath.Join(base, "push-options"))
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err := os.Remove(filepath.Join(base, "push-options")); err != nil {
-			zap.L().Warn("remove push-options file", zap.Error(err))
-		}
-	}()
-	name := parseSubmitOption(
-		strings.Split(strings.TrimSpace(string(options)), "\n"),
-	)
-	if name == "" {
-		return
-	}
-	taskID, err := s.tasks.GetTaskByName(ctx, id.TaskGroupID, name)
-	if err != nil {
-		return
-	}
-	tags, err := os.ReadFile(filepath.Join(base, "push-tags"))
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err := os.Remove(filepath.Join(base, "push-tags")); err != nil {
-			zap.L().Warn("remove push-tags file", zap.Error(err))
-		}
-	}()
-	for _, hash := range strings.Fields(string(tags)) {
-		if err := s.recordAttempt(ctx, id, taskID, hash); err != nil {
-			zap.L().Error("save pushed attempt", zap.Error(err))
-		}
-	}
 }
 
 func (s *Service) onFetch(context.Context, string, string, ssh.PublicKey) {}
@@ -485,16 +423,4 @@ func (s *Service) GetRepoID(
 		TaskGroupID:   groupID,
 		ParticipantID: participantID,
 	}, nil
-}
-
-func parseSubmitOption(options []string) string {
-	for _, option := range options {
-		if value, ok := strings.CutPrefix(
-			strings.TrimSpace(option),
-			"submit=",
-		); ok {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

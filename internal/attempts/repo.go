@@ -68,7 +68,6 @@ type TaskReader interface {
 	GetTaskGroupIDByName(context.Context, string, uuid.UUID) (uuid.UUID, error)
 	GetTaskByName(context.Context, uuid.UUID, string) (uuid.UUID, error)
 	GetTaskPatternsByTaskID(context.Context, uuid.UUID) ([]string, error)
-	GetGroupPatterns(context.Context, uuid.UUID) (map[string][]string, error)
 }
 
 type CourseReader interface {

@@ -136,10 +136,6 @@ type Repo interface {
 		taskGroupID uuid.UUID,
 		name string,
 	) (uuid.UUID, error)
-	GetTaskPatterns(
-		ctx context.Context,
-		taskGroupID uuid.UUID,
-	) (map[string][]string, error)
 	GetTaskPatternsByTaskID(
 		ctx context.Context,
 		taskID uuid.UUID,

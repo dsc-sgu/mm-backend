@@ -14,11 +14,11 @@ There are two ways to create an attempt:
    ```
    git tag submission-1 && git push origin submission-1 -o submit=<task_name>
    ```
-   The pre-receive hook verifies the tag's commit contains files matching the task's patterns (looked up by task name). If they match, the post-receive hook saves the tag's commit hash and push options. The OnPush hook reads these files, resolves the task by name, and creates an attempt for the tag's commit.
+   The hooks are the server binary run as `server hook pre-receive` and `server hook post-receive`. They send the ref updates, the task name and, for pre-receive, the files of each new tag's commit to the backend over a unix socket (`HOOK_SOCKET`). The backend decides: pre-receive is rejected if a tag is updated, the task does not exist, a tag's commit has no file matching the task's patterns, or the participant has fewer attempts left than new tags. Post-receive creates an attempt for each new tag.
 
 ### Mask gate
 
-A task may define file patterns (`tasks.patterns`). A submission is rejected unless at least one of its files matches. For SSH this is enforced by the pre-receive hook, which reads the group's patterns from a temporary file that `GitPack` writes from the database on every push (`MM_PATTERNS_FILE`); for the web path the same check is duplicated in Go (go-git runs no hooks).
+A task may define file patterns (`tasks.patterns`). A submission is rejected unless at least one of its files matches. Both paths check it in the backend with the same `CompilePatterns`: the web path in `PushAttempt`, SSH when the pre-receive hook asks.
 
 ### Database structure
 
@@ -41,10 +41,10 @@ sequenceDiagram
         Git->>DB: Save attempt (user, task, commit hash)
     else SSH tag push
         Student->>Git: git tag v1 && git push origin v1 -o submit=<task_name>
-        Git->>Git: pre-receive hook checks tag's files against task patterns (by name)
-        Git->>Git: post-receive hook saves new tag commit + push-options
-        Git->>Git: OnPush resolves task by name, validates sequence
-        Git->>DB: Save attempt (user, task, tag's commit hash)
+        Git->>Backend: pre-receive hook sends new tags, their files and the task name
+        Backend->>Backend: Task exists, mask gate, attempts left
+        Git->>Backend: post-receive hook sends new tags
+        Backend->>DB: Save attempt (user, task, tag's commit hash)
     end
 ```
 
@@ -54,5 +54,5 @@ sequenceDiagram
 - Attempts are linked to individual tasks, not to the whole group.
 - The commit hash is stored in `attempt_transitions.transition_data` as JSON.
 - Both push methods write to the same repository.
-- Tag updates (force-push) are rejected by the pre-receive hook.
+- Tag updates (force-push) are rejected when the pre-receive hook asks the backend.
 - Branch pushes never create attempts — only tag pushes with `-o submit=<task_name>` do.
