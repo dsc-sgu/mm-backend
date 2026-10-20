@@ -305,7 +305,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:  http.MethodGet,
-			Path:    "/tasks/{group_id}",
+			Path:    "/task-groups/{group_id}",
 			Summary: "Get task group",
 			Tags:    []string{"Task"},
 		},
@@ -315,7 +315,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:        http.MethodPost,
-			Path:          "/tasks",
+			Path:          "/task-groups",
 			Summary:       "Create task group",
 			DefaultStatus: http.StatusCreated,
 			Tags:          []string{"Task"},
@@ -326,7 +326,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:  http.MethodPatch,
-			Path:    "/tasks/{group_id}",
+			Path:    "/task-groups/{group_id}",
 			Summary: "Update task group",
 			Tags:    []string{"Task"},
 		},
@@ -336,7 +336,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:        http.MethodDelete,
-			Path:          "/tasks/{group_id}",
+			Path:          "/task-groups/{group_id}",
 			Summary:       "Delete task group",
 			DefaultStatus: http.StatusNoContent,
 			Tags:          []string{"Task"},
@@ -347,7 +347,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:        http.MethodPost,
-			Path:          "/tasks/{group_id}/template",
+			Path:          "/task-groups/{group_id}/template",
 			Summary:       "Upload task template",
 			DefaultStatus: http.StatusNoContent,
 			Tags:          []string{"Task"},
@@ -359,7 +359,7 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		api,
 		huma.Operation{
 			Method:  http.MethodGet,
-			Path:    "/tasks/{group_id}/tasks",
+			Path:    "/task-groups/{group_id}/tasks",
 			Summary: "Get tasks",
 			Tags:    []string{"Task"},
 		},
