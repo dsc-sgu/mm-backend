@@ -156,6 +156,7 @@ func TestPushAttemptRejectsBadArchive(t *testing.T) {
 	for name, files := range map[string]map[string]string{
 		"empty":       {},
 		"no matching": {"notes.txt": "draft"},
+		"zip slip":    {"../a/x.go": "package a\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, PushTestAttempt(

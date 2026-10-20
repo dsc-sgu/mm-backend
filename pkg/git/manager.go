@@ -151,17 +151,26 @@ func (m *Manager) ListFiles(id RepoID) ([]string, error) {
 	return paths, nil
 }
 
+var (
+	// ErrInvalidArchive is returned when a submitted archive is corrupt or
+	// contains an unsafe file name.
+	ErrInvalidArchive = errors.New("invalid archive")
+	// ErrArchiveTooLarge is returned when a submitted archive exceeds one of
+	// the MaxZip* limits.
+	ErrArchiveTooLarge = errors.New("archive exceeds size limits")
+)
+
 // Unzips an archive of files checking for various types of errors and vulnorabilities.
 // Enforces file-count and size limits to guard against zip bombs, without trusting the archive's declared sizes.
 func UnzipFiles(data []byte) ([]FileInfo, error) {
 	reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("invalid archive: %v", err)
+		return nil, fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
 	if len(reader.File) > MaxZipFileCount {
 		return nil, fmt.Errorf(
-			"invalid archive: contains %d files, exceeding the limit of %d",
-			len(reader.File), MaxZipFileCount,
+			"%w: contains %d files, the limit is %d",
+			ErrArchiveTooLarge, len(reader.File), MaxZipFileCount,
 		)
 	}
 
@@ -173,28 +182,31 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 		}
 		name, err := sanitizeZipEntryName(f.Name)
 		if err != nil {
-			return nil, fmt.Errorf("invalid archive: %s: %v", f.Name, err)
+			return nil, fmt.Errorf("%w: %s: %v", ErrInvalidArchive, f.Name, err)
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return nil, fmt.Errorf("invalid archive: open %s: %v", f.Name, err)
+			return nil, fmt.Errorf("%w: open %s: %v", ErrInvalidArchive, f.Name, err)
 		}
 		content, err := io.ReadAll(io.LimitReader(rc, MaxZipFileSize+1))
-		if err == nil && int64(len(content)) > MaxZipFileSize {
-			err = fmt.Errorf("file exceeds the size limit of %d bytes", MaxZipFileSize)
-		}
 		closeErr := rc.Close()
 		if err != nil {
-			return nil, fmt.Errorf("invalid archive: read %s: %v", f.Name, err)
+			return nil, fmt.Errorf("%w: read %s: %v", ErrInvalidArchive, f.Name, err)
 		}
 		if closeErr != nil {
-			return nil, fmt.Errorf("invalid archive: close %s: %v", f.Name, closeErr)
+			return nil, fmt.Errorf("%w: close %s: %v", ErrInvalidArchive, f.Name, closeErr)
+		}
+		if int64(len(content)) > MaxZipFileSize {
+			return nil, fmt.Errorf(
+				"%w: %s exceeds the file size limit of %d bytes",
+				ErrArchiveTooLarge, f.Name, MaxZipFileSize,
+			)
 		}
 		totalSize += int64(len(content))
 		if totalSize > MaxZipTotalSize {
 			return nil, fmt.Errorf(
-				"invalid archive: exceeds the total decompressed size limit of %d bytes",
-				MaxZipTotalSize,
+				"%w: exceeds the total decompressed size limit of %d bytes",
+				ErrArchiveTooLarge, MaxZipTotalSize,
 			)
 		}
 		files = append(files, FileInfo{
