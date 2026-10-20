@@ -10,8 +10,7 @@ import (
 
 // CreateBlockCommand is the input for creating a block. Data is the content
 // of a text or quiz block and must be empty for a task block. If BlockType is
-// "task", Task must be set, since a task is just a block subtype rather
-// than a separate entity - creating one always creates the other.
+// "task", Task must be set: creating a task block creates its task.
 type CreateBlockCommand struct {
 	CourseID     uuid.UUID       `json:"-"`
 	BlockType    string          `json:"blockType"`
@@ -21,40 +20,29 @@ type CreateBlockCommand struct {
 	Actor        EditContext     `json:"-"`
 }
 
-// TaskData is the input (on create) and output (on read/patch) shape for a
-// task-type block's task-specific fields.
+// TaskData is the input shape for the task created together with a
+// task-type block.
 type TaskData struct {
-	TaskGroupID uuid.UUID  `json:"taskGroupId"`
-	Name        string     `json:"name"`
-	Patterns    []string   `json:"patterns,omitempty"`
-	MaxGrade    float32    `json:"maxGrade"`
-	MaxAttempts int        `json:"maxAttempts"`
-	AvailableAt *time.Time `json:"availableAt,omitempty"`
-	DeadlineAt  *time.Time `json:"deadlineAt,omitempty"`
+	TaskGroupID uuid.UUID       `json:"taskGroupId"`
+	Name        string          `json:"name"`
+	Statement   json.RawMessage `json:"statement,omitempty"`
+	Patterns    []string        `json:"patterns,omitempty"`
+	MaxGrade    float32         `json:"maxGrade"`
+	MaxAttempts int             `json:"maxAttempts"`
+	AvailableAt *time.Time      `json:"availableAt,omitempty"`
+	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }
 
-// TaskUpdate is the input for patching a task-type block's task-specific
-// fields. TaskGroupID and Name are immutable after creation, so they have no
-// place here.
-type TaskUpdate struct {
-	Patterns    *[]string  `json:"patterns,omitempty"`
-	MaxGrade    *float32   `json:"maxGrade,omitempty"`
-	MaxAttempts *int       `json:"maxAttempts,omitempty"`
-	AvailableAt *time.Time `json:"availableAt,omitempty"`
-	DeadlineAt  *time.Time `json:"deadlineAt,omitempty"`
-}
-
-// PatchBlockCommand is the input for patching a block's own data and,
-// if it is a task-type block, its task fields, in one request. BlockType may
-// only repeat the block's current type: a block's content lives in a table of
-// its type, so the type cannot change.
+// PatchBlockCommand is the input for patching a block's own data. BlockType
+// may only repeat the block's current type: a block's content lives in a
+// table of its type, so the type cannot change. A task's fields are patched
+// through the task itself.
 type PatchBlockCommand struct {
 	CourseID   uuid.UUID       `json:"-"`
 	SnapshotID uuid.UUID       `json:"-"`
 	BlockID    uuid.UUID       `json:"-"`
 	BlockType  *string         `json:"blockType,omitempty"`
 	Data       json.RawMessage `json:"data,omitempty"      swaggertype:"object"`
-	Task       *TaskUpdate     `json:"task,omitempty"`
 	Actor      EditContext     `json:"-"`
 }
 
@@ -66,12 +54,9 @@ type CreatedBlock struct {
 	PositionLength int
 }
 
-// PatchedBlock is the result of patching a block. Task is populated whenever
-// the block is (still) a task-type block, reflecting its current task data
-// regardless of whether this particular patch touched it.
+// PatchedBlock is the result of patching a block.
 type PatchedBlock struct {
 	Block *Block
-	Task  *TaskData
 }
 
 // TextData is the database representation of a text block's data.

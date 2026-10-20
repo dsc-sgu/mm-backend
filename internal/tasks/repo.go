@@ -17,15 +17,26 @@ type TaskGroup struct {
 }
 
 type Task struct {
-	ID          uuid.UUID      `json:"id"          db:"block_id"      binding:"required"`
-	SnapshotID  uuid.UUID      `json:"-"           db:"snapshot_id"`
-	TaskGroupID uuid.UUID      `json:"taskGroupID" db:"task_group_id" binding:"required"`
-	Name        string         `json:"name"        db:"name"          binding:"required"`
-	Patterns    pq.StringArray `json:"patterns"    db:"patterns"`
-	MaxGrade    float32        `json:"maxGrade"    db:"max_grade"     binding:"required"`
-	MaxAttempts int            `json:"maxAttempts" db:"max_attempts"  binding:"required"`
-	AvailableAt *time.Time     `json:"availableAt" db:"available_at"`
-	DeadlineAt  *time.Time     `json:"deadlineAt"  db:"deadline_at"`
+	ID          uuid.UUID        `json:"id"                  db:"id"            binding:"required"`
+	TaskGroupID uuid.UUID        `json:"taskGroupID"         db:"task_group_id" binding:"required"`
+	Name        string           `json:"name"                db:"name"          binding:"required"`
+	Statement   *json.RawMessage `json:"statement,omitempty" db:"statement"`
+	Patterns    pq.StringArray   `json:"patterns"            db:"patterns"`
+	MaxGrade    float32          `json:"maxGrade"            db:"max_grade"     binding:"required"`
+	MaxAttempts int              `json:"maxAttempts"         db:"max_attempts"  binding:"required"`
+	AvailableAt *time.Time       `json:"availableAt"         db:"available_at"`
+	DeadlineAt  *time.Time       `json:"deadlineAt"          db:"deadline_at"`
+}
+
+// TaskUpdate is the input for patching a task. TaskGroupID and Name are
+// immutable after creation, so they have no place here.
+type TaskUpdate struct {
+	Statement   json.RawMessage `json:"statement,omitempty"`
+	Patterns    *[]string       `json:"patterns,omitempty"`
+	MaxGrade    *float32        `json:"maxGrade,omitempty"`
+	MaxAttempts *int            `json:"maxAttempts,omitempty"`
+	AvailableAt *time.Time      `json:"availableAt,omitempty"`
+	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }
 
 type CreateTaskGroup struct {
@@ -68,6 +79,11 @@ type Repo interface {
 
 	// Tasks
 	GetTaskByID(ctx context.Context, taskID uuid.UUID) (*Task, error)
+	UpdateTask(
+		ctx context.Context,
+		taskID uuid.UUID,
+		update *TaskUpdate,
+	) (*Task, error)
 	GetTasks(
 		ctx context.Context,
 		taskGroupID, snapshotID uuid.UUID,

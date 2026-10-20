@@ -28,12 +28,13 @@ func handleServiceError(err error) error {
 		errors.Is(err, ErrBlockNotFound),
 		errors.Is(err, ErrTaskGroupNotFound):
 		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, ErrTaskNameTaken):
+		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrSnapshotNotDraft),
 		errors.Is(err, ErrAfterBlockNotFound),
 		errors.Is(err, ErrInvalidBlockForMoveAfter),
-		errors.Is(err, ErrInvalidTaskBlock),
 		errors.Is(err, ErrInvalidBlockData),
 		errors.Is(err, ErrBlockTypeChanged):
 		return huma.Error400BadRequest(err.Error())
@@ -52,7 +53,8 @@ type CreateBlockInput struct {
 
 type CreateBlockOutput struct {
 	Body struct {
-		ID uuid.UUID `json:"id"`
+		ID     uuid.UUID  `json:"id"`
+		TaskID *uuid.UUID `json:"taskID,omitempty"`
 	}
 }
 
@@ -83,6 +85,7 @@ func (h *Handler) CreateBlock(
 	}
 	output := &CreateBlockOutput{}
 	output.Body.ID = created.BlockID
+	output.Body.TaskID = created.TaskID
 	return output, nil
 }
 
@@ -95,8 +98,7 @@ type PatchBlockInput struct {
 
 type PatchBlockOutput struct {
 	Body struct {
-		Block *Block    `json:"block"`
-		Task  *TaskData `json:"task,omitempty"`
+		Block *Block `json:"block"`
 	}
 }
 
@@ -118,7 +120,6 @@ func (h *Handler) PatchBlock(
 		BlockID:    input.BlockID,
 		BlockType:  input.Body.BlockType,
 		Data:       input.Body.Data,
-		Task:       input.Body.Task,
 		Actor:      actor,
 	}
 
@@ -128,7 +129,6 @@ func (h *Handler) PatchBlock(
 	}
 	output := &PatchBlockOutput{}
 	output.Body.Block = patched.Block
-	output.Body.Task = patched.Task
 	return output, nil
 }
 

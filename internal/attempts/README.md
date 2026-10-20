@@ -22,7 +22,7 @@ A task may define file patterns (`tasks.patterns`). A submission is rejected unl
 
 ### Database structure
 
-An attempt (`attempts` table) links a user to a task (`tasks.block_id`) and has a chain of state transitions (`attempt_transitions` table). The transition data stores the commit hash from the git repository.
+An attempt (`attempts` table) links a user to a task (`tasks.id`) and has a chain of state transitions (`attempt_transitions` table). The transition data stores the commit hash from the git repository.
 
 ## Push Flow
 

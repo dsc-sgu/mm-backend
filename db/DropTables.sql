@@ -1,6 +1,7 @@
 -- Drop tables with foreign key constraints
 DROP TABLE IF EXISTS attempt_transitions;
 DROP TABLE IF EXISTS attempts;
+DROP TABLE IF EXISTS task_blocks;
 DROP TABLE IF EXISTS tasks;
 DROP TABLE IF EXISTS task_groups;
 DROP TABLE IF EXISTS course_users_groups;

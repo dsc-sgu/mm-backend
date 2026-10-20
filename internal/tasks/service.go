@@ -47,7 +47,10 @@ func NewService(
 	return &Service{repo: repo, repositories: repositories, members: members, locks: locks}
 }
 
-var ErrTaskGroupNotFound = errors.New("task group not found")
+var (
+	ErrTaskGroupNotFound = errors.New("task group not found")
+	ErrTaskNotFound      = errors.New("task not found")
+)
 
 // requireMember ensures userID is any active member (student or teacher) of courseID.
 func (s *Service) requireMember(
@@ -160,6 +163,28 @@ func (s *Service) UpdateTaskGroup(
 		return nil, err
 	}
 	return s.repo.UpdateTaskGroup(ctx, groupID, update)
+}
+
+// UpdateTask requires the caller to be an active teacher of the task's course.
+// A task lives outside snapshots, so the change applies at once and needs no
+// course edit lock.
+func (s *Service) UpdateTask(
+	ctx context.Context,
+	userID, taskID uuid.UUID,
+	update *TaskUpdate,
+) (*Task, error) {
+	task, err := s.repo.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	courseID, err := s.repo.GetCourseIDByTaskGroup(ctx, task.TaskGroupID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.requireTeacher(ctx, userID, courseID); err != nil {
+		return nil, err
+	}
+	return s.repo.UpdateTask(ctx, taskID, update)
 }
 
 // DeleteTaskGroup requires the caller to be an active teacher of the group's course.

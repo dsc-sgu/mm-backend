@@ -632,7 +632,8 @@ func CreateTestTaskGroup(
 
 // CreateTestTask creates a task by creating a "task"-typed block in the
 // course's current draft, mirroring how the API unifies task and content
-// creation. Patterns are optional; with none the task accepts any files.
+// creation, and returns the task's id. Patterns are optional; with none the
+// task accepts any files.
 func CreateTestTask(
 	t *testing.T,
 	port *nat.Port,
@@ -676,11 +677,12 @@ func CreateTestTask(
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var created struct {
-		ID uuid.UUID `json:"id"`
+		TaskID *uuid.UUID `json:"taskID"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	require.NotNil(t, created.TaskID)
 
-	return created.ID
+	return *created.TaskID
 }
 
 type sshIdentity struct {

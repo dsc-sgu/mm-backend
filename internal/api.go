@@ -365,4 +365,14 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 		},
 		handler.GetTasks,
 	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodPatch,
+			Path:    "/tasks/{task_id}",
+			Summary: "Update task",
+			Tags:    []string{"Task"},
+		},
+		handler.PatchTask,
+	)
 }

@@ -26,7 +26,8 @@ func handleServiceError(err error) error {
 		return nil
 	}
 	switch {
-	case errors.Is(err, ErrTaskGroupNotFound):
+	case errors.Is(err, ErrTaskGroupNotFound),
+		errors.Is(err, ErrTaskNotFound):
 		return huma.Error404NotFound(err.Error())
 	case errors.Is(err, membership.ErrNotFound),
 		errors.Is(err, membership.ErrPermissionDenied):
@@ -133,6 +134,32 @@ func (h *Handler) PatchTaskGroup(
 	}
 
 	return &PatchTaskGroupOutput{Body: tg}, nil
+}
+
+type PatchTaskInput struct {
+	TaskID uuid.UUID `path:"task_id"`
+	Body   TaskUpdate
+}
+
+type PatchTaskOutput struct {
+	Body *Task
+}
+
+func (h *Handler) PatchTask(
+	ctx context.Context,
+	input *PatchTaskInput,
+) (*PatchTaskOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	task, err := h.taskSvc.UpdateTask(ctx, userID, input.TaskID, &input.Body)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	return &PatchTaskOutput{Body: task}, nil
 }
 
 type DeleteTaskGroupInput struct {

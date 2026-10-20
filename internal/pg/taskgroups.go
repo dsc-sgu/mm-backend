@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	// Scoped to the active snapshot, same as getTaskByNameSQL: with each
-	// snapshot generation of a task keeping its own row, an unscoped query
-	// here would mix in patterns from historical, no-longer-live generations.
+	// Scoped to the active snapshot, same as getTaskByNameSQL: a task the
+	// active snapshot no longer links to is not live, even though older
+	// snapshots still link to it.
 	//
 	// Deliberately not filtered to tasks with a non-empty patterns array:
 	// the pre-receive hook needs every live task name, including
@@ -24,10 +24,11 @@ const (
 	getTaskPatternsSQL = `
 		SELECT t.name, t.patterns
 		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
-		JOIN course_snapshots cs ON cs.id = t.snapshot_id
-		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = t.snapshot_id
-		WHERE t.task_group_id = $1
+		JOIN task_blocks tb ON tb.task_id = t.id
+		JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
+		JOIN course_snapshots cs ON cs.id = b.snapshot_id
+		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = b.snapshot_id
+		WHERE t.task_group_id = $1 AND t.deleted_at IS NULL
 		ORDER BY t.name
 	`
 
@@ -35,16 +36,17 @@ const (
 	// active (published) snapshot, so a git push can't target a task that
 	// only exists in an unpublished draft.
 	getTaskByNameSQL = `
-		SELECT t.block_id
+		SELECT t.id
 		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
+		JOIN task_blocks tb ON tb.task_id = t.id
+		JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
 		JOIN course_snapshots cs ON cs.id = b.snapshot_id
 		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = b.snapshot_id
-		WHERE t.task_group_id = $1 AND t.name = $2
+		WHERE t.task_group_id = $1 AND t.name = $2 AND t.deleted_at IS NULL
 	`
 
 	getTaskPatternsByTaskIDSQL = `
-		SELECT patterns FROM tasks WHERE block_id = $1
+		SELECT patterns FROM tasks WHERE id = $1
 	`
 
 	createTaskGroupSQL = `
@@ -77,25 +79,21 @@ const (
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
-	// Both queries join blocks so a task whose block has been deleted disappears
-	// from every read path, the same as a fully deleted task would.
 	getTaskByIDSQL = `
-		SELECT t.block_id, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
-		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
-		WHERE t.block_id = $1
+		SELECT id, task_group_id, name, statement, patterns, max_grade, max_attempts, available_at, deadline_at
+		FROM tasks
+		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	// Scoped to a specific snapshot (the caller's own in-progress draft, or
 	// the course's active/published snapshot - see ResolveViewSnapshot):
-	// each snapshot generation of a task has its own row, so listing "all"
-	// tasks for a group without this scope would return one row per
-	// generation ever copied.
+	// a group's tasks are the ones that snapshot's live blocks link to.
 	getTasksByGroupAndSnapshotSQL = `
-		SELECT t.block_id, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
+		SELECT t.id, t.task_group_id, t.name, t.statement, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
 		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
-		WHERE t.task_group_id = $1 AND t.snapshot_id = $2
+		JOIN task_blocks tb ON tb.task_id = t.id
+		JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
+		WHERE t.task_group_id = $1 AND b.snapshot_id = $2 AND t.deleted_at IS NULL
 		ORDER BY t.name
 	`
 
@@ -117,13 +115,14 @@ const (
 
 	updateTaskSQL = `
 		UPDATE tasks
-		SET patterns = COALESCE($1::text[], patterns),
-		    max_grade = COALESCE($2, max_grade),
-		    max_attempts = COALESCE($3, max_attempts),
-		    available_at = COALESCE($4, available_at),
-		    deadline_at = COALESCE($5, deadline_at)
-		WHERE block_id = $6
-		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
+		SET statement = COALESCE($1::jsonb, statement),
+		    patterns = COALESCE($2::text[], patterns),
+		    max_grade = COALESCE($3, max_grade),
+		    max_attempts = COALESCE($4, max_attempts),
+		    available_at = COALESCE($5, available_at),
+		    deadline_at = COALESCE($6, deadline_at)
+		WHERE id = $7 AND deleted_at IS NULL
+		RETURNING id, task_group_id, name, statement, patterns, max_grade, max_attempts, available_at, deadline_at
 	`
 
 	getTaskGroupIDByNameSQL = `
@@ -137,7 +136,7 @@ const (
 	`
 
 	getTaskCountSQL = `
-		SELECT COUNT(*) FROM tasks WHERE task_group_id = $1
+		SELECT COUNT(*) FROM tasks WHERE task_group_id = $1 AND deleted_at IS NULL
 	`
 )
 
@@ -263,9 +262,48 @@ func (r *PGRepo) GetTaskByID(
 	err := r.db.GetContext(ctx, &task, getTaskByIDSQL, taskID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task %s: not found", taskID)
+			return nil, tasks.ErrTaskNotFound
 		}
 		return nil, fmt.Errorf("get task by id: %w", err)
+	}
+	return &task, nil
+}
+
+func (r *PGRepo) UpdateTask(
+	ctx context.Context,
+	taskID uuid.UUID,
+	update *tasks.TaskUpdate,
+) (*tasks.Task, error) {
+	zap.L().Debug("Executing query", zap.String("query", updateTaskSQL))
+
+	// nil fields must reach the driver as SQL NULL, so that COALESCE leaves
+	// the existing values untouched; a non-empty statement goes as a string,
+	// since lib/pq sends []byte as bytea, which jsonb rejects
+	var statement any
+	if len(update.Statement) > 0 {
+		statement = string(update.Statement)
+	}
+	var patterns any
+	if update.Patterns != nil {
+		patterns = pq.StringArray(*update.Patterns)
+	}
+	var task tasks.Task
+	err := r.db.QueryRowxContext(
+		ctx,
+		updateTaskSQL,
+		statement,
+		patterns,
+		update.MaxGrade,
+		update.MaxAttempts,
+		update.AvailableAt,
+		update.DeadlineAt,
+		taskID,
+	).StructScan(&task)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, tasks.ErrTaskNotFound
+		}
+		return nil, fmt.Errorf("update task: %w", err)
 	}
 	return &task, nil
 }

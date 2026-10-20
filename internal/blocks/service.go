@@ -40,8 +40,10 @@ var (
 	)
 	ErrPermissionDenied  = errors.New("permission denied")
 	ErrTaskGroupNotFound = errors.New("task group not found")
-	ErrInvalidTaskBlock  = errors.New("task data supplied for a non-task block")
-	ErrInvalidBlockData  = errors.New(
+	ErrTaskNameTaken     = errors.New(
+		"a task with this name already exists in the task group",
+	)
+	ErrInvalidBlockData = errors.New(
 		"data is required for text and quiz blocks and not allowed for task blocks",
 	)
 	ErrBlockTypeChanged = errors.New("block type cannot be changed")

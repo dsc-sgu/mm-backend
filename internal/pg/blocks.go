@@ -14,7 +14,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
-	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 const (
@@ -146,16 +145,53 @@ const (
 	`
 
 	createTaskSQL = `
-		INSERT INTO tasks (block_id, snapshot_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
-		VALUES (:block_id, :snapshot_id, :task_group_id, :name, :patterns, :max_grade, :max_attempts, :available_at, :deadline_at)
-		RETURNING block_id
+		INSERT INTO tasks (task_group_id, name, statement, patterns, max_grade, max_attempts, available_at, deadline_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id
+	`
+
+	createTaskBlockSQL = `
+		INSERT INTO task_blocks (block_id, task_id)
+		VALUES ($1, $2)
+	`
+
+	// Task names are unique among the live tasks of a group in one snapshot.
+	taskNameTakenSQL = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM tasks t
+			JOIN task_blocks tb ON tb.task_id = t.id
+			JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
+			WHERE b.snapshot_id = $1 AND t.task_group_id = $2 AND t.name = $3
+		)
+	`
+
+	// Soft-deletes the tasks of snapshotID's deleted blocks that no live
+	// block of any snapshot links to anymore: a task created in a draft and
+	// dropped before being published. A task a published snapshot links to
+	// stays, since attempts may point at it.
+	deleteUnlinkedTasksSQL = `
+		UPDATE tasks t
+		SET deleted_at = NOW()
+		WHERE t.deleted_at IS NULL
+		  AND t.id IN (
+			SELECT tb.task_id
+			FROM task_blocks tb
+			JOIN blocks b ON b.id = tb.block_id
+			WHERE b.snapshot_id = $1
+		  )
+		  AND NOT EXISTS (
+			SELECT 1
+			FROM task_blocks tb
+			JOIN blocks b ON b.id = tb.block_id AND b.deleted_at IS NULL
+			WHERE tb.task_id = t.id
+		  )
 	`
 
 	// Generates the copied blocks' ids explicitly (instead of relying on the
-	// column DEFAULT) so a block's content row, or a task-type block's `tasks`
-	// row, can be copied alongside it under the new block_id. Each snapshot
-	// generation of a task gets its own tasks row (see the NOTE on the tasks
-	// table), so this never collides with the source's still-existing row.
+	// column DEFAULT) so a block's content row, or a task-type block's link to
+	// its task, can be copied alongside it under the new block_id. The task
+	// itself is not copied: the new block links to the same task.
 	copyBlocksToSnapshotSQL = `
 		WITH source AS (
 			SELECT id AS old_id, uuidv7() AS new_id, block_type, position
@@ -181,11 +217,11 @@ const (
 			JOIN quiz_blocks qb ON qb.block_id = s.old_id
 			WHERE s.new_id IN (SELECT id FROM inserted_blocks)
 		)
-		INSERT INTO tasks (block_id, snapshot_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
-		SELECT s.new_id, $1, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
+		INSERT INTO task_blocks (block_id, task_id)
+		SELECT s.new_id, tb.task_id
 		FROM source s
-		JOIN tasks t ON t.block_id = s.old_id
-		WHERE s.block_type = 'task' AND s.new_id IN (SELECT id FROM inserted_blocks)
+		JOIN task_blocks tb ON tb.block_id = s.old_id
+		WHERE s.new_id IN (SELECT id FROM inserted_blocks)
 	`
 )
 
@@ -487,38 +523,51 @@ func (r *PGRepo) CreateBlock(
 			return blocks.ErrTaskGroupNotFound
 		}
 
+		var taken bool
+		if err := tx.GetContext(
+			ctx,
+			&taken,
+			taskNameTakenSQL,
+			snapshot.ID,
+			task.TaskGroupID,
+			task.Name,
+		); err != nil {
+			return fmt.Errorf("check task name: %w", err)
+		}
+		if taken {
+			return blocks.ErrTaskNameTaken
+		}
+
 		patterns := task.Patterns
 		if patterns == nil {
 			patterns = []string{}
 		}
-		newTask := tasks.Task{
-			ID:          block.ID,
-			SnapshotID:  block.SnapshotID,
-			TaskGroupID: task.TaskGroupID,
-			Name:        task.Name,
-			Patterns:    pq.StringArray(patterns),
-			MaxGrade:    task.MaxGrade,
-			MaxAttempts: task.MaxAttempts,
-			AvailableAt: task.AvailableAt,
-			DeadlineAt:  task.DeadlineAt,
+		// nil Statement must reach the driver as SQL NULL, and a non-empty
+		// one as a string: lib/pq sends []byte as bytea, which jsonb rejects
+		var statement any
+		if len(task.Statement) > 0 {
+			statement = string(task.Statement)
 		}
-		taskStmt, err := tx.PrepareNamedContext(ctx, createTaskSQL)
-		if err != nil {
-			return fmt.Errorf("prepare task: %w", err)
-		}
-		defer func() {
-			if closeErr := taskStmt.Close(); closeErr != nil {
-				zap.L().
-					Error("failed to close task statement", zap.Error(closeErr))
-			}
-		}()
-		if err := taskStmt.GetContext(
+		var taskID uuid.UUID
+		if err := tx.GetContext(
 			ctx,
-			&result.TaskID,
-			newTask,
+			&taskID,
+			createTaskSQL,
+			task.TaskGroupID,
+			task.Name,
+			statement,
+			pq.StringArray(patterns),
+			task.MaxGrade,
+			task.MaxAttempts,
+			task.AvailableAt,
+			task.DeadlineAt,
 		); err != nil {
 			return fmt.Errorf("create task: %w", err)
 		}
+		if _, err := tx.ExecContext(ctx, createTaskBlockSQL, block.ID, taskID); err != nil {
+			return fmt.Errorf("link task block: %w", err)
+		}
+		result.TaskID = &taskID
 		zap.L().
 			Debug("created task block", zap.String("block_id", block.ID.String()))
 		return nil
@@ -529,9 +578,8 @@ func (r *PGRepo) CreateBlock(
 	return &result, nil
 }
 
-// PatchBlock updates a block's own data and, if it is a task-type block, its
-// task fields - all gated by the same editable-snapshot check used for
-// every other course-editing mutation.
+// PatchBlock updates a block's own data, gated by the same editable-snapshot
+// check used for every other course-editing mutation.
 func (r *PGRepo) PatchBlock(
 	ctx context.Context,
 	command blocks.PatchBlockCommand,
@@ -580,95 +628,12 @@ func (r *PGRepo) PatchBlock(
 			}
 		}
 		result.Block = &block
-
-		if command.Task != nil && block.BlockType != "task" {
-			return blocks.ErrInvalidTaskBlock
-		}
-		if block.BlockType != "task" {
-			return nil
-		}
-
-		var task *blocks.TaskData
-		var taskErr error
-		if command.Task != nil {
-			task, taskErr = patchTask(ctx, tx, block.ID, command.Task)
-		} else {
-			task, taskErr = getTaskData(ctx, tx, block.ID)
-		}
-		if taskErr != nil {
-			return taskErr
-		}
-		result.Task = task
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &result, nil
-}
-
-// taskDataFromRow converts a tasks.Task row into the blocks.TaskData shape
-// returned to callers.
-func taskDataFromRow(task tasks.Task) *blocks.TaskData {
-	return &blocks.TaskData{
-		TaskGroupID: task.TaskGroupID,
-		Name:        task.Name,
-		Patterns:    []string(task.Patterns),
-		MaxGrade:    task.MaxGrade,
-		MaxAttempts: task.MaxAttempts,
-		AvailableAt: task.AvailableAt,
-		DeadlineAt:  task.DeadlineAt,
-	}
-}
-
-// getTaskData reads a task-type block's current task data, without modifying
-// it. A task-type block with no matching tasks row is an invariant violation
-// - surfaced as ErrInvalidTaskBlock rather than a raw "not found".
-func getTaskData(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	blockID uuid.UUID,
-) (*blocks.TaskData, error) {
-	var task tasks.Task
-	if err := tx.GetContext(ctx, &task, getTaskByIDSQL, blockID); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, blocks.ErrInvalidTaskBlock
-		}
-		return nil, fmt.Errorf("get task: %w", err)
-	}
-	return taskDataFromRow(task), nil
-}
-
-// patchTask updates the task attached to blockID and returns its new state.
-// A task-type block with no matching tasks row is an invariant violation -
-// surfaced as ErrInvalidTaskBlock rather than a raw "not found".
-func patchTask(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	blockID uuid.UUID,
-	update *blocks.TaskUpdate,
-) (*blocks.TaskData, error) {
-	var patterns any
-	if update.Patterns != nil {
-		patterns = pq.StringArray(*update.Patterns)
-	}
-	var task tasks.Task
-	if err := tx.QueryRowxContext(
-		ctx,
-		updateTaskSQL,
-		patterns,
-		update.MaxGrade,
-		update.MaxAttempts,
-		update.AvailableAt,
-		update.DeadlineAt,
-		blockID,
-	).StructScan(&task); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, blocks.ErrInvalidTaskBlock
-		}
-		return nil, fmt.Errorf("tx update task: %w", err)
-	}
-	return taskDataFromRow(task), nil
 }
 
 func (r *PGRepo) GetBlockByID(
@@ -896,7 +861,7 @@ func (r *PGRepo) DeleteBlockByID(
 			return fmt.Errorf("tx delete block: %w", err)
 		}
 
-		return nil
+		return deleteUnlinkedTasks(ctx, tx, ref.SnapshotID)
 	})
 }
 
@@ -915,6 +880,22 @@ func (r *PGRepo) DeleteAllBlocksBySnapshotID(
 	_, err := tx.ExecContext(ctx, deleteAllBlocksBySnapshotIDSQL, snapshotID)
 	if err != nil {
 		return fmt.Errorf("tx soft delete blocks by snapshot: %w", err)
+	}
+	return deleteUnlinkedTasks(ctx, tx, snapshotID)
+}
+
+// deleteUnlinkedTasks soft-deletes the tasks that lost their last live block
+// when blocks of snapshotID were deleted.
+func deleteUnlinkedTasks(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	snapshotID uuid.UUID,
+) error {
+	zap.L().
+		Debug("Executing query within transaction", zap.String("query", deleteUnlinkedTasksSQL))
+
+	if _, err := tx.ExecContext(ctx, deleteUnlinkedTasksSQL, snapshotID); err != nil {
+		return fmt.Errorf("tx delete unlinked tasks: %w", err)
 	}
 	return nil
 }

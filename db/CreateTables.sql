@@ -78,10 +78,7 @@ CREATE TABLE blocks (
     block_type block_type NOT NULL,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
-    deleted_at timestamp,
-
-    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
-    UNIQUE (id, block_type)
+    deleted_at timestamp
 );
 
 -- NOTE(nrydanov): content of text and quiz blocks, one row per block, copied
@@ -211,33 +208,36 @@ CREATE TABLE task_groups (
 -- only among the still-live groups, so a deleted name can be reused.
 CREATE UNIQUE INDEX idx_task_groups_course_name ON task_groups(course_id, name) WHERE (deleted_at IS NULL);
 
--- NOTE(nrydanov): task is a subtype of block — the composite FK plus
--- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
--- NOTE(Ezhkin-Kot): a task's block gets a fresh id every time its snapshot is
--- copied (course-editing draft creation / snapshot switch), so a task's own
--- row is copied alongside it.
+-- NOTE(nrydanov): a task lives outside snapshots, so its id stays the same
+-- across snapshot copies and attempts keep pointing at it. A snapshot reaches
+-- its tasks through task_blocks. A task name is unique among the tasks of its
+-- group in one snapshot; the database cannot express that, so the block
+-- service checks it.
 CREATE TABLE tasks (
-    block_id uuid PRIMARY KEY,
-    block_type block_type NOT NULL DEFAULT 'task',
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     task_group_id uuid NOT NULL REFERENCES task_groups(id),
     name varchar(128) NOT NULL,
+    statement jsonb,
     -- glob patterns matching the files that count as this task's solution
     patterns text[] NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
     max_attempts integer NOT NULL,
     available_at timestamptz,
     deadline_at timestamptz,
+    deleted_at timestamp
+);
 
-    FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
-    CHECK (block_type = 'task'),
-    UNIQUE (snapshot_id, task_group_id, name)
+-- NOTE(nrydanov): links a task-type block to its task, copied with the block
+-- when a snapshot is copied
+CREATE TABLE task_blocks (
+    block_id uuid PRIMARY KEY REFERENCES blocks(id),
+    task_id uuid NOT NULL REFERENCES tasks(id)
 );
 
 CREATE TABLE attempts (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
-    task_id uuid NOT NULL REFERENCES tasks(block_id)
+    task_id uuid NOT NULL REFERENCES tasks(id)
 );
 
 CREATE TABLE attempt_transitions (

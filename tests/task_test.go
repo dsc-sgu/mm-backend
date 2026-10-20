@@ -519,8 +519,8 @@ func TestGetTasks(t *testing.T) {
 // TestTaskSurvivesPublishAndReEdit is a regression test for a bug where
 // copying blocks to a new snapshot (opening a course for editing, or
 // switching snapshots) left a task-type block's metadata behind under its
-// old, no-longer-current block id, silently orphaning it. Each snapshot
-// generation of a task must carry its own, fully populated task data.
+// old, no-longer-current block id, silently orphaning it. The copied block
+// must link to the same task.
 func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	clearDatabases(t)
 
@@ -574,19 +574,56 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&receivedTasks))
 
 	require.Len(t, receivedTasks, 1)
-	require.NotEqual(
+	require.Equal(
 		t,
 		taskID,
 		receivedTasks[0].ID,
-		"task should have a new block id in the new draft generation",
+		"task should keep its id in the new draft",
 	)
 	require.Equal(t, "Task 1", receivedTasks[0].Name)
 	require.Equal(t, groupID, receivedTasks[0].TaskGroupID)
 }
 
-// TestUpdateTask exercises task field updates through the same course-editing
-// path as any other block patch (task data is just a block subtype), rather
-// than a standalone /tasks endpoint.
+// patchTestTask sends PATCH /tasks/{task_id} and returns the response status
+// and the decoded task.
+func patchTestTask(
+	t *testing.T,
+	testUser *TestUser,
+	taskID uuid.UUID,
+	update tasks.TaskUpdate,
+) (int, *tasks.Task) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		backendPort.Port(),
+		taskID,
+	)
+	body, err := json.Marshal(update)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return resp.StatusCode, nil
+	}
+	var task tasks.Task
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&task))
+	return resp.StatusCode, &task
+}
+
+// TestUpdateTask patches a published task through PATCH /tasks/{task_id}.
+// A task lives outside snapshots, so no course edit lock is held.
 func TestUpdateTask(t *testing.T) {
 	clearDatabases(t)
 
@@ -607,27 +644,141 @@ func TestUpdateTask(t *testing.T) {
 		groupID,
 		"Task 1",
 	)
-
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
-		backendPort.Port(),
-		courseID,
-		draftSnapshotID,
-		taskID,
-	)
+	// Publishing releases the course edit lock.
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, draftSnapshotID,
+	))
 
 	newGrade := float32(50)
-	body, _ := json.Marshal(blocks.PatchBlockCommand{
-		Task: &blocks.TaskUpdate{
-			MaxGrade: &newGrade,
-			Patterns: &[]string{"*.go"},
+	statement := json.RawMessage(`{"text":"Write a parser"}`)
+	status, updated := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		Statement: statement,
+		MaxGrade:  &newGrade,
+		Patterns:  &[]string{"*.go"},
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	require.Equal(t, taskID, updated.ID)
+	require.InDelta(t, newGrade, updated.MaxGrade, 0.001)
+	require.Equal(t, []string{"*.go"}, []string(updated.Patterns))
+	require.NotNil(t, updated.Statement)
+	require.JSONEq(t, string(statement), string(*updated.Statement))
+}
+
+// TestAttemptsSurviveRepublish checks that attempts made before a course is
+// edited and published again stay with the task.
+func TestAttemptsSurviveRepublish(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, draftSnapshotID,
+	))
+
+	files := map[string]string{"solution.go": "package main\n"}
+	require.Equal(t, http.StatusCreated, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, files,
+	))
+
+	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, lockResult.DraftSnapshotID,
+	))
+
+	files["solution.go"] = "package main\n\nfunc main() {}\n"
+	require.Equal(t, http.StatusCreated, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, files,
+	))
+
+	attempts := GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID)
+	require.Len(t, attempts, 2)
+}
+
+// TestCancelEditDeletesDraftTask checks that a task created in a draft that
+// is then discarded is deleted with it.
+func TestCancelEditDeletesDraftTask(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
+
+	require.Equal(t, http.StatusNoContent, CancelEdit(
+		t, &backendPort, &testUser, courseID,
+	))
+
+	newGrade := float32(50)
+	status, _ := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxGrade: &newGrade,
+	})
+	require.Equal(t, http.StatusNotFound, status)
+}
+
+// TestCreateTaskRejectsTakenName checks that two tasks of one group in one
+// snapshot cannot share a name, which a git push uses to pick the task.
+func TestCreateTaskRejectsTakenName(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
+		backendPort.Port(),
+		courseID,
+	)
+	body, err := json.Marshal(blocks.CreateBlockCommand{
+		BlockType: "task",
+		Task: &blocks.TaskData{
+			TaskGroupID: groupID,
+			Name:        "Task 1",
+			MaxGrade:    100,
+			MaxAttempts: 5,
 		},
 	})
+	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-
 	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
@@ -635,21 +786,7 @@ func TestUpdateTask(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var updated struct {
-		Block *struct {
-			ID uuid.UUID `json:"id"`
-		} `json:"block"`
-		Task *blocks.TaskData `json:"task"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
-
-	require.Equal(t, taskID, updated.Block.ID)
-	require.NotNil(t, updated.Task)
-	require.InDelta(t, newGrade, updated.Task.MaxGrade, 0.001)
-	require.Equal(t, []string{"*.go"}, updated.Task.Patterns)
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
 func TestUploadTemplate(t *testing.T) {
