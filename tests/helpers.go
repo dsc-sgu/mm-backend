@@ -136,8 +136,11 @@ func initPostgres(
 				FileMode:          0o644,
 			},
 		},
+		// The postgres image logs readiness twice: first the temporary
+		// server that runs the init scripts, then the real one.
 		WaitingFor: wait.ForAll(
-			wait.ForLog("database system is ready to accept connections"),
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2),
 			wait.ForListeningPort(pgPort),
 		),
 		Networks:       []string{net.Name},
