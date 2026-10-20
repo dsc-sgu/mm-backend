@@ -764,7 +764,7 @@ func runGit(
 	cmd.Env = append(
 		os.Environ(),
 		fmt.Sprintf(
-			"GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+			"GIT_SSH_COMMAND=ssh -F /dev/null -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
 			identity.privateKeyPath,
 		),
 		"GIT_AUTHOR_NAME=Test Student",
