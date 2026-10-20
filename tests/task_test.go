@@ -95,7 +95,7 @@ func TestGetTaskGroup(t *testing.T) {
 	require.NotZero(t, taskID)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		groupID,
 	)
@@ -129,7 +129,7 @@ func TestGetTaskGroupNotFound(t *testing.T) {
 	testUser, _, _, _ := setupCourseForTasks(t)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		uuid.New(),
 	)
@@ -162,7 +162,7 @@ func TestUpdateTaskGroup(t *testing.T) {
 	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		groupID,
 	)
@@ -205,7 +205,7 @@ func TestDeleteTaskGroup(t *testing.T) {
 	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		groupID,
 	)
@@ -257,7 +257,7 @@ func TestDeleteTaskGroupWithTasks(t *testing.T) {
 	CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		groupID,
 	)
@@ -307,7 +307,7 @@ func TestCreateTaskGroupReusesDeletedName(t *testing.T) {
 	)
 
 	deleteURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
 		backendPort.Port(),
 		firstGroupID,
 	)
@@ -446,7 +446,7 @@ func TestGetTasks(t *testing.T) {
 	)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s/tasks",
 		backendPort.Port(),
 		groupID,
 	)
@@ -509,7 +509,7 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, lockResult.DraftSnapshotID)
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/tasks",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s/tasks",
 		backendPort.Port(),
 		groupID,
 	)
@@ -643,7 +643,7 @@ func TestUploadTemplateEmptyBody(t *testing.T) {
 	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s/template",
 		backendPort.Port(),
 		groupID,
 	)
