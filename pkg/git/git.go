@@ -116,11 +116,12 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 		); err != nil {
 			return err
 		}
+		// receive-pack has already accepted the push, so a failure here must
+		// not be reported to the caller as a rejected push.
 		if err := EnsureDefaultBranch(s, rp); err != nil {
-			return err
+			log.Error("ensure default branch", "repo", rp, "error", err)
 		}
-		// Needed for git dumb http server
-		return RunGit(s, rp, "update-server-info")
+		return nil
 	default:
 		return fmt.Errorf("unknown git command: %s", gitCmd)
 	}
