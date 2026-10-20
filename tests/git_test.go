@@ -117,10 +117,10 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	require.Equal(t, testUser.ID, attempts[0].UserID)
 }
 
-// TestPushAttemptKeepsPatternFiles checks which files a web attempt leaves in
-// the repository: every file from the zip is added, and of the files already
-// there only those matching the task's patterns are kept.
-func TestPushAttemptKeepsPatternFiles(t *testing.T) {
+// TestPushAttemptReplacesPatternFiles checks which files a web attempt leaves
+// in the repository: every file from the zip is added, and of the files
+// already there only those matching the task's patterns are removed.
+func TestPushAttemptReplacesPatternFiles(t *testing.T) {
 	clearDatabases(t)
 
 	testUser, taskID, identity := setupGitTask(t, map[string]string{
@@ -140,11 +140,11 @@ func TestPushAttemptKeepsPatternFiles(t *testing.T) {
 		},
 	))
 
-	// README.md (template) and notes.txt (first attempt) match no pattern, so
-	// they are gone; a/stub.go and a/x.go match "a/*", so they stay.
+	// a/stub.go (template) and a/x.go (first attempt) match "a/*", so they are
+	// gone; README.md and notes.txt match no pattern, so they stay.
 	repoDir := CloneTestRepo(t, &backendSSHPort, identity, gitRepoPath)
 	files := strings.Fields(runGit(t, repoDir, identity, "ls-files"))
-	require.Equal(t, []string{"a/stub.go", "a/x.go", "a/y.go"}, files)
+	require.Equal(t, []string{"README.md", "a/y.go", "notes.txt"}, files)
 	require.Len(t, GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID), 2)
 }
 
