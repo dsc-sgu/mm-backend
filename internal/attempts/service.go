@@ -162,9 +162,11 @@ func (s *Service) PushAttempt(
 	for _, file := range files {
 		touched[file.FileName] = true
 	}
+	// The repository is shared by the whole task group, so only this task's
+	// files (the ones matching its patterns) are replaced by a resubmission.
 	var remove []string
 	for _, path := range existing {
-		if !touched[path] && !compiledPatterns.MatchAny(path) {
+		if !touched[path] && compiledPatterns.MatchAny(path) {
 			remove = append(remove, path)
 		}
 	}
