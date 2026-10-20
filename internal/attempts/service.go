@@ -178,9 +178,6 @@ func (s *Service) PushAttempt(
 	if err := s.git.EnsureRepo(id); err != nil {
 		return "", fmt.Errorf("init repository: %w", err)
 	}
-	if err := s.tasks.RefreshRepositoryPatterns(ctx, id); err != nil {
-		zap.L().Warn("refresh repository patterns", zap.Error(err))
-	}
 
 	existing, err := s.git.ListFiles(id)
 	if err != nil {
@@ -280,11 +277,18 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 			case pkggit.GitReceivePack:
 				switch access {
 				case pkggit.ReadWriteAccess, pkggit.AdminAccess:
+					patterns, err := s.groupPatterns(sess.Context(), rawRepo, pk)
+					if err != nil {
+						log.Error("get group patterns", "error", err, "repo", rawRepo)
+						pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
+						return
+					}
 					if err := pkggit.GitPack(
 						sess,
 						gc,
 						repoDir,
 						repo,
+						patterns,
 					); err != nil {
 						log.Error(
 							"git push failed",
@@ -310,6 +314,7 @@ func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
 						gc,
 						repoDir,
 						repo,
+						nil,
 					); err != nil {
 						switch {
 						case errors.Is(err, pkggit.ErrInvalidRepo):
@@ -343,10 +348,21 @@ func (s *Service) repoRename(
 	if err = s.git.EnsureRepo(id); err != nil {
 		return "", err
 	}
-	if err = s.tasks.RefreshRepositoryPatterns(ctx, id); err != nil {
-		zap.L().Warn("refresh repository patterns", zap.Error(err))
-	}
 	return id.IntoPath() + ".git", nil
+}
+
+// groupPatterns returns the patterns of every live task in the pushed
+// repository's group, read from the database on each push.
+func (s *Service) groupPatterns(
+	ctx context.Context,
+	original string,
+	key ssh.PublicKey,
+) (map[string][]string, error) {
+	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
+	if err != nil {
+		return nil, err
+	}
+	return s.tasks.GetGroupPatterns(ctx, id.TaskGroupID)
 }
 
 func (s *Service) authRepo(

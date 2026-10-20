@@ -1,6 +1,15 @@
 package git
 
-import "github.com/gobwas/glob"
+import (
+	"strings"
+
+	"github.com/gobwas/glob"
+)
+
+// braceEscaper makes braces literal. The pre-receive hook matches with a
+// shell case statement, which has no "{a,b}" alternation, so gobwas/glob
+// must not have it either.
+var braceEscaper = strings.NewReplacer("{", `\{`, "}", `\}`)
 
 // CompiledPatterns is a set of glob patterns compiled once via
 // CompilePatterns, for matching many names without recompiling on every
@@ -14,7 +23,7 @@ type CompiledPatterns []*glob.Pattern
 func CompilePatterns(patterns []string) CompiledPatterns {
 	compiled := make(CompiledPatterns, 0, len(patterns))
 	for _, pattern := range patterns {
-		g, err := glob.Compile(pattern)
+		g, err := glob.Compile(braceEscaper.Replace(pattern))
 		if err != nil {
 			continue
 		}

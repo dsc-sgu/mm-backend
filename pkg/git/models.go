@@ -4,15 +4,12 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	// PatternsFileName is the file consumed by the Git pre-receive hook.
-	PatternsFileName = ".mm-patterns"
 	// MaxZipFileCount is the maximum number of regular files a submitted
 	// archive may contain.
 	MaxZipFileCount = 2000
@@ -56,10 +53,6 @@ type FileInfo struct {
 	MD5Hash     string    `json:"md5Hash"     binding:"required"`
 	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
 	Content     []byte    `json:"content"     binding:"required"`
-}
-
-func PatternsFilePath(repoPath string) string {
-	return filepath.Join(repoPath, PatternsFileName)
 }
 
 // FileStatus is how a file changed between the two commits Manager.Diff compares.

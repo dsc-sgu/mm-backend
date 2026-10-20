@@ -20,6 +20,12 @@ func TestCompiledPatternsMatchAny(t *testing.T) {
 	}
 }
 
+func TestCompiledPatternsBracesAreLiteral(t *testing.T) {
+	patterns := CompilePatterns([]string{"{a,b}.go"})
+	require.True(t, patterns.MatchAny("{a,b}.go"))
+	require.False(t, patterns.MatchAny("a.go"))
+}
+
 func TestCompilePatternsSkipsInvalid(t *testing.T) {
 	patterns := CompilePatterns([]string{"[", "*.go"})
 	require.Len(t, patterns, 1)

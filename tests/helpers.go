@@ -759,6 +759,15 @@ func runGit(
 ) string {
 	t.Helper()
 
+	out, err := tryGit(dir, identity, args...)
+	require.NoError(t, err, out)
+
+	return out
+}
+
+// tryGit runs a git command in dir as identity's owner and returns its
+// combined output and error.
+func tryGit(dir string, identity sshIdentity, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(
@@ -774,9 +783,7 @@ func runGit(
 	)
 
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(out))
-
-	return string(out)
+	return string(out), err
 }
 
 // CloneTestRepo clones a repository over SSH and returns the checkout path.

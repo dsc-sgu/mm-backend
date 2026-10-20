@@ -338,13 +338,11 @@ func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
 	return c, nil
 }
 
-// WritePatterns writes the pre-receive hook's ".mm-patterns" file: one
-// "<task name>\t<glob>" line per required pattern. A task with no patterns
-// still gets a single "<task name>\t" line with an empty glob - the hook
-// needs a line for every live task name, not just ones with patterns, to
-// tell "no patterns required" apart from "no such task" for an
-// "-o submit=<name>" it doesn't recognize.
-func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
+// formatPatterns renders patterns for the pre-receive hook: one
+// "<task name>\t<glob>" line per pattern. A task with no patterns still gets
+// a "<task name>\t" line, so the hook can tell "no patterns required" apart
+// from "no such task".
+func formatPatterns(patterns map[string][]string) string {
 	var content strings.Builder
 	names := make([]string, 0, len(patterns))
 	for name := range patterns {
@@ -361,5 +359,23 @@ func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
 			_, _ = fmt.Fprintf(&content, "%s\t%s\n", name, pattern)
 		}
 	}
-	return os.WriteFile(PatternsFilePath(m.RepoPath(id)), []byte(content.String()), 0o644)
+	return content.String()
+}
+
+// writePatternsFile writes formatPatterns(patterns) to a new temporary file
+// and returns its path. The caller removes the file.
+func writePatternsFile(patterns map[string][]string) (string, error) {
+	f, err := os.CreateTemp("", "mm-patterns-*")
+	if err != nil {
+		return "", err
+	}
+	_, err = f.WriteString(formatPatterns(patterns))
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }

@@ -18,7 +18,7 @@ There are two ways to create an attempt:
 
 ### Mask gate
 
-A task may define file patterns (`tasks.patterns`). A submission is rejected unless at least one of its files matches. For SSH this is enforced by the pre-receive hook (reading the per-repo `.mm-patterns` file); for the web path the same check is duplicated in Go (go-git runs no hooks).
+A task may define file patterns (`tasks.patterns`). A submission is rejected unless at least one of its files matches. For SSH this is enforced by the pre-receive hook, which reads the group's patterns from a temporary file that `GitPack` writes from the database on every push (`MM_PATTERNS_FILE`); for the web path the same check is duplicated in Go (go-git runs no hooks).
 
 ### Database structure
 

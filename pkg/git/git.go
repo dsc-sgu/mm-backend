@@ -80,7 +80,10 @@ const (
 
 const defaultWorkDir = ""
 
-func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
+// GitPack serves a git-upload-pack or git-receive-pack session for repo.
+// For receive-pack, patterns maps every live task of the repository's group
+// to its file patterns; the pre-receive hook checks submissions against it.
+func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string, patterns map[string][]string) error {
 	rp := filepath.Join(repoDir, repo)
 	switch GitCmd(gitCmd) {
 	case GitUploadPack:
@@ -109,7 +112,16 @@ func GitPack(s ssh.Session, gitCmd string, repoDir string, repo string) error {
 		if err := WritePreReceiveHook(rp); err != nil {
 			return fmt.Errorf("write pre-receive hook: %w", err)
 		}
-		if err := RunGit(s, defaultWorkDir,
+		patternsFile, err := writePatternsFile(patterns)
+		if err != nil {
+			return fmt.Errorf("write patterns file: %w", err)
+		}
+		defer func() {
+			if err := os.Remove(patternsFile); err != nil {
+				log.Error("remove patterns file", "error", err, "path", patternsFile)
+			}
+		}()
+		if err := RunGit(s, defaultWorkDir, []string{"MM_PATTERNS_FILE=" + patternsFile},
 			"-c", "receive.advertisePushOptions=true",
 			"-c", "receive.denyNonFastForwards=true",
 			"receive-pack", rp,
@@ -147,73 +159,80 @@ func Fatal(s ssh.Session, v ...interface{}) {
 	s.Exit(1) // nolint: errcheck
 }
 
-// WritePreReceiveHook writes a pre-receive hook that checks tag pushes for
-// required file patterns defined in the .mm-patterns file.
-// Only tag refs (refs/tags/*) are checked; branch refs are always allowed.
-// The submitted task is selected via the "submit=<name>" push option
-// (e.g. -o submit=task1). Patterns are looked up by task name; the file is
-// tab-separated ("<name>\t<glob>", empty glob for a task with no required
-// patterns) and lists every live task in the group (see WritePatterns), so
-// a "submit=<name>" naming a task that doesn't exist at all is rejected
-// outright, rather than silently treated the same as "no patterns
-// required" the way an absent line would be. Files are checked via git
-// ls-tree on the tag's commit.
+// WritePreReceiveHook writes a pre-receive hook that rejects tag updates and
+// checks a new tag pushed with "-o submit=<task>": the task must exist, and if
+// it has patterns, the tagged commit must contain a file matching one of them.
+// Branch pushes are not checked. The task list comes from the file named by
+// MM_PATTERNS_FILE (see GitPack and formatPatterns).
 func WritePreReceiveHook(repoPath string) error {
 	hooksDir := filepath.Join(repoPath, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		return fmt.Errorf("create hooks dir: %w", err)
 	}
 	script := `#!/bin/sh
-PATTERNS_FILE="$GIT_DIR/.mm-patterns"
 TAB=$(printf '\t')
+ZERO=0000000000000000000000000000000000000000
 
-SUBMIT=""
-if [ -n "$GIT_PUSH_OPTION_COUNT" ] && [ "$GIT_PUSH_OPTION_COUNT" -gt 0 ]; then
+# Prints the value of the last "submit=<task>" push option.
+submitted_task() {
     i=0
-    while [ $i -lt "$GIT_PUSH_OPTION_COUNT" ]; do
+    while [ "$i" -lt "${GIT_PUSH_OPTION_COUNT:-0}" ]; do
         eval "opt=\$GIT_PUSH_OPTION_$i"
         case "$opt" in
-            submit=*) SUBMIT="${opt#submit=}" ;;
+            submit=*) printf '%s\n' "${opt#submit=}" ;;
         esac
         i=$((i+1))
-    done
-fi
+    done | tail -n 1
+}
 
-while read OLD NEW REF; do
-    case "$REF" in
-        refs/heads/*) continue ;;
-        refs/tags/*)
-            [ "$OLD" != "0000000000000000000000000000000000000000" ] && echo "ERROR: tag updates not allowed" >&2 && exit 1
-            ;;
+# Prints the patterns of task $1, one per line. Fails if there is no such task.
+task_patterns() {
+    found=1
+    while IFS="$TAB" read -r name pattern; do
+        if [ "$name" = "$1" ]; then
+            found=0
+            [ -n "$pattern" ] && printf '%s\n' "$pattern"
+        fi
+    done < "$MM_PATTERNS_FILE"
+    return $found
+}
+
+# Succeeds if commit $1 has a file matching one of the patterns in $2.
+has_matching_file() {
+    while IFS= read -r file; do
+        while IFS= read -r pattern; do
+            case "$file" in
+                $pattern) return 0 ;;
+            esac
+        done <<EOF
+$2
+EOF
+    done <<EOF
+$(git -c core.quotePath=false ls-tree -r --name-only "$1")
+EOF
+    return 1
+}
+
+task=$(submitted_task)
+while read -r old new ref; do
+    case "$ref" in
+        refs/tags/*) ;;
         *) continue ;;
     esac
-    [ -z "$SUBMIT" ] && continue
-    FOUND=""
-    PATTERNS=""
-    if [ -f "$PATTERNS_FILE" ]; then
-        while IFS="$TAB" read -r pname ppat; do
-            if [ "$pname" = "$SUBMIT" ]; then
-                FOUND=1
-                [ -n "$ppat" ] && PATTERNS="$PATTERNS $ppat"
-            fi
-        done < "$PATTERNS_FILE"
-    fi
-    if [ -z "$FOUND" ]; then
-        echo "ERROR: no task named '$SUBMIT' in this group" >&2
+    if [ "$old" != "$ZERO" ]; then
+        echo "ERROR: tag updates not allowed" >&2
         exit 1
     fi
-    [ -z "$PATTERNS" ] && continue
-    FILES=$(git ls-tree --name-only -r "$NEW" 2>/dev/null)
-    [ -z "$FILES" ] && continue
-    for file in $FILES; do
-        for pattern in $PATTERNS; do
-            case "$file" in
-                $pattern) exit 0 ;;
-            esac
-        done
-    done
-    echo "ERROR: no files match required patterns for task '$SUBMIT' ($PATTERNS)" >&2
-    exit 1
+    [ -z "$task" ] && continue
+    if ! patterns=$(task_patterns "$task"); then
+        echo "ERROR: no task named '$task' in this group" >&2
+        exit 1
+    fi
+    [ -z "$patterns" ] && continue
+    if ! has_matching_file "$new" "$patterns"; then
+        echo "ERROR: no files match required patterns for task '$task'" >&2
+        exit 1
+    fi
 done
 `
 	return os.WriteFile(
@@ -267,9 +286,10 @@ done > "$GIT_DIR/push-tags"
 // pre/post-receive hook writes to its own stderr, which git relays to the
 // client over the pack protocol's side-band regardless - was previously
 // silently lost, on both the client and the server.
-func RunGit(s ssh.Session, dir string, args ...string) error {
+func RunGit(s ssh.Session, dir string, env []string, args ...string) error {
 	cmd := exec.CommandContext(s.Context(), "git", args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = s
 	cmd.Stdin = s
 	var stderr bytes.Buffer
@@ -301,7 +321,7 @@ func EnsureDefaultBranch(s ssh.Session, repoPath string) error {
 	// Rename the default branch to the first branch available
 	_, err = r.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		err = RunGit(s, repoPath, "branch", "-M", fb.Name().Short())
+		err = RunGit(s, repoPath, nil, "branch", "-M", fb.Name().Short())
 		if err != nil {
 			return err
 		}

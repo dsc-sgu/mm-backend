@@ -117,6 +117,39 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	require.Equal(t, testUser.ID, attempts[0].UserID)
 }
 
+// TestGitSSHTagPushChecksPatterns checks the pre-receive hook: it rejects an
+// unknown task and a commit with no file matching the task's patterns.
+func TestGitSSHTagPushChecksPatterns(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, taskID, identity := setupGitTask(t, nil, "src/*")
+
+	repoDir := CloneTestRepo(t, &backendSSHPort, identity, gitRepoPath)
+	submit := func(file, tag, task string) (string, error) {
+		path := filepath.Join(repoDir, file)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(tag), 0o644))
+		runGit(t, repoDir, identity, "add", file)
+		runGit(t, repoDir, identity, "commit", "-m", tag)
+		runGit(t, repoDir, identity, "tag", tag)
+		return tryGit(repoDir, identity, "push", "origin", tag, "-o", "submit="+task)
+	}
+
+	out, err := submit("src/a.go", "unknown-task", "taskB")
+	require.Error(t, err)
+	require.Contains(t, out, "no task named 'taskB'")
+
+	runGit(t, repoDir, identity, "rm", "-q", "src/a.go")
+	out, err = submit("notes.txt", "no-match", "taskA")
+	require.Error(t, err, out)
+	require.Contains(t, out, "no files match")
+
+	_, err = submit("src/my solution.go", "match", "taskA")
+	require.NoError(t, err)
+
+	require.Len(t, GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID), 1)
+}
+
 // TestPushAttemptReplacesPatternFiles checks which files a web attempt leaves
 // in the repository: every file from the zip is added, and of the files
 // already there only those matching the task's patterns are removed.
