@@ -28,7 +28,7 @@ type TaskData struct {
 	Statement   json.RawMessage `json:"statement,omitempty"`
 	Patterns    []string        `json:"patterns,omitempty"`
 	MaxGrade    float32         `json:"maxGrade"`
-	MaxAttempts int             `json:"maxAttempts"`
+	MaxAttempts *int            `json:"maxAttempts,omitempty" minimum:"1"`
 	AvailableAt *time.Time      `json:"availableAt,omitempty"`
 	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }

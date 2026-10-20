@@ -363,9 +363,8 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 		TaskGroup: blocks.TaskGroupRef{
 			New: &blocks.NewTaskGroup{Name: "Group 1"},
 		},
-		Name:        "Task NoPatternsField",
-		MaxGrade:    100,
-		MaxAttempts: 5,
+		Name:     "Task NoPatternsField",
+		MaxGrade: 100,
 	}
 	body, err := json.Marshal(task)
 	require.NoError(t, err)
@@ -395,9 +394,8 @@ func TestCreateTaskBlockRejectsData(t *testing.T) {
 			TaskGroup: blocks.TaskGroupRef{
 				New: &blocks.NewTaskGroup{Name: "Group 1"},
 			},
-			Name:        "Task 1",
-			MaxGrade:    100,
-			MaxAttempts: 5,
+			Name:     "Task 1",
+			MaxGrade: 100,
 		},
 	})
 	require.NoError(t, err)
@@ -626,6 +624,59 @@ func TestUpdateTask(t *testing.T) {
 	require.Equal(t, []string{"*.go"}, []string(updated.Patterns))
 	require.NotNil(t, updated.Statement)
 	require.JSONEq(t, string(statement), string(*updated.Statement))
+}
+
+// TestPushAttemptRespectsMaxAttempts checks that a task takes no more
+// attempts than its limit, that a submission rejected by the patterns does
+// not use one up, and that clearing the limit with null lifts it.
+func TestPushAttemptRespectsMaxAttempts(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
+
+	_, taskID := CreateTestTaskInNewGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+		"Task 1",
+		"*.go",
+	)
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, draftSnapshotID,
+	))
+
+	status, _ := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxAttempts: tasks.OmittableNullable[int]{Sent: true, Value: 0},
+	})
+	require.Equal(t, http.StatusUnprocessableEntity, status)
+
+	status, updated := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxAttempts: tasks.OmittableNullable[int]{Sent: true, Value: 1},
+	})
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, 1, *updated.MaxAttempts)
+
+	require.Equal(t, http.StatusBadRequest, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, map[string]string{"notes.txt": "x"},
+	))
+	solution := map[string]string{"solution.go": "package main\n"}
+	require.Equal(t, http.StatusCreated, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, solution,
+	))
+	require.Equal(t, http.StatusConflict, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, solution,
+	))
+
+	status, updated = patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxAttempts: tasks.OmittableNullable[int]{Sent: true, Null: true},
+	})
+	require.Equal(t, http.StatusOK, status)
+	require.Nil(t, updated.MaxAttempts)
+	require.Equal(t, http.StatusCreated, PushTestAttempt(
+		t, &backendPort, &testUser, taskID, solution,
+	))
 }
 
 // TestAttemptsSurviveRepublish checks that attempts made before a course is

@@ -65,6 +65,14 @@ const (
 		  AND b.snapshot_id = c.active_snapshot_id
 	`
 
+	getAttemptLimitSQL = `
+		SELECT t.max_attempts,
+		       (SELECT count(*) FROM attempts a
+		        WHERE a.task_id = t.id AND a.user_id = $2) AS used
+		FROM tasks t
+		WHERE t.id = $1
+	`
+
 	// Unlike repoForTaskSQL, this is not restricted to the active snapshot:
 	// it backs authorization for viewing already-recorded attempts, which
 	// must keep resolving even if the task later drops out of the active
@@ -262,4 +270,18 @@ func (r *PGRepo) GetTaskCourseID(
 		return uuid.Nil, fmt.Errorf("get task course: %w", err)
 	}
 	return courseID, nil
+}
+
+func (r *PGRepo) GetAttemptLimit(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (*int, int, error) {
+	var row struct {
+		Limit *int `db:"max_attempts"`
+		Used  int  `db:"used"`
+	}
+	if err := r.db.GetContext(ctx, &row, getAttemptLimitSQL, taskID, participantID); err != nil {
+		return nil, 0, fmt.Errorf("get attempt limit: %w", err)
+	}
+	return row.Limit, row.Used, nil
 }

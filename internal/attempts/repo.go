@@ -56,6 +56,12 @@ type Repo interface {
 	// GetTaskCourseID resolves which course a task belongs to, for
 	// authorizing access to already-recorded attempts.
 	GetTaskCourseID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error)
+	// GetAttemptLimit returns a task's attempt limit, nil if attempts are
+	// not limited, and how many attempts the participant has made at it.
+	GetAttemptLimit(
+		ctx context.Context,
+		taskID, participantID uuid.UUID,
+	) (limit *int, used int, err error)
 }
 
 type TaskReader interface {

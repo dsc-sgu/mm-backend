@@ -651,11 +651,10 @@ func createTestTaskBlock(
 	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
 		Task: &blocks.TaskData{
-			TaskGroup:   group,
-			Name:        name,
-			Patterns:    patterns,
-			MaxGrade:    100,
-			MaxAttempts: 5,
+			TaskGroup: group,
+			Name:      name,
+			Patterns:  patterns,
+			MaxGrade:  100,
 		},
 	})
 	require.NoError(t, err)

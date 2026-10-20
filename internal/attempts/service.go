@@ -54,6 +54,9 @@ var (
 	ErrPatternMismatch = errors.New("no uploaded files match required patterns")
 	// ErrEmptyArchive is returned when an uploaded archive contains no files.
 	ErrEmptyArchive = errors.New("uploaded archive contains no files")
+	// ErrAttemptsExhausted is returned when a participant has used up a
+	// task's attempts.
+	ErrAttemptsExhausted = errors.New("no attempts left for this task")
 )
 
 // GetAttempts lists a participant's attempts at a task. The caller must be
@@ -125,6 +128,24 @@ func (s *Service) repoForTask(
 	return id, nil
 }
 
+// assertAttemptsLeft checks that participantID may make n more attempts at
+// taskID. Only recorded attempts count: a submission rejected before it was
+// committed is not one.
+func (s *Service) assertAttemptsLeft(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+	n int,
+) error {
+	limit, used, err := s.repo.GetAttemptLimit(ctx, taskID, participantID)
+	if err != nil {
+		return fmt.Errorf("get attempt limit: %w", err)
+	}
+	if limit != nil && used+n > *limit {
+		return ErrAttemptsExhausted
+	}
+	return nil
+}
+
 // recordAttempt is the shared tail of every submission: whatever transport
 // produced the commit, the rules that govern accepting it and storing it live
 // here and nowhere else. Access is already settled by the caller's gate
@@ -149,6 +170,9 @@ func (s *Service) PushAttempt(
 ) (string, error) {
 	id, err := s.repoForTask(ctx, taskID, participantID)
 	if err != nil {
+		return "", err
+	}
+	if err := s.assertAttemptsLeft(ctx, taskID, participantID, 1); err != nil {
 		return "", err
 	}
 	files, err := pkggit.UnzipFiles(zipData)
