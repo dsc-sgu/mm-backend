@@ -31,6 +31,10 @@ func handleServiceError(err error) error {
 		errors.Is(err, ErrPatternMismatch),
 		errors.Is(err, ErrEmptyArchive):
 		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, pkggit.ErrInvalidArchive):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, pkggit.ErrArchiveTooLarge):
+		return huma.Error413RequestEntityTooLarge(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
 }
