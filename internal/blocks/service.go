@@ -2,7 +2,9 @@ package blocks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
@@ -43,11 +45,39 @@ var (
 	ErrTaskNameTaken     = errors.New(
 		"a task with this name already exists in the task group",
 	)
+	ErrInvalidBlockType = errors.New(
+		"block type must be 1 to 64 characters of a-z, 0-9 and -",
+	)
 	ErrInvalidBlockData = errors.New(
-		"data is required for text and quiz blocks and not allowed for task blocks",
+		"data must be a JSON object with an integer version, at most 64 KiB, and is not allowed for task blocks",
 	)
 	ErrBlockTypeChanged = errors.New("block type cannot be changed")
 )
+
+const (
+	taskBlockType    = "task"
+	maxBlockDataSize = 64 << 10
+)
+
+var blockTypeRegexp = regexp.MustCompile(`^[a-z0-9-]{1,64}$`)
+
+// validateBlockData checks the only things the backend knows about a block's
+// content: it is a JSON object carrying an integer version and is not too
+// large. The rest of it belongs to the frontend.
+func validateBlockData(data json.RawMessage) error {
+	if len(data) > maxBlockDataSize {
+		return ErrInvalidBlockData
+	}
+	var content map[string]json.RawMessage
+	if err := json.Unmarshal(data, &content); err != nil || content == nil {
+		return ErrInvalidBlockData
+	}
+	var version int64
+	if err := json.Unmarshal(content["version"], &version); err != nil {
+		return ErrInvalidBlockData
+	}
+	return nil
+}
 
 // CreateBlock creates a block (and, if it's a task-type block, its task data
 // alongside it), enqueueing a lexorank rebalance if positions have grown too long.
@@ -55,6 +85,17 @@ func (s *Service) CreateBlock(
 	ctx context.Context,
 	command CreateBlockCommand,
 ) (*CreatedBlock, error) {
+	if !blockTypeRegexp.MatchString(command.BlockType) {
+		return nil, ErrInvalidBlockType
+	}
+	if command.BlockType == taskBlockType {
+		if len(command.Data) > 0 || command.Task == nil {
+			return nil, ErrInvalidBlockData
+		}
+	} else if err := validateBlockData(command.Data); err != nil {
+		return nil, err
+	}
+
 	result, err := s.repo.CreateBlock(ctx, command)
 	if err != nil {
 		return nil, err
@@ -67,12 +108,16 @@ func (s *Service) CreateBlock(
 	return result, nil
 }
 
-// PatchBlock updates a block's own data and, if it's a task-type block, its
-// task fields.
+// PatchBlock updates a block's own data. A task block has none.
 func (s *Service) PatchBlock(
 	ctx context.Context,
 	command PatchBlockCommand,
 ) (*PatchedBlock, error) {
+	if len(command.Data) > 0 {
+		if err := validateBlockData(command.Data); err != nil {
+			return nil, err
+		}
+	}
 	return s.repo.PatchBlock(ctx, command)
 }
 

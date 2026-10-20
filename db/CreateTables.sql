@@ -3,7 +3,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
-CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task');
 CREATE TYPE snapshot_status AS ENUM ('draft', 'published', 'stale');
 
 CREATE TABLE unit_types (
@@ -75,22 +74,14 @@ CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id
 CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
-    block_type block_type NOT NULL,
+    -- NOTE(nrydanov): the frontend names block types; "task" is the only one
+    -- the backend gives a meaning to
+    block_type varchar(64) NOT NULL CHECK (block_type ~ '^[a-z0-9-]+$'),
+    -- content the backend does not read, NULL for a task block
+    data jsonb,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
     deleted_at timestamp
-);
-
--- NOTE(nrydanov): content of text and quiz blocks, one row per block, copied
--- together with its block when a snapshot is copied
-CREATE TABLE text_blocks (
-    block_id uuid PRIMARY KEY REFERENCES blocks(id),
-    content jsonb NOT NULL
-);
-
-CREATE TABLE quiz_blocks (
-    block_id uuid PRIMARY KEY REFERENCES blocks(id),
-    content jsonb NOT NULL
 );
 
 -- NOTE(Ezhkin-Kot): pessimistic locking for course editing

@@ -36,6 +36,7 @@ func handleServiceError(err error) error {
 		errors.Is(err, ErrAfterBlockNotFound),
 		errors.Is(err, ErrInvalidBlockForMoveAfter),
 		errors.Is(err, ErrInvalidBlockData),
+		errors.Is(err, ErrInvalidBlockType),
 		errors.Is(err, ErrBlockTypeChanged):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, locks.ErrLockHeldByAnother),

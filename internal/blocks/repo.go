@@ -9,8 +9,8 @@ import (
 )
 
 // CreateBlockCommand is the input for creating a block. Data is the content
-// of a text or quiz block and must be empty for a task block. If BlockType is
-// "task", Task must be set: creating a task block creates its task.
+// of the block and must be empty for a task block. If BlockType is "task",
+// Task must be set: creating a task block creates its task.
 type CreateBlockCommand struct {
 	CourseID     uuid.UUID       `json:"-"`
 	BlockType    string          `json:"blockType"`
@@ -34,8 +34,7 @@ type TaskData struct {
 }
 
 // PatchBlockCommand is the input for patching a block's own data. BlockType
-// may only repeat the block's current type: a block's content lives in a
-// table of its type, so the type cannot change. A task's fields are patched
+// may only repeat the block's current type. A task's fields are patched
 // through the task itself.
 type PatchBlockCommand struct {
 	CourseID   uuid.UUID       `json:"-"`
@@ -59,21 +58,8 @@ type PatchedBlock struct {
 	Block *Block
 }
 
-// TextData is the database representation of a text block's data.
-type TextData struct {
-	Format string `json:"format"`
-	Text   string `json:"text"`
-}
-
-// QuizData is the database representation of a quiz block's data.
-type QuizData struct {
-	QuestionQuantity int      `json:""`
-	Questions        []string `json:""`
-	Answers          []string `json:""`
-}
-
-// Block is the database representation of a block. Data is read from the
-// content table of the block's type and is JSON null for a task block.
+// Block is the database representation of a block. A task block's data is
+// built on read from its link to the task: {"version": 1, "taskId": ...}.
 type Block struct {
 	ID         uuid.UUID       `json:"id"         db:"id"          binding:"required"`
 	SnapshotID uuid.UUID       `json:"snapshotID" db:"snapshot_id" binding:"required"`

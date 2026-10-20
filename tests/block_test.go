@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -434,8 +435,8 @@ func TestPatchBlockTypeIsImmutable(t *testing.T) {
 		draftSnapshotID,
 	)
 
-	quiz := "quiz"
-	body, err := json.Marshal(blocks.PatchBlockCommand{BlockType: &quiz})
+	heading := "heading"
+	body, err := json.Marshal(blocks.PatchBlockCommand{BlockType: &heading})
 	require.NoError(t, err)
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
@@ -464,5 +465,52 @@ func TestPatchBlockTypeIsImmutable(t *testing.T) {
 		draftSnapshotID,
 		blockID,
 	)
-	require.Equal(t, "text", block.BlockType)
+	require.Equal(t, "paragraph", block.BlockType)
+}
+
+// TestCreateBlockValidatesTypeAndData checks the two things the backend knows
+// about a block: the shape of its type name and that its data is a versioned
+// JSON object.
+func TestCreateBlockValidatesTypeAndData(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
+		backendPort.Port(),
+		courseID,
+	)
+	cases := []struct {
+		name      string
+		blockType string
+		data      string
+		status    int
+	}{
+		{"domain type", "list-item", `{"version":1}`, http.StatusCreated},
+		{"uppercase type", "Paragraph", `{"version":1}`, http.StatusBadRequest},
+		{"too long type", strings.Repeat("a", 65), `{"version":1}`, http.StatusBadRequest},
+		{"data without version", "paragraph", `{"text":"a"}`, http.StatusBadRequest},
+		{"no data", "paragraph", ``, http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body, err := json.Marshal(blocks.CreateBlockCommand{
+				BlockType: c.blockType,
+				Data:      json.RawMessage(c.data),
+			})
+			require.NoError(t, err)
+			req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := testUser.Client.Do(req)
+			require.NoError(t, err)
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			require.Equal(t, c.status, resp.StatusCode)
+		})
+	}
 }

@@ -438,7 +438,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			draftSnapshotID,
 			block1ID,
 		)
-		newBlockData := `{"text":"updated content"}`
+		newBlockData := `{"text":"updated content","version":1}`
 		body, _ := json.Marshal(
 			blocks.PatchBlockCommand{Data: json.RawMessage(newBlockData)},
 		)
@@ -527,7 +527,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		) // One block added, one deleted.
 		require.Equal(
 			t,
-			json.RawMessage(`{"text":"updated content"}`),
+			json.RawMessage(`{"text":"updated content","version":1}`),
 			studentContent.Blocks[0].Data,
 		)
 

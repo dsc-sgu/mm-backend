@@ -13,8 +13,6 @@ DROP TABLE IF EXISTS students;
 DROP TABLE IF EXISTS course_members;
 DROP TABLE IF EXISTS invites;
 DROP TABLE IF EXISTS course_locks;
-DROP TABLE IF EXISTS quiz_blocks;
-DROP TABLE IF EXISTS text_blocks;
 DROP TABLE IF EXISTS blocks;
 DROP TABLE IF EXISTS course_snapshots;
 DROP TABLE IF EXISTS courses;

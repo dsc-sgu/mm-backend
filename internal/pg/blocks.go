@@ -18,42 +18,25 @@ import (
 
 const (
 	createBlockSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, position)
-		VALUES (:snapshot_id, :block_type, :position)
+		INSERT INTO blocks (snapshot_id, block_type, data, position)
+		VALUES ($1, $2, $3, $4)
 		RETURNING id
 	`
 
-	createTextBlockSQL = `
-		INSERT INTO text_blocks (block_id, content)
-		VALUES ($1, $2)
+	updateBlockDataSQL = `
+		UPDATE blocks SET data = $2
+		WHERE id = $1
+		RETURNING data
 	`
 
-	createQuizBlockSQL = `
-		INSERT INTO quiz_blocks (block_id, content)
-		VALUES ($1, $2)
-	`
-
-	updateTextBlockSQL = `
-		UPDATE text_blocks SET content = $2
-		WHERE block_id = $1
-		RETURNING content
-	`
-
-	updateQuizBlockSQL = `
-		UPDATE quiz_blocks SET content = $2
-		WHERE block_id = $1
-		RETURNING content
-	`
-
-	// A block's content lives in the table of its type; a task block has no
-	// content row, so its data reads as JSON null.
+	// A task block has no data of its own; it reads as a reference to its
+	// task built from task_blocks.
 	getBlockByIDSQL = `
 		SELECT b.id, b.snapshot_id, b.block_type,
-		       COALESCE(tb.content, qb.content, 'null'::jsonb) AS data,
+		       COALESCE(b.data, jsonb_build_object('version', 1, 'taskId', tb.task_id)) AS data,
 		       b.position, b.deleted_at
 		FROM blocks b
-		LEFT JOIN text_blocks tb ON tb.block_id = b.id
-		LEFT JOIN quiz_blocks qb ON qb.block_id = b.id
+		LEFT JOIN task_blocks tb ON tb.block_id = b.id
 		WHERE b.id = $1 AND b.deleted_at IS NULL
 	`
 
@@ -65,11 +48,10 @@ const (
 
 	getAllBlocksBySnapshotIDSQL = `
 		SELECT b.id, b.snapshot_id, b.block_type,
-		       COALESCE(tb.content, qb.content, 'null'::jsonb) AS data,
+		       COALESCE(b.data, jsonb_build_object('version', 1, 'taskId', tb.task_id)) AS data,
 		       b.position
 		FROM blocks b
-		LEFT JOIN text_blocks tb ON tb.block_id = b.id
-		LEFT JOIN quiz_blocks qb ON qb.block_id = b.id
+		LEFT JOIN task_blocks tb ON tb.block_id = b.id
 		WHERE b.snapshot_id = $1 AND b.deleted_at IS NULL
 		ORDER BY b.position ASC
 	`
@@ -189,33 +171,19 @@ const (
 	`
 
 	// Generates the copied blocks' ids explicitly (instead of relying on the
-	// column DEFAULT) so a block's content row, or a task-type block's link to
-	// its task, can be copied alongside it under the new block_id. The task
-	// itself is not copied: the new block links to the same task.
+	// column DEFAULT) so a task-type block's link to its task can be copied
+	// alongside it under the new block_id. The task itself is not copied: the
+	// new block links to the same task.
 	copyBlocksToSnapshotSQL = `
 		WITH source AS (
-			SELECT id AS old_id, uuidv7() AS new_id, block_type, position
+			SELECT id AS old_id, uuidv7() AS new_id, block_type, data, position
 			FROM blocks
 			WHERE snapshot_id = $2 AND deleted_at IS NULL
 		),
 		inserted_blocks AS (
-			INSERT INTO blocks (id, snapshot_id, block_type, position)
-			SELECT new_id, $1, block_type, position FROM source
+			INSERT INTO blocks (id, snapshot_id, block_type, data, position)
+			SELECT new_id, $1, block_type, data, position FROM source
 			RETURNING id
-		),
-		copied_texts AS (
-			INSERT INTO text_blocks (block_id, content)
-			SELECT s.new_id, tb.content
-			FROM source s
-			JOIN text_blocks tb ON tb.block_id = s.old_id
-			WHERE s.new_id IN (SELECT id FROM inserted_blocks)
-		),
-		copied_quizzes AS (
-			INSERT INTO quiz_blocks (block_id, content)
-			SELECT s.new_id, qb.content
-			FROM source s
-			JOIN quiz_blocks qb ON qb.block_id = s.old_id
-			WHERE s.new_id IN (SELECT id FROM inserted_blocks)
 		)
 		INSERT INTO task_blocks (block_id, task_id)
 		SELECT s.new_id, tb.task_id
@@ -331,25 +299,6 @@ func blockBelongsToSnapshot(
 	return nil
 }
 
-// blockContentSQL returns the insert or update query for the content table
-// of blockType. A task block has no content table, so data is not allowed
-// for it.
-func blockContentSQL(blockType string, update bool) (string, error) {
-	switch blockType {
-	case "text":
-		if update {
-			return updateTextBlockSQL, nil
-		}
-		return createTextBlockSQL, nil
-	case "quiz":
-		if update {
-			return updateQuizBlockSQL, nil
-		}
-		return createQuizBlockSQL, nil
-	}
-	return "", blocks.ErrInvalidBlockData
-}
-
 // getPositionsForMoveTx returns prev and next block positions to calculate a
 // new position between them
 func getPositionsForMoveTx(
@@ -421,20 +370,11 @@ func (r *PGRepo) CreateBlock(
 	ctx context.Context,
 	command blocks.CreateBlockCommand,
 ) (*blocks.CreatedBlock, error) {
-	if command.BlockType == "task" && command.Task == nil {
-		return nil, fmt.Errorf("task data is required for task block")
-	}
-	var contentSQL string
-	if command.BlockType != "task" {
-		var err error
-		if contentSQL, err = blockContentSQL(command.BlockType, false); err != nil {
-			return nil, err
-		}
-		if len(command.Data) == 0 {
-			return nil, blocks.ErrInvalidBlockData
-		}
-	} else if len(command.Data) > 0 {
-		return nil, blocks.ErrInvalidBlockData
+	// nil Data must reach the driver as SQL NULL, and a non-empty one as a
+	// string: lib/pq sends []byte as bytea, which jsonb rejects
+	var data any
+	if len(command.Data) > 0 {
+		data = string(command.Data)
 	}
 
 	var result blocks.CreatedBlock
@@ -469,40 +409,27 @@ func (r *PGRepo) CreateBlock(
 		if err != nil {
 			return fmt.Errorf("resolve positions: %w", err)
 		}
-		block := blocks.Block{
-			SnapshotID: snapshot.ID,
-			BlockType:  command.BlockType,
-			Position: blocks.CalculateMiddlePosition(
-				positions.Prev,
-				positions.Next,
-			),
-		}
-		stmt, err := tx.PrepareNamedContext(ctx, createBlockSQL)
-		if err != nil {
-			return fmt.Errorf("prepare block: %w", err)
-		}
-		defer func() {
-			if closeErr := stmt.Close(); closeErr != nil {
-				zap.L().
-					Error("failed to close block statement", zap.Error(closeErr))
-			}
-		}()
-		if err := stmt.GetContext(ctx, &block.ID, block); err != nil {
+		position := blocks.CalculateMiddlePosition(
+			positions.Prev,
+			positions.Next,
+		)
+		var blockID uuid.UUID
+		if err := tx.GetContext(
+			ctx,
+			&blockID,
+			createBlockSQL,
+			snapshot.ID,
+			command.BlockType,
+			data,
+			position,
+		); err != nil {
 			return fmt.Errorf("create block: %w", err)
 		}
-		result.BlockID = block.ID
-		result.SnapshotID = block.SnapshotID
-		result.PositionLength = len(block.Position)
+		result.BlockID = blockID
+		result.SnapshotID = snapshot.ID
+		result.PositionLength = len(position)
 
-		if command.BlockType != "task" {
-			if _, err := tx.ExecContext(
-				ctx,
-				contentSQL,
-				block.ID,
-				string(command.Data),
-			); err != nil {
-				return fmt.Errorf("create block content: %w", err)
-			}
+		if command.Task == nil {
 			return nil
 		}
 		task := command.Task
@@ -564,12 +491,12 @@ func (r *PGRepo) CreateBlock(
 		); err != nil {
 			return fmt.Errorf("create task: %w", err)
 		}
-		if _, err := tx.ExecContext(ctx, createTaskBlockSQL, block.ID, taskID); err != nil {
+		if _, err := tx.ExecContext(ctx, createTaskBlockSQL, blockID, taskID); err != nil {
 			return fmt.Errorf("link task block: %w", err)
 		}
 		result.TaskID = &taskID
 		zap.L().
-			Debug("created task block", zap.String("block_id", block.ID.String()))
+			Debug("created task block", zap.String("block_id", blockID.String()))
 		return nil
 	})
 	if err != nil {
@@ -613,18 +540,17 @@ func (r *PGRepo) PatchBlock(
 			return blocks.ErrBlockTypeChanged
 		}
 		if len(command.Data) > 0 {
-			contentSQL, err := blockContentSQL(block.BlockType, true)
-			if err != nil {
-				return err
+			if block.BlockType == "task" {
+				return blocks.ErrInvalidBlockData
 			}
 			if err := tx.GetContext(
 				ctx,
 				&block.Data,
-				contentSQL,
+				updateBlockDataSQL,
 				block.ID,
 				string(command.Data),
 			); err != nil {
-				return fmt.Errorf("tx update block content: %w", err)
+				return fmt.Errorf("tx update block data: %w", err)
 			}
 		}
 		result.Block = &block

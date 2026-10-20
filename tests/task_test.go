@@ -415,7 +415,7 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 }
 
 // TestCreateTaskBlockRejectsData checks that a task block takes no content:
-// its fields come in "task", and data is only for text and quiz blocks.
+// its fields come in "task", and data is only for the other blocks.
 func TestCreateTaskBlockRejectsData(t *testing.T) {
 	clearDatabases(t)
 
@@ -457,6 +457,43 @@ func TestCreateTaskBlockRejectsData(t *testing.T) {
 		}
 	}()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// TestTaskBlockDataReferencesTask checks that a task block reads as a
+// reference to its task, which is what the frontend stores for every other
+// block type in data.
+func TestTaskBlockDataReferencesTask(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, draftSnapshotID := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	taskID := CreateTestTask(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		groupID,
+		"Task 1",
+	)
+	require.Equal(t, http.StatusNoContent, PublishDraft(
+		t, &backendPort, &testUser, courseID, draftSnapshotID,
+	))
+
+	content := GetCourseContent(t, &backendPort, &testUser, courseID)
+	require.Len(t, content.Blocks, 1)
+	require.Equal(t, "task", content.Blocks[0].BlockType)
+	require.JSONEq(
+		t,
+		fmt.Sprintf(`{"version":1,"taskId":"%s"}`, taskID),
+		string(content.Blocks[0].Data),
+	)
 }
 
 func TestGetTasks(t *testing.T) {

@@ -474,8 +474,8 @@ func CreateTestBlockAfter(
 
 	blockBody, err := json.Marshal(blocks.CreateBlockCommand{
 		AfterBlockID: afterBlockID,
-		BlockType:    "text",
-		Data:         []byte("true"),
+		BlockType:    "paragraph",
+		Data:         []byte(`{"version":1}`),
 	})
 	require.NoError(t, err)
 
