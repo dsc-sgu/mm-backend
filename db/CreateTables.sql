@@ -76,13 +76,24 @@ CREATE TABLE blocks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
     block_type block_type NOT NULL,
-    data jsonb NOT NULL,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
     deleted_at timestamp,
 
     -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
     UNIQUE (id, block_type)
+);
+
+-- NOTE(nrydanov): content of text and quiz blocks, one row per block, copied
+-- together with its block when a snapshot is copied
+CREATE TABLE text_blocks (
+    block_id uuid PRIMARY KEY REFERENCES blocks(id),
+    content jsonb NOT NULL
+);
+
+CREATE TABLE quiz_blocks (
+    block_id uuid PRIMARY KEY REFERENCES blocks(id),
+    content jsonb NOT NULL
 );
 
 -- NOTE(Ezhkin-Kot): pessimistic locking for course editing

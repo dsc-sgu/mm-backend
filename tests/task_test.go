@@ -383,7 +383,6 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 
 	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
-		Data:      []byte("true"),
 		Task: &blocks.TaskData{
 			TaskGroupID: groupID,
 			Name:        "Task NoPatternsField",
@@ -413,6 +412,51 @@ func TestCreateTaskWithoutPatterns(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
 	require.NotZero(t, created.ID)
+}
+
+// TestCreateTaskBlockRejectsData checks that a task block takes no content:
+// its fields come in "task", and data is only for text and quiz blocks.
+func TestCreateTaskBlockRejectsData(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
+		backendPort.Port(),
+		courseID,
+	)
+	body, err := json.Marshal(blocks.CreateBlockCommand{
+		BlockType: "task",
+		Data:      []byte("true"),
+		Task: &blocks.TaskData{
+			TaskGroupID: groupID,
+			Name:        "Task 1",
+			MaxGrade:    100,
+			MaxAttempts: 5,
+		},
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestGetTasks(t *testing.T) {

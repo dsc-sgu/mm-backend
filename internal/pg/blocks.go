@@ -19,15 +19,43 @@ import (
 
 const (
 	createBlockSQL = `
-		INSERT INTO blocks (snapshot_id, block_type, data, position)
-		VALUES (:snapshot_id, :block_type, :data, :position)
+		INSERT INTO blocks (snapshot_id, block_type, position)
+		VALUES (:snapshot_id, :block_type, :position)
 		RETURNING id
 	`
 
+	createTextBlockSQL = `
+		INSERT INTO text_blocks (block_id, content)
+		VALUES ($1, $2)
+	`
+
+	createQuizBlockSQL = `
+		INSERT INTO quiz_blocks (block_id, content)
+		VALUES ($1, $2)
+	`
+
+	updateTextBlockSQL = `
+		UPDATE text_blocks SET content = $2
+		WHERE block_id = $1
+		RETURNING content
+	`
+
+	updateQuizBlockSQL = `
+		UPDATE quiz_blocks SET content = $2
+		WHERE block_id = $1
+		RETURNING content
+	`
+
+	// A block's content lives in the table of its type; a task block has no
+	// content row, so its data reads as JSON null.
 	getBlockByIDSQL = `
-		SELECT id, snapshot_id, block_type, data, position, deleted_at
-		FROM blocks
-		WHERE id = $1 AND deleted_at IS NULL
+		SELECT b.id, b.snapshot_id, b.block_type,
+		       COALESCE(tb.content, qb.content, 'null'::jsonb) AS data,
+		       b.position, b.deleted_at
+		FROM blocks b
+		LEFT JOIN text_blocks tb ON tb.block_id = b.id
+		LEFT JOIN quiz_blocks qb ON qb.block_id = b.id
+		WHERE b.id = $1 AND b.deleted_at IS NULL
 	`
 
 	getBlockSnapshotIDSQL = `
@@ -37,17 +65,14 @@ const (
 	`
 
 	getAllBlocksBySnapshotIDSQL = `
-		SELECT id, snapshot_id, block_type, data, position
-		FROM blocks
-		WHERE snapshot_id = $1 AND deleted_at IS NULL
-		ORDER BY position ASC
-	`
-
-	updateBlockContentSQL = `
-		UPDATE blocks
-		SET block_type = COALESCE($1, block_type), data = COALESCE($2, data)
-		WHERE id = $3 AND deleted_at IS NULL
-		RETURNING id, snapshot_id, block_type, data, position
+		SELECT b.id, b.snapshot_id, b.block_type,
+		       COALESCE(tb.content, qb.content, 'null'::jsonb) AS data,
+		       b.position
+		FROM blocks b
+		LEFT JOIN text_blocks tb ON tb.block_id = b.id
+		LEFT JOIN quiz_blocks qb ON qb.block_id = b.id
+		WHERE b.snapshot_id = $1 AND b.deleted_at IS NULL
+		ORDER BY b.position ASC
 	`
 
 	updateBlockPositionSQL = `
@@ -127,20 +152,34 @@ const (
 	`
 
 	// Generates the copied blocks' ids explicitly (instead of relying on the
-	// column DEFAULT) so a task-type block's `tasks` row can be copied
-	// alongside it under the new block_id. Each snapshot generation of a task
-	// gets its own tasks row (see the NOTE on the tasks table), so this never
-	// collides with the source's still-existing row.
+	// column DEFAULT) so a block's content row, or a task-type block's `tasks`
+	// row, can be copied alongside it under the new block_id. Each snapshot
+	// generation of a task gets its own tasks row (see the NOTE on the tasks
+	// table), so this never collides with the source's still-existing row.
 	copyBlocksToSnapshotSQL = `
 		WITH source AS (
-			SELECT id AS old_id, uuidv7() AS new_id, block_type, data, position
+			SELECT id AS old_id, uuidv7() AS new_id, block_type, position
 			FROM blocks
 			WHERE snapshot_id = $2 AND deleted_at IS NULL
 		),
 		inserted_blocks AS (
-			INSERT INTO blocks (id, snapshot_id, block_type, data, position)
-			SELECT new_id, $1, block_type, data, position FROM source
+			INSERT INTO blocks (id, snapshot_id, block_type, position)
+			SELECT new_id, $1, block_type, position FROM source
 			RETURNING id
+		),
+		copied_texts AS (
+			INSERT INTO text_blocks (block_id, content)
+			SELECT s.new_id, tb.content
+			FROM source s
+			JOIN text_blocks tb ON tb.block_id = s.old_id
+			WHERE s.new_id IN (SELECT id FROM inserted_blocks)
+		),
+		copied_quizzes AS (
+			INSERT INTO quiz_blocks (block_id, content)
+			SELECT s.new_id, qb.content
+			FROM source s
+			JOIN quiz_blocks qb ON qb.block_id = s.old_id
+			WHERE s.new_id IN (SELECT id FROM inserted_blocks)
 		)
 		INSERT INTO tasks (block_id, snapshot_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at)
 		SELECT s.new_id, $1, t.task_group_id, t.name, t.patterns, t.max_grade, t.max_attempts, t.available_at, t.deadline_at
@@ -256,6 +295,25 @@ func blockBelongsToSnapshot(
 	return nil
 }
 
+// blockContentSQL returns the insert or update query for the content table
+// of blockType. A task block has no content table, so data is not allowed
+// for it.
+func blockContentSQL(blockType string, update bool) (string, error) {
+	switch blockType {
+	case "text":
+		if update {
+			return updateTextBlockSQL, nil
+		}
+		return createTextBlockSQL, nil
+	case "quiz":
+		if update {
+			return updateQuizBlockSQL, nil
+		}
+		return createQuizBlockSQL, nil
+	}
+	return "", blocks.ErrInvalidBlockData
+}
+
 // getPositionsForMoveTx returns prev and next block positions to calculate a
 // new position between them
 func getPositionsForMoveTx(
@@ -330,6 +388,18 @@ func (r *PGRepo) CreateBlock(
 	if command.BlockType == "task" && command.Task == nil {
 		return nil, fmt.Errorf("task data is required for task block")
 	}
+	var contentSQL string
+	if command.BlockType != "task" {
+		var err error
+		if contentSQL, err = blockContentSQL(command.BlockType, false); err != nil {
+			return nil, err
+		}
+		if len(command.Data) == 0 {
+			return nil, blocks.ErrInvalidBlockData
+		}
+	} else if len(command.Data) > 0 {
+		return nil, blocks.ErrInvalidBlockData
+	}
 
 	var result blocks.CreatedBlock
 	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
@@ -366,7 +436,6 @@ func (r *PGRepo) CreateBlock(
 		block := blocks.Block{
 			SnapshotID: snapshot.ID,
 			BlockType:  command.BlockType,
-			Data:       command.Data,
 			Position: blocks.CalculateMiddlePosition(
 				positions.Prev,
 				positions.Next,
@@ -390,6 +459,14 @@ func (r *PGRepo) CreateBlock(
 		result.PositionLength = len(block.Position)
 
 		if command.BlockType != "task" {
+			if _, err := tx.ExecContext(
+				ctx,
+				contentSQL,
+				block.ID,
+				string(command.Data),
+			); err != nil {
+				return fmt.Errorf("create block content: %w", err)
+			}
 			return nil
 		}
 		task := command.Task
@@ -480,16 +557,27 @@ func (r *PGRepo) PatchBlock(
 			return err
 		}
 
-		// nil Data must reach the driver as SQL NULL (not an empty string),
-		// so that COALESCE leaves the existing column value untouched
-		var data any
-		if len(command.Data) > 0 {
-			data = string(command.Data)
-		}
 		var block blocks.Block
-		if err := tx.QueryRowxContext(ctx, updateBlockContentSQL, command.BlockType, data, command.BlockID).
-			StructScan(&block); err != nil {
-			return fmt.Errorf("tx update block: %w", err)
+		if err := tx.GetContext(ctx, &block, getBlockByIDSQL, command.BlockID); err != nil {
+			return fmt.Errorf("tx get block: %w", err)
+		}
+		if command.BlockType != nil && *command.BlockType != block.BlockType {
+			return blocks.ErrBlockTypeChanged
+		}
+		if len(command.Data) > 0 {
+			contentSQL, err := blockContentSQL(block.BlockType, true)
+			if err != nil {
+				return err
+			}
+			if err := tx.GetContext(
+				ctx,
+				&block.Data,
+				contentSQL,
+				block.ID,
+				string(command.Data),
+			); err != nil {
+				return fmt.Errorf("tx update block content: %w", err)
+			}
 		}
 		result.Block = &block
 

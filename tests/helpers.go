@@ -651,7 +651,6 @@ func CreateTestTask(
 
 	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
-		Data:      []byte("true"),
 		Task: &blocks.TaskData{
 			TaskGroupID: groupID,
 			Name:        name,

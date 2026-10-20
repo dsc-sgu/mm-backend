@@ -41,6 +41,10 @@ var (
 	ErrPermissionDenied  = errors.New("permission denied")
 	ErrTaskGroupNotFound = errors.New("task group not found")
 	ErrInvalidTaskBlock  = errors.New("task data supplied for a non-task block")
+	ErrInvalidBlockData  = errors.New(
+		"data is required for text and quiz blocks and not allowed for task blocks",
+	)
+	ErrBlockTypeChanged = errors.New("block type cannot be changed")
 )
 
 // CreateBlock creates a block (and, if it's a task-type block, its task data

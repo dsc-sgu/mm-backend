@@ -1,12 +1,16 @@
 package tests
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
 )
 
 func TestCreateBlock(t *testing.T) {
@@ -386,4 +390,79 @@ func TestBlockLexoRankOrdering(t *testing.T) {
 			"Blocks are not in correct order after moving",
 		)
 	})
+}
+
+// TestPatchBlockTypeIsImmutable checks that a block cannot change its type:
+// its content lives in the table of its type.
+func TestPatchBlockTypeIsImmutable(t *testing.T) {
+	clearDatabases(t)
+
+	testUser := CreateAndLoginUser(
+		t,
+		&backendPort,
+		"Test First Name",
+		"Test Last Name",
+		"Username",
+		"test@email.com",
+		"password",
+	)
+	disciplineID := CreateTestDiscipline(
+		t,
+		&backendPort,
+		&testUser,
+		"Test Discipline",
+	)
+	courseID := CreateTestCourse(
+		t,
+		&backendPort,
+		&testUser,
+		disciplineID,
+		"Test Course",
+		"Test Course",
+	)
+	draftSnapshotID := LockCourse(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+	).DraftSnapshotID
+	blockID := CreateTestBlock(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		draftSnapshotID,
+	)
+
+	quiz := "quiz"
+	body, err := json.Marshal(blocks.PatchBlockCommand{BlockType: &quiz})
+	require.NoError(t, err)
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
+		backendPort.Port(),
+		courseID,
+		draftSnapshotID,
+		blockID,
+	)
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	block := GetBlockByID(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		draftSnapshotID,
+		blockID,
+	)
+	require.Equal(t, "text", block.BlockType)
 }
