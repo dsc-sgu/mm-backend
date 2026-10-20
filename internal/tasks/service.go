@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
@@ -25,18 +26,26 @@ type MemberChecker interface {
 	) (*membership.Member, error)
 }
 
+// LockValidator checks that a session holds the course edit lock, the same
+// check block editing makes.
+type LockValidator interface {
+	ValidateLock(ctx context.Context, session *locks.LockSession) error
+}
+
 type Service struct {
 	repo         Repo
 	repositories RepositoryStore
 	members      MemberChecker
+	locks        LockValidator
 }
 
 func NewService(
 	repo Repo,
 	repositories RepositoryStore,
 	members MemberChecker,
+	locks LockValidator,
 ) *Service {
-	return &Service{repo: repo, repositories: repositories, members: members}
+	return &Service{repo: repo, repositories: repositories, members: members, locks: locks}
 }
 
 var ErrTaskGroupNotFound = errors.New("task group not found")
@@ -169,10 +178,12 @@ func (s *Service) DeleteTaskGroup(
 	return s.repo.DeleteTaskGroup(ctx, groupID)
 }
 
-// UploadTemplate requires the caller to be an active teacher of the group's course.
+// UploadTemplate requires the caller to be an active teacher of the group's
+// course holding its edit lock. The template repository is not part of a
+// snapshot, so the lock is the only guard against concurrent course edits.
 func (s *Service) UploadTemplate(
 	ctx context.Context,
-	userID, groupID uuid.UUID,
+	userID, sessionID, groupID uuid.UUID,
 	zipData []byte,
 ) error {
 	tg, err := s.repo.GetTaskGroupByID(ctx, groupID)
@@ -183,6 +194,13 @@ func (s *Service) UploadTemplate(
 		return ErrTaskGroupNotFound
 	}
 	if err := s.requireTeacher(ctx, userID, tg.CourseID); err != nil {
+		return err
+	}
+	if err := s.locks.ValidateLock(ctx, &locks.LockSession{
+		CourseID:  tg.CourseID,
+		UserID:    userID,
+		SessionID: sessionID,
+	}); err != nil {
 		return err
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
@@ -30,6 +31,10 @@ func handleServiceError(err error) error {
 	case errors.Is(err, membership.ErrNotFound),
 		errors.Is(err, membership.ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, locks.ErrLockHeldByAnother),
+		errors.Is(err, locks.ErrLockNotFound),
+		errors.Is(err, locks.ErrLockExpired):
+		return huma.Error423Locked(err.Error())
 	case errors.Is(err, pkggit.ErrInvalidArchive):
 		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, pkggit.ErrArchiveTooLarge):
@@ -181,6 +186,7 @@ func (h *Handler) UploadTemplate(
 	if err := h.taskSvc.UploadTemplate(
 		ctx,
 		userID,
+		session.SessionIDFromContext(ctx),
 		groupID,
 		input.RawBody,
 	); err != nil {

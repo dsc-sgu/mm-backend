@@ -628,6 +628,31 @@ func TestUploadTemplate(t *testing.T) {
 	})
 }
 
+func TestUploadTemplateRequiresLock(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID, _ := setupCourseForTasks(t)
+
+	groupID := CreateTestTaskGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+	)
+	_ = CreateTestTask(t, &backendPort, &testUser, courseID, groupID, "Task 1")
+	require.Equal(t, http.StatusNoContent, CancelEdit(t, &backendPort, &testUser, courseID))
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
+		backendPort.Port(),
+		groupID,
+	)
+	require.Equal(t, http.StatusLocked, postTestZip(t, &testUser, url, map[string]string{
+		"README.md": "template readme",
+	}))
+}
+
 func TestUploadTemplateEmptyBody(t *testing.T) {
 	clearDatabases(t)
 
