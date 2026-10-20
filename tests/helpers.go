@@ -599,7 +599,7 @@ func CreateTestTaskGroup(
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks",
+		"http://127.0.0.1:%s/api/v1/task-groups",
 		port.Port(),
 	)
 
@@ -850,7 +850,7 @@ func UploadTestTemplate(
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s/template",
 		port.Port(),
 		groupID,
 	)
