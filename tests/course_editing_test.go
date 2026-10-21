@@ -249,6 +249,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		&teacher,
 		disciplineID,
 		"Test Course",
+		"Test Course",
 	)
 
 	// Enroll Student in the course
@@ -439,7 +440,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 		)
 		newBlockData := `{"text":"updated content"}`
 		body, _ := json.Marshal(
-			blocks.UpdateBlock{Data: json.RawMessage(newBlockData)},
+			blocks.PatchBlockCommand{Data: json.RawMessage(newBlockData)},
 		)
 		req, err := http.NewRequest(
 			http.MethodPatch,
@@ -659,6 +660,7 @@ func TestCourseEditingWorkflow(t *testing.T) {
 			&backendPort,
 			&teacher,
 			disciplineID,
+			"Conflict Course",
 			"Conflict Course",
 		)
 

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,7 +9,10 @@ import (
 	"maps"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,12 +21,15 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	attempt "github.com/dsc-sgu/mm-backend/internal/attempts"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type TestUser struct {
@@ -35,7 +42,7 @@ type TestUser struct {
 func initBackend(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
-) (testcontainers.Container, *mobynetwork.Port, error) {
+) (testcontainers.Container, *mobynetwork.Port, *mobynetwork.Port, error) {
 	return initBackendWithEnv(ctx, net, nil)
 }
 
@@ -43,8 +50,9 @@ func initBackendWithEnv(
 	ctx context.Context,
 	net *testcontainers.DockerNetwork,
 	additionalEnv map[string]string,
-) (testcontainers.Container, *mobynetwork.Port, error) {
+) (container testcontainers.Container, port, sshPort *mobynetwork.Port, err error) {
 	basePort := mobynetwork.MustParsePort("80/tcp")
+	sshBasePort := mobynetwork.MustParsePort("2222/tcp")
 
 	env := map[string]string{
 		"HOST":          "0.0.0.0",
@@ -64,13 +72,13 @@ func initBackendWithEnv(
 			Dockerfile: "Dockerfile",
 		},
 		Entrypoint:   []string{"/app/server"},
-		ExposedPorts: []string{basePort.String()},
+		ExposedPorts: []string{basePort.String(), sshBasePort.String()},
 		Env:          env,
 		WaitingFor:   wait.ForLog("Server running"),
 		Networks:     []string{net.Name},
 	}
 
-	container, err := testcontainers.GenericContainer(
+	container, err = testcontainers.GenericContainer(
 		ctx,
 		testcontainers.GenericContainerRequest{
 			ContainerRequest: req,
@@ -78,15 +86,22 @@ func initBackendWithEnv(
 		},
 	)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
 
-	port, err := container.MappedPort(ctx, basePort.String())
+	basePortMapped, err := container.MappedPort(ctx, basePort.String())
 	if err != nil {
-		return nil, nil, err
+		return
 	}
+	port = &basePortMapped
 
-	return container, &port, nil
+	sshPortMapped, err := container.MappedPort(ctx, sshBasePort.String())
+	if err != nil {
+		return
+	}
+	sshPort = &sshPortMapped
+
+	return
 }
 
 func initPostgres(
@@ -393,6 +408,7 @@ func CreateTestCourse(
 	testUser *TestUser,
 	disciplineID uuid.UUID,
 	name string,
+	displayName string,
 ) uuid.UUID {
 	t.Helper()
 
@@ -404,6 +420,7 @@ func CreateTestCourse(
 	courseBody, _ := json.Marshal(courses.CreateCourse{
 		DisciplineID: disciplineID,
 		Name:         name,
+		DisplayName:  displayName,
 	})
 
 	courseReq, err := http.NewRequest(
@@ -450,15 +467,14 @@ func CreateTestBlockAfter(
 	t.Helper()
 
 	blockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks",
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
 		port.Port(),
 		courseID,
-		snapshotID,
 	)
 
-	blockBody, err := json.Marshal(blocks.CreateBlock{
+	blockBody, err := json.Marshal(blocks.CreateBlockCommand{
 		AfterBlockID: afterBlockID,
-		BlockType:    "test",
+		BlockType:    "text",
 		Data:         []byte("true"),
 	})
 	require.NoError(t, err)
@@ -571,6 +587,319 @@ func GetBlockByID(
 	)
 
 	return returnedBlock
+}
+
+func CreateTestTaskGroup(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID uuid.UUID,
+	name string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks",
+		port.Port(),
+	)
+
+	body, err := json.Marshal(tasks.CreateTaskGroup{
+		CourseID: courseID,
+		Name:     name,
+		Data:     []byte("true"),
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created tasks.CreateTaskGroupResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+// CreateTestTask creates a task by creating a "task"-typed block in the
+// course's current draft, mirroring how the API unifies task and content
+// creation. Patterns are optional; with none the task accepts any files.
+func CreateTestTask(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID, groupID uuid.UUID,
+	name string,
+	patterns ...string,
+) uuid.UUID {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
+		port.Port(),
+		courseID,
+	)
+
+	body, err := json.Marshal(blocks.CreateBlockCommand{
+		BlockType: "task",
+		Data:      []byte("true"),
+		Task: &blocks.TaskData{
+			TaskGroupID: groupID,
+			Name:        name,
+			Patterns:    patterns,
+			MaxGrade:    100,
+			MaxAttempts: 5,
+		},
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created struct {
+		ID uuid.UUID `json:"id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+
+	return created.ID
+}
+
+type sshIdentity struct {
+	privateKeyPath string
+	authorizedKey  string
+}
+
+func generateSSHKeyPair(t *testing.T) sshIdentity {
+	t.Helper()
+
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "id_ed25519")
+
+	cmd := exec.Command(
+		"ssh-keygen",
+		"-t",
+		"ed25519",
+		"-f",
+		privPath,
+		"-N",
+		"",
+		"-q",
+	)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	pubBytes, err := os.ReadFile(privPath + ".pub")
+	require.NoError(t, err)
+
+	return sshIdentity{
+		privateKeyPath: privPath,
+		authorizedKey:  strings.TrimSpace(string(pubBytes)),
+	}
+}
+
+func RegisterTestSSHKey(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	name string,
+	authorizedKey string,
+) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/auth/ssh-keys",
+		port.Port(),
+	)
+
+	body, err := json.Marshal(sshkeys.AddSSHKey{Name: name, Key: authorizedKey})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+}
+
+// runGit runs a git command in dir as identity's owner and fails the test on
+// error.
+func runGit(
+	t *testing.T,
+	dir string,
+	identity sshIdentity,
+	args ...string,
+) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(
+		os.Environ(),
+		fmt.Sprintf(
+			"GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+			identity.privateKeyPath,
+		),
+		"GIT_AUTHOR_NAME=Test Student",
+		"GIT_AUTHOR_EMAIL=student@test.com",
+		"GIT_COMMITTER_NAME=Test Student",
+		"GIT_COMMITTER_EMAIL=student@test.com",
+	)
+
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	return string(out)
+}
+
+// CloneTestRepo clones a repository over SSH and returns the checkout path.
+func CloneTestRepo(
+	t *testing.T,
+	sshPort *mobynetwork.Port,
+	identity sshIdentity,
+	repoPath string,
+) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	repoURL := fmt.Sprintf(
+		"ssh://git@127.0.0.1:%s/%s",
+		sshPort.Port(),
+		repoPath,
+	)
+	runGit(t, dir, identity, "clone", repoURL, "repo")
+
+	return filepath.Join(dir, "repo")
+}
+
+// postTestZip POSTs a zip of files to url and returns the response status.
+func postTestZip(
+	t *testing.T,
+	testUser *TestUser,
+	url string,
+	files map[string]string,
+) int {
+	t.Helper()
+
+	var zipData bytes.Buffer
+	w := zip.NewWriter(&zipData)
+	for name, content := range files {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+
+	req, err := http.NewRequest(http.MethodPost, url, &zipData)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/zip")
+
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	return resp.StatusCode
+}
+
+func UploadTestTemplate(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	groupID uuid.UUID,
+	files map[string]string,
+) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
+		port.Port(),
+		groupID,
+	)
+
+	require.Equal(t, http.StatusNoContent, postTestZip(t, testUser, url, files))
+}
+
+// PushTestAttempt submits files as a web attempt and returns the response
+// status.
+func PushTestAttempt(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	taskID uuid.UUID,
+	files map[string]string,
+) int {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/attempts?taskID=%s",
+		port.Port(),
+		taskID,
+	)
+
+	return postTestZip(t, testUser, url, files)
+}
+
+func GetTestAttempts(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	taskID, userID uuid.UUID,
+) []attempt.Attempt {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/attempts/%s/%s",
+		port.Port(),
+		taskID,
+		userID,
+	)
+
+	resp, err := testUser.Client.Get(url)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var attempts []attempt.Attempt
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&attempts))
+
+	return attempts
 }
 
 func GetRoleInCourse(

@@ -62,6 +62,14 @@ func (h *Handler) CreateCourse(
 type GetPaginatedCoursesInput struct {
 	Limit  int    `query:"limit"`
 	LastID string `query:"last_id"`
+	// LastName is the name of the course LastID belongs to (the last course
+	// of the previous page) - required alongside LastID for pages after the
+	// first, since results are keyset-paginated on (name, id) to match the
+	// name-ordered listing.
+	LastName     string `query:"last_name"`
+	DisciplineID string `query:"discipline_id"`
+	IsTeacher    bool   `query:"is_teacher"`
+	IsStudent    bool   `query:"is_student"`
 }
 
 type GetPaginatedCoursesOutput struct {
@@ -81,10 +89,26 @@ func (h *Handler) GetPaginatedCourses(
 		}
 	}
 
+	var disciplineID uuid.UUID
+	if input.DisciplineID != "" {
+		var err error
+		disciplineID, err = uuid.Parse(input.DisciplineID)
+		if err != nil {
+			return nil, huma.Error400BadRequest("")
+		}
+	}
+
 	courseList, err := h.courseService.GetPaginatedCourses(
 		ctx,
 		input.Limit,
 		lastID,
+		input.LastName,
+		CourseFilter{
+			DisciplineID: disciplineID,
+			UserID:       session.UserIDFromContext(ctx),
+			IsTeacher:    input.IsTeacher,
+			IsStudent:    input.IsStudent,
+		},
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
