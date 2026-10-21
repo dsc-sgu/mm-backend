@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/checkpoints"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
@@ -24,11 +26,18 @@ func handleServiceError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var conflict *checkpoints.ConflictError
+	if errors.As(err, &conflict) {
+		return huma.Error409Conflict(err.Error())
+	}
 	switch {
 	case errors.Is(err, ErrTaskGroupNotFound),
-		errors.Is(err, ErrTaskNotFound):
+		errors.Is(err, ErrTaskNotFound),
+		errors.Is(err, blocks.ErrCourseNotFound),
+		errors.Is(err, blocks.ErrBlockVersionNotFound):
 		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, ErrTaskGroupNameTaken):
+	case errors.Is(err, ErrTaskGroupNameTaken),
+		errors.Is(err, blocks.ErrDraftVersionConflict):
 		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, membership.ErrNotFound),
 		errors.Is(err, membership.ErrPermissionDenied):
@@ -105,13 +114,38 @@ func (h *Handler) PatchTaskGroup(
 	return &PatchTaskGroupOutput{Body: tg}, nil
 }
 
+type GetTaskInput struct {
+	TaskID uuid.UUID `path:"task_id"`
+}
+
+type GetTaskOutput struct {
+	Body *Task
+}
+
+func (h *Handler) GetTask(
+	ctx context.Context,
+	input *GetTaskInput,
+) (*GetTaskOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	task, err := h.taskSvc.GetTask(ctx, userID, input.TaskID)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	return &GetTaskOutput{Body: task}, nil
+}
+
 type PatchTaskInput struct {
 	TaskID uuid.UUID `path:"task_id"`
 	Body   TaskUpdate
 }
 
 type PatchTaskOutput struct {
-	Body *Task
+	Body *UpdatedTask
 }
 
 func (h *Handler) PatchTask(

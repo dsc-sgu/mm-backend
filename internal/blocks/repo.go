@@ -33,6 +33,36 @@ type TaskData struct {
 	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }
 
+// TaskSettings is the data of a task block: everything a teacher edits
+// about a task, versioned and published with the block. The task's id and
+// name live in the tasks table and are not part of it.
+type TaskSettings struct {
+	Version     int             `json:"version"`
+	Statement   json.RawMessage `json:"statement,omitempty"`
+	Patterns    []string        `json:"patterns"`
+	MaxGrade    float32         `json:"maxGrade"`
+	MaxAttempts *int            `json:"maxAttempts"`
+	AvailableAt *time.Time      `json:"availableAt"`
+	DeadlineAt  *time.Time      `json:"deadlineAt"`
+}
+
+// Settings returns the task block data a new task starts with.
+func (t TaskData) Settings() TaskSettings {
+	patterns := t.Patterns
+	if patterns == nil {
+		patterns = []string{}
+	}
+	return TaskSettings{
+		Version:     1,
+		Statement:   t.Statement,
+		Patterns:    patterns,
+		MaxGrade:    t.MaxGrade,
+		MaxAttempts: t.MaxAttempts,
+		AvailableAt: t.AvailableAt,
+		DeadlineAt:  t.DeadlineAt,
+	}
+}
+
 // TaskGroupRef picks the task group of a new task: an existing group by ID,
 // or a new group created together with the task. Exactly one is set.
 type TaskGroupRef struct {
