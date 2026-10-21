@@ -29,7 +29,7 @@ var (
 	// The published tasks of a group, the ones a git push may submit to.
 	getLiveTasksSQL = `
 		WITH v AS (` + blockView("(SELECT course_id FROM task_groups WHERE id = $1)", "NULL") + `)
-		SELECT t.id, t.name, t.patterns
+		SELECT t.id, t.name, t.patterns, t.max_attempts
 		FROM tasks t
 		JOIN task_blocks tb ON tb.task_id = t.id
 		JOIN v ON v.id = tb.block_id AND NOT v.deleted
@@ -83,10 +83,10 @@ const (
 		SET statement = COALESCE($1::jsonb, statement),
 		    patterns = COALESCE($2::text[], patterns),
 		    max_grade = COALESCE($3, max_grade),
-		    max_attempts = COALESCE($4, max_attempts),
-		    available_at = COALESCE($5, available_at),
-		    deadline_at = COALESCE($6, deadline_at)
-		WHERE id = $7 AND deleted_at IS NULL
+		    max_attempts = CASE WHEN $4 THEN $5::integer ELSE max_attempts END,
+		    available_at = COALESCE($6, available_at),
+		    deadline_at = COALESCE($7, deadline_at)
+		WHERE id = $8 AND deleted_at IS NULL
 		RETURNING id, task_group_id, name, statement, patterns, max_grade, max_attempts, available_at, deadline_at
 	`
 
@@ -231,6 +231,12 @@ func (r *PGRepo) UpdateTask(
 	if update.Patterns != nil {
 		patterns = pq.StringArray(*update.Patterns)
 	}
+	// maxAttempts may be cleared with null, so whether it was sent is passed
+	// apart from its value
+	var maxAttempts *int
+	if update.MaxAttempts.Sent {
+		maxAttempts = update.MaxAttempts.Ptr()
+	}
 	var task tasks.Task
 	err := r.db.QueryRowxContext(
 		ctx,
@@ -238,7 +244,8 @@ func (r *PGRepo) UpdateTask(
 		statement,
 		patterns,
 		update.MaxGrade,
-		update.MaxAttempts,
+		update.MaxAttempts.Sent,
+		maxAttempts,
 		update.AvailableAt,
 		update.DeadlineAt,
 		taskID,
@@ -395,7 +402,7 @@ func (r *PGRepo) GetLiveTasks(
 	for rows.Next() {
 		var task pkggit.Task
 		var patterns pq.StringArray
-		if err := rows.Scan(&task.ID, &task.Name, &patterns); err != nil {
+		if err := rows.Scan(&task.ID, &task.Name, &patterns, &task.MaxAttempts); err != nil {
 			return nil, fmt.Errorf("scan live task: %w", err)
 		}
 		task.Patterns = patterns
