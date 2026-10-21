@@ -36,11 +36,11 @@ func blockView(courseParam, viewerParam string) string {
 	`
 }
 
-// A task block has no data of its own; it reads as a reference to its task
-// built from task_blocks.
+// A task block's data reads with the id of its task from task_blocks added.
 const viewColumnsWithTaskData = `
 	v.id, v.version, v.course_id, v.block_type,
-	COALESCE(v.data, jsonb_build_object('version', 1, 'taskId', tb.task_id)) AS data,
+	CASE WHEN tb.task_id IS NULL THEN v.data
+	     ELSE v.data || jsonb_build_object('taskId', tb.task_id) END AS data,
 	v.position, v.draft, v.deleted, v.created_by, v.base_version
 `
 
@@ -190,8 +190,8 @@ const (
 	`
 
 	createTaskSQL = `
-		INSERT INTO tasks (task_group_id, name, statement, patterns, max_grade, max_attempts, available_at, deadline_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO tasks (task_group_id, name)
+		VALUES ($1, $2)
 		RETURNING id
 	`
 
@@ -346,47 +346,48 @@ func getHead(ctx context.Context, tx *sqlx.Tx, blockID uuid.UUID) (*blocks.Block
 // which is returned as it is, or a published version, which is copied
 // into a new draft with that version as its base, whether or not a later
 // one was published since. A draft at another version than the one seen
-// means the user edits the block from two places and is a conflict.
+// means the user edits the block from two places and is a conflict. The
+// second result tells whether the draft was created by this call.
 func ensureDraft(
 	ctx context.Context,
 	tx *sqlx.Tx,
 	courseID, blockID, userID uuid.UUID,
 	seenVersion int,
-) (*blocks.Block, error) {
+) (*blocks.Block, bool, error) {
 	if _, err := tx.ExecContext(ctx, lockBlockSQL, blockID); err != nil {
-		return nil, fmt.Errorf("lock block: %w", err)
+		return nil, false, fmt.Errorf("lock block: %w", err)
 	}
 
 	var draft blocks.Block
 	err := tx.GetContext(ctx, &draft, getOwnDraftSQL, blockID, userID)
 	if err == nil {
 		if draft.CourseID != courseID || draft.Deleted {
-			return nil, blocks.ErrBlockNotFound
+			return nil, false, blocks.ErrBlockNotFound
 		}
 		if draft.Version != seenVersion {
-			return nil, blocks.ErrDraftVersionConflict
+			return nil, false, blocks.ErrDraftVersionConflict
 		}
-		return &draft, nil
+		return &draft, false, nil
 	}
 	if err != sql.ErrNoRows {
-		return nil, fmt.Errorf("get own draft: %w", err)
+		return nil, false, fmt.Errorf("get own draft: %w", err)
 	}
 
 	var base blocks.Block
 	err = tx.GetContext(ctx, &base, getBlockVersionSQL, blockID, seenVersion)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, blocks.ErrBlockVersionNotFound
+			return nil, false, blocks.ErrBlockVersionNotFound
 		}
-		return nil, fmt.Errorf("get seen version: %w", err)
+		return nil, false, fmt.Errorf("get seen version: %w", err)
 	}
 	if base.CourseID != courseID || base.Draft || base.Deleted {
-		return nil, blocks.ErrBlockVersionNotFound
+		return nil, false, blocks.ErrBlockVersionNotFound
 	}
 
 	version, err := nextVersion(ctx, tx, blockID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	draft = base
 	draft.Version = version
@@ -394,9 +395,9 @@ func ensureDraft(
 	draft.CreatedBy = userID
 	draft.BaseVersion = &base.Version
 	if err := insertBlock(ctx, tx, &draft); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return &draft, nil
+	return &draft, true, nil
 }
 
 // getPositionsForMoveTx returns the positions of the blocks around the
@@ -458,12 +459,21 @@ func getPositionsForMoveTx(
 }
 
 // CreateBlock creates a block as a draft of the actor and, for a task
-// block, its task.
+// block, its task. A task block's data is the task's settings.
 func (r *PGRepo) CreateBlock(
 	ctx context.Context,
 	command blocks.CreateBlockCommand,
 ) (*blocks.CreatedBlock, error) {
 	userID := command.Actor.UserID
+
+	data := jsonbArg(command.Data)
+	if command.Task != nil {
+		settings, err := json.Marshal(command.Task.Settings())
+		if err != nil {
+			return nil, fmt.Errorf("encode task settings: %w", err)
+		}
+		data = string(settings)
+	}
 
 	var result blocks.CreatedBlock
 	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
@@ -492,7 +502,7 @@ func (r *PGRepo) CreateBlock(
 			insertNewBlockSQL,
 			command.CourseID,
 			command.BlockType,
-			jsonbArg(command.Data),
+			data,
 			position,
 			userID,
 		); err != nil {
@@ -528,24 +538,8 @@ func (r *PGRepo) CreateBlock(
 			return blocks.ErrTaskNameTaken
 		}
 
-		patterns := task.Patterns
-		if patterns == nil {
-			patterns = []string{}
-		}
 		var taskID uuid.UUID
-		if err := tx.GetContext(
-			ctx,
-			&taskID,
-			createTaskSQL,
-			groupID,
-			task.Name,
-			jsonbArg(task.Statement),
-			pq.StringArray(patterns),
-			task.MaxGrade,
-			task.MaxAttempts,
-			task.AvailableAt,
-			task.DeadlineAt,
-		); err != nil {
+		if err := tx.GetContext(ctx, &taskID, createTaskSQL, groupID, task.Name); err != nil {
 			return fmt.Errorf("create task: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, createTaskBlockSQL, blockID, taskID); err != nil {
@@ -613,7 +607,7 @@ func (r *PGRepo) PatchBlock(
 		if err := lockCourse(ctx, tx, command.CourseID); err != nil {
 			return err
 		}
-		draft, err := ensureDraft(ctx, tx, command.CourseID, command.BlockID, userID, command.Version)
+		draft, _, err := ensureDraft(ctx, tx, command.CourseID, command.BlockID, userID, command.Version)
 		if err != nil {
 			return err
 		}
@@ -706,7 +700,7 @@ func (r *PGRepo) MoveBlock(
 		if err := lockCourse(ctx, tx, ref.CourseID); err != nil {
 			return err
 		}
-		draft, err := ensureDraft(ctx, tx, ref.CourseID, ref.BlockID, editCtx.UserID, ref.Version)
+		draft, _, err := ensureDraft(ctx, tx, ref.CourseID, ref.BlockID, editCtx.UserID, ref.Version)
 		if err != nil {
 			return err
 		}
@@ -807,7 +801,7 @@ func (r *PGRepo) DeleteBlockByID(
 		if err := lockCourse(ctx, tx, ref.CourseID); err != nil {
 			return err
 		}
-		draft, err := ensureDraft(ctx, tx, ref.CourseID, ref.BlockID, editCtx.UserID, ref.Version)
+		draft, _, err := ensureDraft(ctx, tx, ref.CourseID, ref.BlockID, editCtx.UserID, ref.Version)
 		if err != nil {
 			return err
 		}

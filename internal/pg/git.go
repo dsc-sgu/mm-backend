@@ -62,14 +62,6 @@ const (
 		LIMIT 1
 	`
 
-	getAttemptLimitSQL = `
-		SELECT t.max_attempts,
-		       (SELECT count(*) FROM attempts a
-		        WHERE a.task_id = t.id AND a.user_id = $2) AS used
-		FROM tasks t
-		WHERE t.id = $1
-	`
-
 	// Unlike repoForTaskSQL, this is not restricted to published tasks: it
 	// backs authorization for viewing already-recorded attempts, which must
 	// keep resolving even if the task's block is later deleted.
@@ -81,15 +73,31 @@ const (
 	`
 )
 
-// Only a task whose block is published can be attempted.
-var repoForTaskSQL = `
-	WITH v AS (` + blockView("(SELECT tg.course_id FROM tasks t JOIN task_groups tg ON tg.id = t.task_group_id WHERE t.id = $1)", "NULL") + `)
-	SELECT v.course_id, t.task_group_id
-	FROM tasks t
-	JOIN task_blocks tb ON tb.task_id = t.id
-	JOIN v ON v.id = tb.block_id AND NOT v.deleted
-	WHERE t.id = $1 AND t.deleted_at IS NULL
-`
+// taskCourseSQL is the course of the task $1, for the published view of it.
+const taskCourseSQL = `(SELECT tg.course_id FROM tasks t JOIN task_groups tg ON tg.id = t.task_group_id WHERE t.id = $1)`
+
+var (
+	// Only a task whose block is published can be attempted.
+	repoForTaskSQL = `
+		WITH v AS (` + blockView(taskCourseSQL, "NULL") + `)
+		SELECT v.course_id, t.task_group_id
+		FROM tasks t
+		JOIN task_blocks tb ON tb.task_id = t.id
+		JOIN v ON v.id = tb.block_id AND NOT v.deleted
+		WHERE t.id = $1 AND t.deleted_at IS NULL
+	`
+
+	// The attempt limit is read from the published settings of the task.
+	getAttemptLimitSQL = `
+		WITH v AS (` + blockView(taskCourseSQL, "NULL") + `)
+		SELECT (v.data->>'maxAttempts')::integer AS max_attempts,
+		       (SELECT count(*) FROM attempts a
+		        WHERE a.task_id = tb.task_id AND a.user_id = $2) AS used
+		FROM task_blocks tb
+		JOIN v ON v.id = tb.block_id AND NOT v.deleted
+		WHERE tb.task_id = $1
+	`
+)
 
 func (r *PGRepo) AddSSHKey(model *sshkeys.SSHKey) error {
 	zap.L().Debug("Executing query", zap.String("query", addSSHKeySQL))

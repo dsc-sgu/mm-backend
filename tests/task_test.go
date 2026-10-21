@@ -428,11 +428,20 @@ func TestTaskBlockDataReferencesTask(t *testing.T) {
 	content := GetCourseContent(t, &backendPort, &testUser, courseID)
 	require.Len(t, content.Blocks, 1)
 	require.Equal(t, "task", content.Blocks[0].BlockType)
-	require.JSONEq(
-		t,
-		fmt.Sprintf(`{"version":1,"taskId":"%s"}`, taskID),
-		string(content.Blocks[0].Data),
-	)
+	requireTaskBlockData(t, content.Blocks[0].Data, taskID)
+}
+
+// requireTaskBlockData checks that a task block's data names its task and
+// carries the task's settings.
+func requireTaskBlockData(t *testing.T, data json.RawMessage, taskID uuid.UUID) {
+	t.Helper()
+
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &fields))
+	require.JSONEq(t, `1`, string(fields["version"]))
+	require.JSONEq(t, fmt.Sprintf(`"%s"`, taskID), string(fields["taskId"]))
+	require.JSONEq(t, `100`, string(fields["maxGrade"]))
+	require.Contains(t, fields, "patterns")
 }
 
 func TestGetTasks(t *testing.T) {
@@ -509,11 +518,7 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	MoveBlockAfter(t, &backendPort, &testUser, courseID, content.Blocks[0].ID, nil)
 	draft := GetBlockByID(t, &backendPort, &testUser, courseID, content.Blocks[0].ID)
 	require.True(t, draft.Draft)
-	require.JSONEq(
-		t,
-		fmt.Sprintf(`{"version":1,"taskId":"%s"}`, taskID),
-		string(draft.Data),
-	)
+	requireTaskBlockData(t, draft.Data, taskID)
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/task-groups/%s/tasks",
@@ -547,15 +552,51 @@ func TestTaskSurvivesPublishAndReEdit(t *testing.T) {
 	require.Equal(t, groupID, receivedTasks[0].TaskGroupID)
 }
 
-// patchTestTask sends PATCH /tasks/{task_id} and returns the response status
-// and the decoded task.
+// getTestTask returns the task as testUser sees it, with the status.
+func getTestTask(
+	t *testing.T,
+	testUser *TestUser,
+	taskID uuid.UUID,
+) (int, *tasks.Task) {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/tasks/%s",
+		backendPort.Port(),
+		taskID,
+	)
+	resp, err := testUser.Client.Get(url)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return resp.StatusCode, nil
+	}
+	var task tasks.Task
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&task))
+	return resp.StatusCode, &task
+}
+
+// patchTestTask sends PATCH /tasks/{task_id}, from the block version
+// testUser sees unless update names one, and returns the response status
+// and the decoded result.
 func patchTestTask(
 	t *testing.T,
 	testUser *TestUser,
 	taskID uuid.UUID,
 	update tasks.TaskUpdate,
-) (int, *tasks.Task) {
+) (int, *tasks.UpdatedTask) {
 	t.Helper()
+
+	if update.Version == 0 {
+		status, task := getTestTask(t, testUser, taskID)
+		require.Equal(t, http.StatusOK, status)
+		update.Version = task.Version
+	}
 
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/tasks/%s",
@@ -580,13 +621,13 @@ func patchTestTask(
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, nil
 	}
-	var task tasks.Task
+	var task tasks.UpdatedTask
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&task))
 	return resp.StatusCode, &task
 }
 
 // TestUpdateTask patches a published task through PATCH /tasks/{task_id}.
-// A task lives outside block versions, so the change applies at once.
+// With no draft of the task's block, the edit is published on its own.
 func TestUpdateTask(t *testing.T) {
 	clearDatabases(t)
 
@@ -612,10 +653,62 @@ func TestUpdateTask(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 
 	require.Equal(t, taskID, updated.ID)
+	require.True(t, updated.Published)
+	require.False(t, updated.Draft)
+	require.Equal(t, 2, updated.Version)
 	require.InDelta(t, newGrade, updated.MaxGrade, 0.001)
-	require.Equal(t, []string{"*.go"}, []string(updated.Patterns))
-	require.NotNil(t, updated.Statement)
-	require.JSONEq(t, string(statement), string(*updated.Statement))
+	require.Equal(t, []string{"*.go"}, updated.Patterns)
+	require.JSONEq(t, string(statement), string(updated.Statement))
+
+	// The settings are published in the block, as a checkpoint of their own
+	content := GetCourseContent(t, &backendPort, &testUser, courseID)
+	require.Len(t, content.Blocks, 1)
+	require.Equal(t, 2, content.Blocks[0].Version)
+	require.Len(t, GetCheckpoints(t, &backendPort, &testUser, courseID), 2)
+}
+
+// TestUpdateTaskJoinsExistingDraft checks that a task edit made while its
+// author has a draft of the task's block waits in that draft: readers see
+// the published settings until the course is published.
+func TestUpdateTaskJoinsExistingDraft(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, _, courseID := setupCourseForTasks(t)
+
+	_, taskID := CreateTestTaskInNewGroup(
+		t,
+		&backendPort,
+		&testUser,
+		courseID,
+		"Group 1",
+		"Task 1",
+	)
+	require.Equal(t, http.StatusOK, Publish(t, &backendPort, &testUser, courseID))
+
+	// Moving the task block opens a draft of it
+	_, task := getTestTask(t, &testUser, taskID)
+	MoveBlockAfter(t, &backendPort, &testUser, courseID, task.BlockID, nil)
+
+	newGrade := float32(50)
+	status, updated := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxGrade: &newGrade,
+	})
+	require.Equal(t, http.StatusOK, status)
+	require.False(t, updated.Published)
+	require.True(t, updated.Draft)
+	require.InDelta(t, newGrade, updated.MaxGrade, 0.001)
+
+	published := GetCourseContent(t, &backendPort, &testUser, courseID).Blocks
+	require.Len(t, published, 1)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(published[0].Data, &fields))
+	require.JSONEq(t, `100`, string(fields["maxGrade"]))
+	require.Len(t, GetCheckpoints(t, &backendPort, &testUser, courseID), 1)
+
+	require.Equal(t, http.StatusOK, Publish(t, &backendPort, &testUser, courseID))
+	_, task = getTestTask(t, &testUser, taskID)
+	require.False(t, task.Draft)
+	require.InDelta(t, newGrade, task.MaxGrade, 0.001)
 }
 
 // TestPushAttemptRespectsMaxAttempts checks that a task takes no more
@@ -728,6 +821,7 @@ func TestCancelEditDeletesDraftTask(t *testing.T) {
 
 	newGrade := float32(50)
 	status, _ := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		Version:  1,
 		MaxGrade: &newGrade,
 	})
 	require.Equal(t, http.StatusNotFound, status)

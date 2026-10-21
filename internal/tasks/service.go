@@ -120,6 +120,33 @@ func (s *Service) GetTasks(
 	return s.repo.GetTasks(ctx, groupID, viewerID)
 }
 
+// GetTask returns a task for any active course member, with the settings
+// of the block version they see.
+func (s *Service) GetTask(
+	ctx context.Context,
+	userID, taskID uuid.UUID,
+) (*Task, error) {
+	task, err := s.repo.GetTaskByID(ctx, taskID, uuid.Nil)
+	if err != nil && !errors.Is(err, ErrTaskNotFound) {
+		return nil, err
+	}
+	var courseID uuid.UUID
+	if task != nil {
+		courseID, err = s.repo.GetCourseIDByTaskGroup(ctx, task.TaskGroupID)
+	} else {
+		// Not published: only its author sees it, through their draft
+		courseID, err = s.repo.GetCourseIDByTask(ctx, taskID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	viewerID, err := s.viewer(ctx, userID, courseID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetTaskByID(ctx, taskID, viewerID)
+}
+
 // UpdateTaskGroup requires the caller to be an active teacher of the group's course.
 func (s *Service) UpdateTaskGroup(
 	ctx context.Context,
@@ -136,25 +163,23 @@ func (s *Service) UpdateTaskGroup(
 	return s.repo.UpdateTaskGroup(ctx, groupID, update)
 }
 
-// UpdateTask requires the caller to be an active teacher of the task's course.
-// A task lives outside block versions, so the change applies at once.
+// UpdateTask requires the caller to be an active teacher of the task's
+// course. The settings go into the caller's draft of the task's block: a
+// draft made for this edit alone is published at once, an existing one
+// carries the edit until the course is published.
 func (s *Service) UpdateTask(
 	ctx context.Context,
 	userID, taskID uuid.UUID,
 	update *TaskUpdate,
-) (*Task, error) {
-	task, err := s.repo.GetTaskByID(ctx, taskID)
-	if err != nil {
-		return nil, err
-	}
-	courseID, err := s.repo.GetCourseIDByTaskGroup(ctx, task.TaskGroupID)
+) (*UpdatedTask, error) {
+	courseID, err := s.repo.GetCourseIDByTask(ctx, taskID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.requireTeacher(ctx, userID, courseID); err != nil {
 		return nil, err
 	}
-	return s.repo.UpdateTask(ctx, taskID, update)
+	return s.repo.UpdateTask(ctx, taskID, userID, update)
 }
 
 // UploadTemplate requires the caller to be an active teacher of the group's
