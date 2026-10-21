@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
+	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 // gitRepoPath is the SSH path of the repository setupGitTask creates.
@@ -101,6 +102,77 @@ func TestGitSubmitViaSSHTagPush(t *testing.T) {
 	require.Len(t, attempts, 1)
 	require.Equal(t, taskID, attempts[0].TaskID)
 	require.Equal(t, testUser.ID, attempts[0].UserID)
+}
+
+// TestGitSSHTagPushChecksPatterns checks the pre-receive hook: it rejects an
+// unknown task and a commit with no file matching the task's patterns.
+func TestGitSSHTagPushChecksPatterns(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, taskID, identity := setupGitTask(t, nil, "src/*")
+
+	repoDir := CloneTestRepo(t, &backendSSHPort, identity, gitRepoPath)
+	submit := func(file, tag, task string) (string, error) {
+		path := filepath.Join(repoDir, file)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(tag), 0o644))
+		runGit(t, repoDir, identity, "add", file)
+		runGit(t, repoDir, identity, "commit", "-m", tag)
+		runGit(t, repoDir, identity, "tag", tag)
+		return tryGit(repoDir, identity, "push", "origin", tag, "-o", "submit="+task)
+	}
+
+	out, err := submit("src/a.go", "unknown-task", "taskB")
+	require.Error(t, err)
+	require.Contains(t, out, "no task named \"taskB\"")
+
+	runGit(t, repoDir, identity, "rm", "-q", "src/a.go")
+	out, err = submit("notes.txt", "no-match", "taskA")
+	require.Error(t, err, out)
+	require.Contains(t, out, "no files match")
+
+	_, err = submit("src/my solution.go", "match", "taskA")
+	require.NoError(t, err)
+
+	require.Len(t, GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID), 1)
+}
+
+// TestGitSSHTagPushRespectsMaxAttempts checks that the pre-receive hook
+// counts every new tag of a push against the task's attempt limit.
+func TestGitSSHTagPushRespectsMaxAttempts(t *testing.T) {
+	clearDatabases(t)
+
+	testUser, taskID, identity := setupGitTask(t, nil)
+	status, _ := patchTestTask(t, &testUser, taskID, tasks.TaskUpdate{
+		MaxAttempts: tasks.OmittableNullable[int]{Sent: true, Value: 1},
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	repoDir := CloneTestRepo(t, &backendSSHPort, identity, gitRepoPath)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(repoDir, "solution.go"),
+		[]byte("package main\n"),
+		0o644,
+	))
+	runGit(t, repoDir, identity, "add", "solution.go")
+	runGit(t, repoDir, identity, "commit", "-m", "solution")
+	for _, tag := range []string{"submission-1", "submission-2", "submission-3"} {
+		runGit(t, repoDir, identity, "tag", tag)
+	}
+
+	out, err := tryGit(repoDir, identity,
+		"push", "origin", "submission-1", "submission-2", "-o", "submit=taskA")
+	require.Error(t, err)
+	require.Contains(t, out, "no attempts left for task 'taskA'")
+	require.Empty(t, GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID))
+
+	runGit(t, repoDir, identity, "push", "origin", "submission-1", "-o", "submit=taskA")
+	require.Len(t, GetTestAttempts(t, &backendPort, &testUser, taskID, testUser.ID), 1)
+
+	out, err = tryGit(repoDir, identity,
+		"push", "origin", "submission-3", "-o", "submit=taskA")
+	require.Error(t, err)
+	require.Contains(t, out, "no attempts left for task 'taskA'")
 }
 
 // TestPushAttemptReplacesPatternFiles checks which files a web attempt leaves

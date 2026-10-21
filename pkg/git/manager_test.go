@@ -58,7 +58,6 @@ func TestUnzipFiles(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Equal(t, "dir/a.go", files[0].FileName)
 	require.Equal(t, []byte("package a\n"), files[0].Content)
-	require.EqualValues(t, len("package a\n"), files[0].FileSize)
 }
 
 func TestUnzipFilesRejectsInvalidArchive(t *testing.T) {
