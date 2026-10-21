@@ -9,15 +9,13 @@ import (
 
 // Course is the database representation of a course.
 type Course struct {
-	ID               uuid.UUID  `json:"id"                         db:"id"                 binding:"required"`
-	DisciplineID     uuid.UUID  `json:"disciplineID,omitempty"     db:"discipline_id"`
-	ActiveSnapshotID *uuid.UUID `json:"activeSnapshotID,omitempty" db:"active_snapshot_id"`
-	OwnerID          uuid.UUID  `json:"ownerID"                    db:"owner_id"           binding:"required"`
-	Name             string     `json:"name"                       db:"name"               binding:"required"`
-	DisplayName      string     `json:"displayName"                db:"display_name"       binding:"required"`
-	Version          int        `json:"version"                    db:"version"            binding:"required"`
-	CreatedAt        time.Time  `json:"createdAt"                  db:"created_at"         binding:"required"`
-	DeletedAt        *time.Time `json:"-"                          db:"deleted_at"`
+	ID           uuid.UUID  `json:"id"                     db:"id"            binding:"required"`
+	DisciplineID uuid.UUID  `json:"disciplineID,omitempty" db:"discipline_id"`
+	OwnerID      uuid.UUID  `json:"ownerID"                db:"owner_id"      binding:"required"`
+	Name         string     `json:"name"                   db:"name"          binding:"required"`
+	DisplayName  string     `json:"displayName"            db:"display_name"  binding:"required"`
+	CreatedAt    time.Time  `json:"createdAt"              db:"created_at"    binding:"required"`
+	DeletedAt    *time.Time `json:"-"                      db:"deleted_at"`
 }
 
 // CreateCourse is the input for creating a course, used by both the service and repository layers.
@@ -44,9 +42,8 @@ type CourseFilter struct {
 }
 
 type Repo interface {
-	// CreateCourseWithInitialSnapshot atomically creates a course together with
-	// its first published snapshot and links them.
-	CreateCourseWithInitialSnapshot(
+	// CreateCourse creates a course with its owner as its first teacher.
+	CreateCourse(
 		ctx context.Context,
 		model *CreateCourse,
 		ownerID uuid.UUID,
@@ -68,10 +65,4 @@ type Repo interface {
 		update *UpdateCourse,
 	) (*Course, error)
 	DeleteCourseByID(ctx context.Context, id uuid.UUID) error
-	PublishDraft(
-		ctx context.Context,
-		courseID, draftSnapshotID uuid.UUID,
-		expectedVersion int,
-		userID, sessionID uuid.UUID,
-	) error
 }
