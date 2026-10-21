@@ -11,9 +11,8 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
-	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
+	"github.com/dsc-sgu/mm-backend/internal/checkpoints"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
-	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 // UserSummary identifies a user for response enrichment
@@ -45,8 +44,9 @@ func resolveUserSummary(
 }
 
 // userSummaryResolver memoizes user lookups within a single request so the
-// same person (e.g. a teacher who created several snapshots or invites) is
-// only fetched once even if they appear multiple times in a list response.
+// same person (e.g. a teacher who published several times or created
+// several invites) is only fetched once even if they appear multiple times
+// in a list response.
 type userSummaryResolver struct {
 	userService *users.Service
 	cache       map[uuid.UUID]*UserSummary
@@ -71,34 +71,16 @@ func (r *userSummaryResolver) resolve(
 	return summary
 }
 
-type LockConflictBody struct {
-	status int
-	Detail string       `json:"detail"`
-	Holder *UserSummary `json:"holder"`
+// PublishConflictBody is the 409 response of a publish that found blocks
+// changed by another publish since the caller's draft of them was started.
+type PublishConflictBody struct {
+	Detail string      `json:"detail"`
+	Blocks []uuid.UUID `json:"blocks"`
 }
 
-func (e *LockConflictBody) Error() string { return e.Detail }
+func (e *PublishConflictBody) Error() string { return e.Detail }
 
-func (e *LockConflictBody) GetStatus() int { return e.status }
-
-// lockConflictError builds the enriched 423 response
-// for a lock held by another user
-func (h *Handler) lockConflictError(
-	ctx context.Context,
-	holderID uuid.UUID,
-	baseErr error,
-) error {
-	holder := resolveUserSummary(ctx, h.userService, holderID)
-	if holder == nil {
-		return huma.Error423Locked(baseErr.Error())
-	}
-
-	return &LockConflictBody{
-		status: http.StatusLocked,
-		Detail: baseErr.Error(),
-		Holder: holder,
-	}
-}
+func (e *PublishConflictBody) GetStatus() int { return http.StatusConflict }
 
 // CourseIDResponse is the handler-level response containing only a course ID.
 type CourseIDResponse struct {
@@ -112,23 +94,21 @@ type UserRoleResponse struct {
 
 // CourseContentResponse is the handler-level response for course with ordered blocks
 type CourseContentResponse struct {
-	ID               uuid.UUID       `json:"id"`
-	DisciplineID     uuid.UUID       `json:"disciplineId"`
-	ActiveSnapshotID *uuid.UUID      `json:"activeSnapshotId"`
-	Name             string          `json:"name"`
-	Owner            *UserSummary    `json:"owner"`
-	CreatedAt        time.Time       `json:"createdAt"`
-	Blocks           []*blocks.Block `json:"blocks"`
+	ID           uuid.UUID       `json:"id"`
+	DisciplineID uuid.UUID       `json:"disciplineId"`
+	Name         string          `json:"name"`
+	Owner        *UserSummary    `json:"owner"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	Blocks       []*blocks.Block `json:"blocks"`
 }
 
-// SnapshotMetadataResponse is a part of response for course timeline
-type SnapshotMetadataResponse struct {
-	ID        uuid.UUID        `json:"id"`
-	CourseID  uuid.UUID        `json:"courseId"`
-	Version   int              `json:"version"`
-	Status    snapshots.Status `json:"status"`
-	CreatedBy *UserSummary     `json:"createdBy"`
-	CreatedAt time.Time        `json:"createdAt"`
+// CheckpointResponse describes one publish of a course, with the
+// publisher's identity resolved.
+type CheckpointResponse struct {
+	ID        uuid.UUID    `json:"id"`
+	CourseID  uuid.UUID    `json:"courseId"`
+	CreatedBy *UserSummary `json:"createdBy"`
+	CreatedAt time.Time    `json:"createdAt"`
 }
 
 // InviteResponse is the handler-level response for an invite, with the
@@ -160,24 +140,25 @@ func handleServiceError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var conflict *checkpoints.ConflictError
+	if errors.As(err, &conflict) {
+		return &PublishConflictBody{Detail: err.Error(), Blocks: conflict.BlockIDs}
+	}
 	switch {
 	case errors.Is(err, ErrPermissionDenied),
+		errors.Is(err, blocks.ErrPermissionDenied),
 		errors.Is(err, membership.ErrPermissionDenied),
 		errors.Is(err, membership.ErrNotFound):
 		return huma.Error403Forbidden(err.Error())
 	case errors.Is(err, ErrCourseNotFound),
+		errors.Is(err, blocks.ErrCourseNotFound),
 		errors.Is(err, membership.ErrInviteNotFound),
-		errors.Is(err, ErrSnapshotNotFound):
+		errors.Is(err, checkpoints.ErrCheckpointNotFound),
+		errors.Is(err, checkpoints.ErrNothingToPublish):
 		return huma.Error404NotFound(err.Error())
-	case errors.Is(err, locks.ErrLockHeldByAnother),
-		errors.Is(err, locks.ErrLockNotFound),
-		errors.Is(err, locks.ErrLockExpired):
-		return huma.Error423Locked(err.Error())
-	case errors.Is(err, ErrSnapshotConflict),
+	case errors.Is(err, checkpoints.ErrTaskGroupNameTaken),
 		errors.Is(err, membership.ErrAlreadyMember):
 		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, ErrInvalidTarget):
-		return huma.Error400BadRequest(err.Error())
 	case errors.Is(err, membership.ErrInviteRevoked),
 		errors.Is(err, membership.ErrInviteExpired):
 		return huma.Error410Gone(err.Error())

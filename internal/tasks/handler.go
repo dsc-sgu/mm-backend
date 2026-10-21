@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/checkpoints"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type Handler struct {
@@ -23,12 +26,26 @@ func handleServiceError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var conflict *checkpoints.ConflictError
+	if errors.As(err, &conflict) {
+		return huma.Error409Conflict(err.Error())
+	}
 	switch {
-	case errors.Is(err, ErrTaskGroupNotFound):
+	case errors.Is(err, ErrTaskGroupNotFound),
+		errors.Is(err, ErrTaskNotFound),
+		errors.Is(err, blocks.ErrCourseNotFound),
+		errors.Is(err, blocks.ErrBlockVersionNotFound):
 		return huma.Error404NotFound(err.Error())
+	case errors.Is(err, ErrTaskGroupNameTaken),
+		errors.Is(err, blocks.ErrDraftVersionConflict):
+		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, membership.ErrNotFound),
 		errors.Is(err, membership.ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, pkggit.ErrInvalidArchive):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, pkggit.ErrArchiveTooLarge):
+		return huma.Error413RequestEntityTooLarge(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
 }
@@ -46,8 +63,7 @@ func (h *Handler) GetTaskGroup(
 	input *GetTaskGroupInput,
 ) (*GetTaskGroupOutput, error) {
 	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
+	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
@@ -56,7 +72,7 @@ func (h *Handler) GetTaskGroup(
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	result, err := h.taskSvc.GetTaskGroup(ctx, userID, sessionID, groupID)
+	result, err := h.taskSvc.GetTaskGroup(ctx, userID, groupID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
@@ -65,33 +81,6 @@ func (h *Handler) GetTaskGroup(
 	}
 
 	return &GetTaskGroupOutput{Body: result}, nil
-}
-
-type CreateTaskGroupInput struct {
-	Body CreateTaskGroup
-}
-
-type CreateTaskGroupOutput struct {
-	Body *CreateTaskGroupResponse
-}
-
-func (h *Handler) CreateTaskGroup(
-	ctx context.Context,
-	input *CreateTaskGroupInput,
-) (*CreateTaskGroupOutput, error) {
-	userID := session.UserIDFromContext(ctx)
-	if userID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	tg, err := h.taskSvc.CreateTaskGroup(ctx, userID, &input.Body)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-
-	return &CreateTaskGroupOutput{
-		Body: &CreateTaskGroupResponse{ID: tg.ID},
-	}, nil
 }
 
 type PatchTaskGroupInput struct {
@@ -125,29 +114,55 @@ func (h *Handler) PatchTaskGroup(
 	return &PatchTaskGroupOutput{Body: tg}, nil
 }
 
-type DeleteTaskGroupInput struct {
-	GroupID string `path:"group_id"`
+type GetTaskInput struct {
+	TaskID uuid.UUID `path:"task_id"`
 }
 
-func (h *Handler) DeleteTaskGroup(
+type GetTaskOutput struct {
+	Body *Task
+}
+
+func (h *Handler) GetTask(
 	ctx context.Context,
-	input *DeleteTaskGroupInput,
-) (*struct{}, error) {
+	input *GetTaskInput,
+) (*GetTaskOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	groupID, err := uuid.Parse(input.GroupID)
+	task, err := h.taskSvc.GetTask(ctx, userID, input.TaskID)
 	if err != nil {
-		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
-	}
-
-	if err := h.taskSvc.DeleteTaskGroup(ctx, userID, groupID); err != nil {
 		return nil, handleServiceError(err)
 	}
 
-	return nil, nil
+	return &GetTaskOutput{Body: task}, nil
+}
+
+type PatchTaskInput struct {
+	TaskID uuid.UUID `path:"task_id"`
+	Body   TaskUpdate
+}
+
+type PatchTaskOutput struct {
+	Body *UpdatedTask
+}
+
+func (h *Handler) PatchTask(
+	ctx context.Context,
+	input *PatchTaskInput,
+) (*PatchTaskOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	task, err := h.taskSvc.UpdateTask(ctx, userID, input.TaskID, &input.Body)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	return &PatchTaskOutput{Body: task}, nil
 }
 
 type UploadTemplateInput struct {
@@ -198,8 +213,7 @@ func (h *Handler) GetTasks(
 	input *GetTasksInput,
 ) (*GetTasksOutput, error) {
 	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
+	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
@@ -208,7 +222,7 @@ func (h *Handler) GetTasks(
 		return nil, huma.Error400BadRequest("parsing group_id: " + err.Error())
 	}
 
-	taskList, err := h.taskSvc.GetTasks(ctx, userID, sessionID, groupID)
+	taskList, err := h.taskSvc.GetTasks(ctx, userID, groupID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}

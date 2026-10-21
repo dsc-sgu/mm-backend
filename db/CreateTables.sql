@@ -3,8 +3,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE user_role AS ENUM ('ADMIN', 'USER');
 CREATE TYPE course_member_role AS ENUM ('STUDENT', 'TEACHER');
 CREATE TYPE attempt_state AS ENUM ('submitted', 'graded');
-CREATE TYPE block_type AS ENUM ('text', 'quiz', 'task');
-CREATE TYPE snapshot_status AS ENUM ('draft', 'published', 'stale');
 
 CREATE TABLE unit_types (
     id uuid PRIMARY KEY,
@@ -43,12 +41,10 @@ CREATE TABLE disciplines (
 CREATE TABLE courses (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     discipline_id uuid,
-    active_snapshot_id uuid, -- REFERENCES course_snapshots(id)
     owner_id uuid NOT NULL REFERENCES users(id),
     name varchar(128) NOT NULL,
     display_name varchar(128) NOT NULL,
     -- Service info
-    version integer NOT NULL DEFAULT 0,
     created_at timestamp NOT NULL,
     deleted_at timestamp,
 
@@ -57,40 +53,57 @@ CREATE TABLE courses (
         UNIQUE (discipline_id, name)
 );
 
-CREATE TABLE course_snapshots (
+-- NOTE(nrydanov): a block is a stack of versions under one id. The course a
+-- student sees is the latest published (draft = false) version of every
+-- block that is not deleted. A published version is never changed; an edit
+-- creates a draft version owned by its author, and publishing turns the
+-- author's drafts into published versions, merging them with whatever was
+-- published since base_version. A deleted block keeps its versions and gets
+-- one more with deleted = true.
+CREATE TABLE blocks (
+    id uuid NOT NULL DEFAULT uuidv7(),
+    version integer NOT NULL CHECK (version > 0),
+    course_id uuid NOT NULL REFERENCES courses(id),
+    -- NOTE(nrydanov): the frontend names block types; "task" is the only one
+    -- the backend gives a meaning to
+    block_type varchar(64) NOT NULL CHECK (block_type ~ '^[a-z0-9-]+$'),
+    -- content the backend does not read, except for a task block, whose data
+    -- holds the task's settings (statement, patterns, grade, attempt limit,
+    -- schedule) and so is versioned and published with the block
+    data jsonb,
+    -- NOTE(Ezhkin-Kot): fractional indexing
+    position varchar(64) NOT NULL COLLATE "C",
+    draft boolean NOT NULL,
+    deleted boolean NOT NULL DEFAULT false,
+    created_by uuid NOT NULL REFERENCES users(id),
+    -- the published version a draft was copied from, NULL for a new block;
+    -- publishing compares base, head and the draft field by field
+    base_version integer,
+
+    PRIMARY KEY (id, version)
+);
+
+CREATE INDEX idx_blocks_published ON blocks(course_id, id, version DESC) WHERE (NOT draft);
+CREATE INDEX idx_blocks_drafts ON blocks(course_id, created_by) WHERE (draft);
+
+-- NOTE(nrydanov): a checkpoint records which block versions a publish made
+-- visible, as the full map of the course's live blocks at that moment. It is
+-- history only: the current state is read from blocks, and a checkpoint is
+-- used to list publishes and to restore one of them.
+CREATE TABLE checkpoints (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     course_id uuid NOT NULL REFERENCES courses(id),
-    version integer NOT NULL,
-    status snapshot_status NOT NULL DEFAULT 'draft',
     created_by uuid NOT NULL REFERENCES users(id),
     created_at timestamp NOT NULL
 );
 
-ALTER TABLE courses
-ADD CONSTRAINT fk_courses_active_snapshot
-FOREIGN KEY (active_snapshot_id) REFERENCES course_snapshots(id);
+CREATE TABLE checkpoint_blocks (
+    checkpoint_id uuid NOT NULL REFERENCES checkpoints(id),
+    block_id uuid NOT NULL,
+    version integer NOT NULL,
 
-CREATE UNIQUE INDEX idx_course_published_snapshots ON course_snapshots(course_id, version) WHERE (status = 'published');
-
-CREATE TABLE blocks (
-    id uuid PRIMARY KEY DEFAULT uuidv7(),
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
-    block_type block_type NOT NULL,
-    data jsonb NOT NULL,
-    -- NOTE(Ezhkin-Kot): fractional indexing
-    position varchar(64) NOT NULL COLLATE "C",
-    deleted_at timestamp,
-
-    -- NOTE(nrydanov): required so tasks can reference (id, block_type) via FK
-    UNIQUE (id, block_type)
-);
-
--- NOTE(Ezhkin-Kot): pessimistic locking for course editing
-CREATE TABLE course_locks (
-    course_id uuid PRIMARY KEY REFERENCES courses(id),
-    user_id uuid NOT NULL REFERENCES users(id),
-    session_id uuid NOT NULL,
-    expires_at timestamp NOT NULL
+    PRIMARY KEY (checkpoint_id, block_id),
+    FOREIGN KEY (block_id, version) REFERENCES blocks(id, version)
 );
 
 -- NOTE(Ezhkin-Kot): data for invite links to courses
@@ -194,39 +207,38 @@ CREATE TABLE task_groups (
     deleted_at timestamp
 );
 
--- NOTE(Ezhkin-Kot): task_groups is soft-deleted (like blocks) rather than
--- hard-deleted, since tasks from any snapshot generation, including old
--- history, may still reference a group; a partial index keeps names unique
--- only among the still-live groups, so a deleted name can be reused.
+-- NOTE(Ezhkin-Kot): task_groups is soft-deleted rather than hard-deleted,
+-- since tasks linked from old block versions may still reference a group; a
+-- partial index keeps names unique only among the still-live groups, so a
+-- deleted name can be reused.
 CREATE UNIQUE INDEX idx_task_groups_course_name ON task_groups(course_id, name) WHERE (deleted_at IS NULL);
 
--- NOTE(nrydanov): task is a subtype of block — the composite FK plus
--- CHECK (block_type = 'task') keeps a task attachable only to a task-type block
--- NOTE(Ezhkin-Kot): a task's block gets a fresh id every time its snapshot is
--- copied (course-editing draft creation / snapshot switch), so a task's own
--- row is copied alongside it.
+-- NOTE(nrydanov): a task row is the task's identity: its id stays the same
+-- while its block is edited and attempts keep pointing at it. Everything a
+-- teacher edits about the task lives in the data of its block and is
+-- versioned with it. A course reaches its tasks through task_blocks. A task
+-- name is unique among the tasks of its group in one course; the database
+-- cannot express that, so the block service checks it.
 CREATE TABLE tasks (
-    block_id uuid PRIMARY KEY,
-    block_type block_type NOT NULL DEFAULT 'task',
-    snapshot_id uuid NOT NULL REFERENCES course_snapshots(id),
+    id uuid PRIMARY KEY DEFAULT uuidv7(),
     task_group_id uuid NOT NULL REFERENCES task_groups(id),
+    -- the key a git push names the task by; set at creation and never changed
     name varchar(128) NOT NULL,
-    -- glob patterns matching the files that count as this task's solution
-    patterns text[] NOT NULL DEFAULT '{}',
-    max_grade real NOT NULL,
-    max_attempts integer NOT NULL,
-    available_at timestamptz,
-    deadline_at timestamptz,
+    deleted_at timestamp
+);
 
-    FOREIGN KEY (block_id, block_type) REFERENCES blocks(id, block_type),
-    CHECK (block_type = 'task'),
-    UNIQUE (snapshot_id, task_group_id, name)
+-- NOTE(nrydanov): links a task-type block to its task. The link is per block
+-- id, shared by all the block's versions, so it cannot reference blocks(id,
+-- version).
+CREATE TABLE task_blocks (
+    block_id uuid PRIMARY KEY,
+    task_id uuid NOT NULL REFERENCES tasks(id)
 );
 
 CREATE TABLE attempts (
     id uuid NOT NULL PRIMARY KEY DEFAULT uuidv7(),
     user_id uuid NOT NULL REFERENCES users(id),
-    task_id uuid NOT NULL REFERENCES tasks(block_id)
+    task_id uuid NOT NULL REFERENCES tasks(id)
 );
 
 CREATE TABLE attempt_transitions (

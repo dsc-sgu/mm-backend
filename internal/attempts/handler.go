@@ -26,11 +26,17 @@ func handleServiceError(err error) error {
 	switch {
 	case errors.Is(err, ErrPermissionDenied):
 		return huma.Error403Forbidden(err.Error())
+	case errors.Is(err, ErrAttemptsExhausted):
+		return huma.Error409Conflict(err.Error())
 	case errors.Is(err, ErrDifferentUsers),
 		errors.Is(err, ErrDifferentTasks),
 		errors.Is(err, ErrPatternMismatch),
 		errors.Is(err, ErrEmptyArchive):
 		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, pkggit.ErrInvalidArchive):
+		return huma.Error400BadRequest(err.Error())
+	case errors.Is(err, pkggit.ErrArchiveTooLarge):
+		return huma.Error413RequestEntityTooLarge(err.Error())
 	}
 	return huma.Error500InternalServerError(err.Error())
 }

@@ -24,23 +24,23 @@ func NewRebalanceWorker(repo Repo, queueSize int) *RebalanceWorker {
 	}
 }
 
-// Enqueue schedules a rebalance for snapshotID, unless one is already
+// Enqueue schedules a rebalance for courseID, unless one is already
 // queued or in progress for it
-func (w *RebalanceWorker) Enqueue(snapshotID uuid.UUID) {
+func (w *RebalanceWorker) Enqueue(courseID uuid.UUID) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.pending[snapshotID] {
+	if w.pending[courseID] {
 		return
 	}
 
 	select {
-	case w.queue <- snapshotID:
-		w.pending[snapshotID] = true
+	case w.queue <- courseID:
+		w.pending[courseID] = true
 	default:
 		zap.L().Warn(
 			"rebalance queue full, dropping trigger",
-			zap.String("snapshot_id", snapshotID.String()),
+			zap.String("course_id", courseID.String()),
 		)
 	}
 }
@@ -53,11 +53,11 @@ func (w *RebalanceWorker) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case snapshotID := <-w.queue:
-			w.rebalance(ctx, snapshotID)
+		case courseID := <-w.queue:
+			w.rebalance(ctx, courseID)
 
 			w.mu.Lock()
-			delete(w.pending, snapshotID)
+			delete(w.pending, courseID)
 			w.mu.Unlock()
 		}
 	}
@@ -65,16 +65,16 @@ func (w *RebalanceWorker) Run(ctx context.Context) {
 
 // rebalance shrinks overgrown position lines,
 // distributing them evenly across the available alphabet
-func (w *RebalanceWorker) rebalance(ctx context.Context, snapshotID uuid.UUID) {
+func (w *RebalanceWorker) rebalance(ctx context.Context, courseID uuid.UUID) {
 	zap.L().
-		Info("Starting position rebalancing for snapshot", zap.String("snapshot_id", snapshotID.String()))
+		Info("Starting position rebalancing for course", zap.String("course_id", courseID.String()))
 
-	if err := w.repo.RebalanceBlockPositions(ctx, snapshotID); err != nil {
+	if err := w.repo.RebalanceBlockPositions(ctx, courseID); err != nil {
 		zap.L().
 			Error("rebalance positions failed", zap.Error(err))
 		return
 	}
 
 	zap.L().
-		Info("Position rebalancing successfully finished", zap.String("snapshot_id", snapshotID.String()))
+		Info("Position rebalancing successfully finished", zap.String("course_id", courseID.String()))
 }

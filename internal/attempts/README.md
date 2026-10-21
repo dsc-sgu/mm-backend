@@ -18,11 +18,11 @@ There are two ways to create an attempt:
 
 ### Mask gate
 
-A task may define file patterns (`tasks.patterns`). A submission is rejected unless at least one of its files matches. Patterns live only in the database; both the SSH push rules and the web upload read them from there and match with the same `pkg/git.CompiledPatterns.MatchAny`. The web upload checks the uploaded files; a push checks the whole tree of the tagged commit.
+A task may define file patterns (`patterns` in the data of its published block). A submission is rejected unless at least one of its files matches. Patterns live only in the database; both the SSH push rules and the web upload read them from there and match with the same `pkg/git.CompiledPatterns.MatchAny`. The web upload checks the uploaded files; a push checks the whole tree of the tagged commit.
 
 ### Database structure
 
-An attempt (`attempts` table) links a user to a task (`tasks.block_id`) and has a chain of state transitions (`attempt_transitions` table). The transition data stores the commit hash from the git repository.
+An attempt (`attempts` table) links a user to a task (`tasks.id`) and has a chain of state transitions (`attempt_transitions` table). The transition data stores the commit hash from the git repository.
 
 ## Push Flow
 

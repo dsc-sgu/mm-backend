@@ -9,26 +9,22 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
-	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
 
 type Handler struct {
 	courseService     *Service
-	lockService       *locks.Service
 	membershipService *membership.Service
 	userService       *users.Service
 }
 
 func NewHandler(
 	courseService *Service,
-	lockService *locks.Service,
 	membershipService *membership.Service,
 	userService *users.Service,
 ) *Handler {
 	return &Handler{
 		courseService:     courseService,
-		lockService:       lockService,
 		membershipService: membershipService,
 		userService:       userService,
 	}
@@ -142,6 +138,9 @@ func (h *Handler) GetCourse(
 
 type GetCourseContentInput struct {
 	CourseID uuid.UUID `path:"course_id"`
+	// Draft asks for the caller's own draft versions over the published
+	// blocks; teachers only.
+	Draft bool `query:"draft"`
 }
 
 type GetCourseContentOutput struct {
@@ -161,6 +160,7 @@ func (h *Handler) GetCourseContent(
 		ctx,
 		input.CourseID,
 		userID,
+		input.Draft,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
@@ -169,122 +169,110 @@ func (h *Handler) GetCourseContent(
 	return &GetCourseContentOutput{Body: content}, nil
 }
 
-type GetSnapshotBlocksInput struct {
-	CourseID   uuid.UUID `path:"course_id"`
-	SnapshotID uuid.UUID `path:"snapshot_id"`
-}
-
-type GetSnapshotBlocksOutput struct {
-	Body []*blocks.Block
-}
-
-// GetSnapshotBlocks returns all blocks in a specific snapshot
-func (h *Handler) GetSnapshotBlocks(
-	ctx context.Context,
-	input *GetSnapshotBlocksInput,
-) (*GetSnapshotBlocksOutput, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	linkedBlocks, err := h.courseService.GetSnapshotBlocks(
-		ctx,
-		input.SnapshotID,
-		input.CourseID,
-		userID,
-		sessionID,
-	)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-
-	return &GetSnapshotBlocksOutput{Body: linkedBlocks}, nil
-}
-
-type GetCourseSnapshotsInput struct {
+type GetCheckpointsInput struct {
 	CourseID uuid.UUID `path:"course_id"`
 }
 
-type GetCourseSnapshotsOutput struct {
-	Body []SnapshotMetadataResponse
+type GetCheckpointsOutput struct {
+	Body []CheckpointResponse
 }
 
-func (h *Handler) GetCourseSnapshots(
+// GetCheckpoints lists the publishes of a course, latest first
+func (h *Handler) GetCheckpoints(
 	ctx context.Context,
-	input *GetCourseSnapshotsInput,
-) (*GetCourseSnapshotsOutput, error) {
+	input *GetCheckpointsInput,
+) (*GetCheckpointsOutput, error) {
 	userID := session.UserIDFromContext(ctx)
 	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	list, err := h.courseService.GetPublishedSnapshots(
-		ctx,
-		input.CourseID,
-		userID,
-	)
+	list, err := h.courseService.GetCheckpoints(ctx, input.CourseID, userID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
 	resolver := newUserSummaryResolver(h.userService)
-	result := make([]SnapshotMetadataResponse, len(list))
-	for i, s := range list {
-		result[i] = SnapshotMetadataResponse{
-			ID:        s.ID,
-			CourseID:  s.CourseID,
-			Version:   s.Version,
-			Status:    s.Status,
-			CreatedBy: resolver.resolve(ctx, s.CreatedBy),
-			CreatedAt: s.CreatedAt,
+	result := make([]CheckpointResponse, len(list))
+	for i, c := range list {
+		result[i] = CheckpointResponse{
+			ID:        c.ID,
+			CourseID:  c.CourseID,
+			CreatedBy: resolver.resolve(ctx, c.CreatedBy),
+			CreatedAt: c.CreatedAt,
 		}
 	}
 
-	return &GetCourseSnapshotsOutput{Body: result}, nil
+	return &GetCheckpointsOutput{Body: result}, nil
 }
 
-type GetCourseSnapshotInput struct {
-	CourseID   uuid.UUID `path:"course_id"`
-	SnapshotID uuid.UUID `path:"snapshot_id"`
+type GetCheckpointBlocksInput struct {
+	CourseID     uuid.UUID `path:"course_id"`
+	CheckpointID uuid.UUID `path:"checkpoint_id"`
 }
 
-type GetCourseSnapshotOutput struct {
-	Body *SnapshotMetadataResponse
+type GetCheckpointBlocksOutput struct {
+	Body []*blocks.Block
 }
 
-func (h *Handler) GetCourseSnapshot(
+// GetCheckpointBlocks returns the course's blocks as a publish left them
+func (h *Handler) GetCheckpointBlocks(
 	ctx context.Context,
-	input *GetCourseSnapshotInput,
-) (*GetCourseSnapshotOutput, error) {
+	input *GetCheckpointBlocksInput,
+) (*GetCheckpointBlocksOutput, error) {
 	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
+	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	s, err := h.courseService.GetCourseSnapshot(
+	linkedBlocks, err := h.courseService.GetCheckpointBlocks(
 		ctx,
-		input.SnapshotID,
 		input.CourseID,
+		input.CheckpointID,
 		userID,
-		sessionID,
 	)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
-	return &GetCourseSnapshotOutput{
-		Body: &SnapshotMetadataResponse{
-			ID:        s.ID,
-			CourseID:  s.CourseID,
-			Version:   s.Version,
-			Status:    s.Status,
-			CreatedBy: resolveUserSummary(ctx, h.userService, s.CreatedBy),
-			CreatedAt: s.CreatedAt,
-		},
-	}, nil
+	return &GetCheckpointBlocksOutput{Body: linkedBlocks}, nil
+}
+
+type RestoreCheckpointInput struct {
+	CourseID     uuid.UUID `path:"course_id"`
+	CheckpointID uuid.UUID `path:"checkpoint_id"`
+}
+
+type RestoreCheckpointOutput struct {
+	Body *CheckpointResponse
+}
+
+// RestoreCheckpoint publishes the course as it was at the checkpoint
+func (h *Handler) RestoreCheckpoint(
+	ctx context.Context,
+	input *RestoreCheckpointInput,
+) (*RestoreCheckpointOutput, error) {
+	userID := session.UserIDFromContext(ctx)
+	if userID == uuid.Nil {
+		return nil, huma.Error401Unauthorized("")
+	}
+
+	c, err := h.courseService.RestoreCheckpoint(
+		ctx,
+		input.CourseID,
+		input.CheckpointID,
+		userID,
+	)
+	if err != nil {
+		return nil, handleServiceError(err)
+	}
+
+	return &RestoreCheckpointOutput{Body: &CheckpointResponse{
+		ID:        c.ID,
+		CourseID:  c.CourseID,
+		CreatedBy: resolveUserSummary(ctx, h.userService, c.CreatedBy),
+		CreatedAt: c.CreatedAt,
+	}}, nil
 }
 
 type PatchCourseInput struct {
@@ -338,164 +326,52 @@ func (h *Handler) DeleteCourse(
 	return nil, nil
 }
 
-type LockCourseInput struct {
+type PublishInput struct {
 	CourseID uuid.UUID `path:"course_id"`
 }
 
-type LockCourseOutput struct {
-	Body *InitLockResult
+type PublishOutput struct {
+	Body *CheckpointResponse
 }
 
-func (h *Handler) LockCourse(
+// Publish publishes the caller's draft blocks of the course
+func (h *Handler) Publish(
 	ctx context.Context,
-	input *LockCourseInput,
-) (*LockCourseOutput, error) {
+	input *PublishInput,
+) (*PublishOutput, error) {
 	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
+	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	lockSession := &locks.LockSession{
-		CourseID:  input.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	result, holderID, err := h.courseService.LockAndInitDraft(ctx, lockSession)
-	if err != nil {
-		if holderID != nil {
-			return nil, h.lockConflictError(ctx, *holderID, err)
-		}
-		return nil, handleServiceError(err)
-	}
-
-	return &LockCourseOutput{Body: result}, nil
-}
-
-type HeartbeatInput struct {
-	CourseID uuid.UUID `path:"course_id"`
-}
-
-func (h *Handler) Heartbeat(
-	ctx context.Context,
-	input *HeartbeatInput,
-) (*struct{}, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	lockSession := &locks.LockSession{
-		CourseID:  input.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	holderID, err := h.lockService.RefreshLock(ctx, lockSession)
-	if err != nil {
-		if holderID != nil {
-			return nil, h.lockConflictError(ctx, *holderID, err)
-		}
-		return nil, handleServiceError(err)
-	}
-
-	return nil, nil
-}
-
-type SwitchSnapshotInput struct {
-	CourseID uuid.UUID `path:"course_id"`
-	Body     struct {
-		TargetSnapshotID uuid.UUID `json:"targetSnapshotID"`
-	}
-}
-
-func (h *Handler) SwitchSnapshot(
-	ctx context.Context,
-	input *SwitchSnapshotInput,
-) (*struct{}, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	lockSession := &locks.LockSession{
-		CourseID:  input.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	err := h.courseService.SwitchSnapshot(
-		ctx,
-		lockSession,
-		input.Body.TargetSnapshotID,
-	)
+	c, err := h.courseService.Publish(ctx, input.CourseID, userID)
 	if err != nil {
 		return nil, handleServiceError(err)
 	}
 
-	return nil, nil
-}
-
-type PublishDraftInput struct {
-	CourseID uuid.UUID `path:"course_id"`
-	Body     struct {
-		DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
-	}
-}
-
-func (h *Handler) PublishDraft(
-	ctx context.Context,
-	input *PublishDraftInput,
-) (*struct{}, error) {
-	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
-		return nil, huma.Error401Unauthorized("")
-	}
-
-	lockSession := &locks.LockSession{
-		CourseID:  input.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	err := h.courseService.PublishDraft(
-		ctx,
-		lockSession,
-		input.Body.DraftSnapshotID,
-	)
-	if err != nil {
-		return nil, handleServiceError(err)
-	}
-
-	return nil, nil
+	return &PublishOutput{Body: &CheckpointResponse{
+		ID:        c.ID,
+		CourseID:  c.CourseID,
+		CreatedBy: resolveUserSummary(ctx, h.userService, c.CreatedBy),
+		CreatedAt: c.CreatedAt,
+	}}, nil
 }
 
 type CancelEditInput struct {
 	CourseID uuid.UUID `path:"course_id"`
 }
 
+// CancelEdit discards the caller's draft blocks of the course
 func (h *Handler) CancelEdit(
 	ctx context.Context,
 	input *CancelEditInput,
 ) (*struct{}, error) {
 	userID := session.UserIDFromContext(ctx)
-	sessionID := session.SessionIDFromContext(ctx)
-	if userID == uuid.Nil || sessionID == uuid.Nil {
+	if userID == uuid.Nil {
 		return nil, huma.Error401Unauthorized("")
 	}
 
-	lockSession := &locks.LockSession{
-		CourseID:  input.CourseID,
-		UserID:    userID,
-		SessionID: sessionID,
-	}
-
-	err := h.courseService.CancelEdit(ctx, lockSession)
-	if err != nil {
+	if err := h.courseService.CancelEdit(ctx, input.CourseID, userID); err != nil {
 		return nil, handleServiceError(err)
 	}
 

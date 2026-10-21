@@ -2,81 +2,197 @@ package blocks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 )
+
+// MemberChecker resolves a course membership, the same gate the rest of the
+// course uses (membership.Service.CheckMember).
+type MemberChecker interface {
+	CheckMember(
+		ctx context.Context,
+		userID, courseID uuid.UUID,
+	) (*membership.Member, error)
+}
 
 type Service struct {
 	repo              Repo
+	members           MemberChecker
 	rebalanceWorker   *RebalanceWorker
 	lexoRankThreshold int
 }
 
 func NewService(
 	repo Repo,
+	members MemberChecker,
 	rebalanceWorker *RebalanceWorker,
 	lexoRankThreshold int,
 ) *Service {
 	return &Service{
 		repo:              repo,
+		members:           members,
 		rebalanceWorker:   rebalanceWorker,
 		lexoRankThreshold: lexoRankThreshold,
 	}
 }
 
 var (
-	ErrSnapshotNotFound = errors.New("snapshot not found")
-	ErrSnapshotNotDraft = errors.New(
-		"cannot modify blocks in a non-draft snapshot",
-	)
+	ErrCourseNotFound           = errors.New("course not found")
 	ErrInvalidBlockForMoveAfter = errors.New(
 		"block cannot be moved after itself",
 	)
-	ErrBlockNotFound      = errors.New("block not found")
+	ErrBlockNotFound        = errors.New("block not found")
+	ErrBlockVersionNotFound = errors.New(
+		"the block has no published version with this number",
+	)
+	ErrDraftVersionConflict = errors.New(
+		"the draft of this block is at another version",
+	)
 	ErrAfterBlockNotFound = errors.New(
-		"after_block_id does not exist in this snapshot",
+		"after_block_id does not exist in this course",
 	)
 	ErrPermissionDenied  = errors.New("permission denied")
 	ErrTaskGroupNotFound = errors.New("task group not found")
-	ErrInvalidTaskBlock  = errors.New("task data supplied for a non-task block")
+	ErrTaskNameTaken     = errors.New(
+		"a task with this name already exists in the task group",
+	)
+	ErrTaskGroupNameTaken = errors.New(
+		"a task group with this name already exists in the course",
+	)
+	ErrInvalidTaskGroup = errors.New(
+		"task group must have either an id or a new name of 1 to 128 characters",
+	)
+	ErrInvalidBlockType = errors.New(
+		"block type must be 1 to 64 characters of a-z, 0-9 and -",
+	)
+	ErrInvalidBlockData = errors.New(
+		"data must be a JSON object with an integer version, at most 64 KiB, and is not allowed for task blocks",
+	)
+	ErrBlockTypeChanged = errors.New("block type cannot be changed")
 )
 
+const (
+	taskBlockType    = "task"
+	maxBlockDataSize = 64 << 10
+	maxTaskGroupName = 128
+)
+
+var blockTypeRegexp = regexp.MustCompile(`^[a-z0-9-]{1,64}$`)
+
+func validateTaskGroupRef(ref TaskGroupRef) error {
+	if (ref.ID == nil) == (ref.New == nil) {
+		return ErrInvalidTaskGroup
+	}
+	if ref.New != nil &&
+		(ref.New.Name == "" || len([]rune(ref.New.Name)) > maxTaskGroupName) {
+		return ErrInvalidTaskGroup
+	}
+	return nil
+}
+
+// validateBlockData checks the only things the backend knows about a block's
+// content: it is a JSON object carrying an integer version and is not too
+// large. The rest of it belongs to the frontend.
+func validateBlockData(data json.RawMessage) error {
+	if len(data) > maxBlockDataSize {
+		return ErrInvalidBlockData
+	}
+	var content map[string]json.RawMessage
+	if err := json.Unmarshal(data, &content); err != nil || content == nil {
+		return ErrInvalidBlockData
+	}
+	var version int64
+	if err := json.Unmarshal(content["version"], &version); err != nil {
+		return ErrInvalidBlockData
+	}
+	return nil
+}
+
+// requireTeacher ensures userID is an active teacher of courseID.
+func (s *Service) requireTeacher(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) error {
+	member, err := s.members.CheckMember(ctx, userID, courseID)
+	if err != nil {
+		return err
+	}
+	if member.Role != membership.TeacherRole {
+		return ErrPermissionDenied
+	}
+	return nil
+}
+
 // CreateBlock creates a block (and, if it's a task-type block, its task data
-// alongside it), enqueueing a lexorank rebalance if positions have grown too long.
+// alongside it) as a draft of the actor, enqueueing a lexorank rebalance if
+// positions have grown too long.
 func (s *Service) CreateBlock(
 	ctx context.Context,
 	command CreateBlockCommand,
 ) (*CreatedBlock, error) {
+	if err := s.requireTeacher(ctx, command.Actor.UserID, command.CourseID); err != nil {
+		return nil, err
+	}
+	if !blockTypeRegexp.MatchString(command.BlockType) {
+		return nil, ErrInvalidBlockType
+	}
+	if command.BlockType == taskBlockType {
+		if len(command.Data) > 0 || command.Task == nil {
+			return nil, ErrInvalidBlockData
+		}
+		if err := validateTaskGroupRef(command.Task.TaskGroup); err != nil {
+			return nil, err
+		}
+	} else if err := validateBlockData(command.Data); err != nil {
+		return nil, err
+	}
+
 	result, err := s.repo.CreateBlock(ctx, command)
 	if err != nil {
 		return nil, err
 	}
 
 	if result.PositionLength > s.lexoRankThreshold {
-		s.rebalanceWorker.Enqueue(result.SnapshotID)
+		s.rebalanceWorker.Enqueue(command.CourseID)
 	}
 
 	return result, nil
 }
 
-// PatchBlock updates a block's own data and, if it's a task-type block, its
-// task fields.
+// PatchBlock updates a block's own data in the actor's draft. A task block
+// has none.
 func (s *Service) PatchBlock(
 	ctx context.Context,
 	command PatchBlockCommand,
 ) (*PatchedBlock, error) {
+	if err := s.requireTeacher(ctx, command.Actor.UserID, command.CourseID); err != nil {
+		return nil, err
+	}
+	if len(command.Data) > 0 {
+		if err := validateBlockData(command.Data); err != nil {
+			return nil, err
+		}
+	}
 	return s.repo.PatchBlock(ctx, command)
 }
 
-// MoveBlock changes block's position so that it comes after afterBlockID
+// MoveBlock changes the block's position in the actor's draft so that it
+// comes after afterBlockID
 func (s *Service) MoveBlock(
 	ctx context.Context,
 	editCtx EditContext,
 	ref BlockRef,
 	afterBlockID *uuid.UUID,
 ) error {
+	if err := s.requireTeacher(ctx, editCtx.UserID, ref.CourseID); err != nil {
+		return err
+	}
 	if afterBlockID != nil && *afterBlockID == ref.BlockID {
 		return ErrInvalidBlockForMoveAfter
 	}
@@ -88,33 +204,71 @@ func (s *Service) MoveBlock(
 
 	// Check if rebalance is needed
 	if len(newPosition) > s.lexoRankThreshold {
-		s.rebalanceWorker.Enqueue(ref.SnapshotID)
+		s.rebalanceWorker.Enqueue(ref.CourseID)
 	}
 
 	return nil
 }
 
+// DeleteBlockByID deletes the block in the actor's draft.
 func (s *Service) DeleteBlockByID(
 	ctx context.Context,
 	editCtx EditContext,
 	ref BlockRef,
 ) error {
+	if err := s.requireTeacher(ctx, editCtx.UserID, ref.CourseID); err != nil {
+		return err
+	}
 	return s.repo.DeleteBlockByID(ctx, editCtx, ref)
 }
 
+// GetBlockByID returns the block as userID sees it: a teacher sees their
+// own draft version if they have one, anyone else the published version.
 func (s *Service) GetBlockByID(
 	ctx context.Context,
-	editCtx EditContext,
+	userID uuid.UUID,
 	ref BlockRef,
 ) (*Block, error) {
-	return s.repo.GetBlockByID(ctx, editCtx, ref)
+	viewerID, err := s.viewer(ctx, userID, ref.CourseID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.GetBlockByID(ctx, viewerID, ref)
 }
 
-func (s *Service) GetAllBlocksBySnapshotID(
+// GetCourseBlocks lists the live blocks of a course in order. With draft
+// set, a teacher sees their own draft versions over the published ones.
+func (s *Service) GetCourseBlocks(
 	ctx context.Context,
-	snapshotID uuid.UUID,
+	courseID, userID uuid.UUID,
+	draft bool,
 ) ([]*Block, error) {
-	return s.repo.GetAllBlocksBySnapshotID(ctx, snapshotID)
+	viewerID := uuid.Nil
+	if draft {
+		if err := s.requireTeacher(ctx, userID, courseID); err != nil {
+			return nil, err
+		}
+		viewerID = userID
+	} else if _, err := s.members.CheckMember(ctx, userID, courseID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetCourseBlocks(ctx, courseID, viewerID)
+}
+
+// viewer resolves whose drafts a reader of courseID sees: their own if they
+// are a teacher, nobody's (uuid.Nil) if they are a student.
+func (s *Service) viewer(
+	ctx context.Context,
+	userID, courseID uuid.UUID,
+) (uuid.UUID, error) {
+	member, err := s.members.CheckMember(ctx, userID, courseID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if member.Role == membership.TeacherRole {
+		return userID, nil
+	}
+	return uuid.Nil, nil
 }
 
 // Fractional indexing

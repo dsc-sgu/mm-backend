@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	mobynetwork "github.com/moby/moby/api/types/network"
@@ -29,7 +30,6 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
 type TestUser struct {
@@ -136,8 +136,11 @@ func initPostgres(
 				FileMode:          0o644,
 			},
 		},
+		// The postgres image logs readiness twice: first the temporary
+		// server that runs the init scripts, then the real one.
 		WaitingFor: wait.ForAll(
-			wait.ForLog("database system is ready to accept connections"),
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2),
 			wait.ForListeningPort(pgPort),
 		),
 		Networks:       []string{net.Name},
@@ -201,8 +204,8 @@ func clearPostgres(t *testing.T) {
 
 	_, err := testPostgres.Exec(`
 		TRUNCATE TABLE
-			course_locks,
-			course_snapshots,
+			checkpoint_blocks,
+			checkpoints,
 			blocks,
 			courses,
 			course_members,
@@ -448,21 +451,41 @@ func CreateTestCourse(
 	return createdCourse.ID
 }
 
+// CreateTestBlock creates a paragraph block in testUser's draft of the
+// course and returns its id.
 func CreateTestBlock(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
-	courseID, snapshotID uuid.UUID,
+	courseID uuid.UUID,
 ) uuid.UUID {
-	return CreateTestBlockAfter(t, port, testUser, courseID, snapshotID, nil)
+	return CreateTestBlockAfter(t, port, testUser, courseID, nil)
 }
 
 func CreateTestBlockAfter(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
-	courseID, snapshotID uuid.UUID,
+	courseID uuid.UUID,
 	afterBlockID *uuid.UUID,
+) uuid.UUID {
+	return CreateTestBlockWithData(
+		t,
+		port,
+		testUser,
+		courseID,
+		afterBlockID,
+		`{"version":1}`,
+	)
+}
+
+func CreateTestBlockWithData(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID uuid.UUID,
+	afterBlockID *uuid.UUID,
+	data string,
 ) uuid.UUID {
 	t.Helper()
 
@@ -474,8 +497,8 @@ func CreateTestBlockAfter(
 
 	blockBody, err := json.Marshal(blocks.CreateBlockCommand{
 		AfterBlockID: afterBlockID,
-		BlockType:    "text",
-		Data:         []byte("true"),
+		BlockType:    "paragraph",
+		Data:         []byte(data),
 	})
 	require.NoError(t, err)
 
@@ -505,26 +528,26 @@ func CreateTestBlockAfter(
 	return createdBlock.ID
 }
 
+// MoveBlockAfter moves a block in testUser's draft so that it comes after
+// afterBlockID, or first when afterBlockID is nil.
 func MoveBlockAfter(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
-	courseID, snapshotID, blockToMoveID uuid.UUID,
+	courseID, blockToMoveID uuid.UUID,
 	afterBlockID *uuid.UUID,
 ) {
 	t.Helper()
 
 	moveURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s/move",
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks/%s/move",
 		port.Port(),
 		courseID,
-		snapshotID,
 		blockToMoveID,
 	)
 
-	body, _ := json.Marshal(struct {
-		AfterBlockID *uuid.UUID `json:"afterBlockId"`
-	}{
+	body, _ := json.Marshal(blocks.MoveBlock{
+		Version:      blockVersion(t, port, testUser, courseID, blockToMoveID),
 		AfterBlockID: afterBlockID,
 	})
 
@@ -545,19 +568,20 @@ func MoveBlockAfter(
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+// GetBlockByID returns the block as testUser sees it: their own draft
+// version if they have one, else the published one.
 func GetBlockByID(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
-	courseID, snapshotID, blockID uuid.UUID,
+	courseID, blockID uuid.UUID,
 ) blocks.Block {
 	t.Helper()
 
 	getBlockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/snapshots/%s/blocks/%s",
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks/%s",
 		port.Port(),
 		courseID,
-		snapshotID,
 		blockID,
 	)
 
@@ -589,50 +613,41 @@ func GetBlockByID(
 	return returnedBlock
 }
 
-func CreateTestTaskGroup(
+// blockVersion returns the version of the block as testUser sees it, the
+// one an edit is sent from.
+func blockVersion(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID, blockID uuid.UUID,
+) int {
+	t.Helper()
+	return GetBlockByID(t, port, testUser, courseID, blockID).Version
+}
+
+// CreateTestTaskInNewGroup creates a task together with a new task group
+// named groupName and returns the ids of both.
+func CreateTestTaskInNewGroup(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
 	courseID uuid.UUID,
-	name string,
-) uuid.UUID {
+	groupName, name string,
+	patterns ...string,
+) (groupID, taskID uuid.UUID) {
 	t.Helper()
 
-	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks",
-		port.Port(),
-	)
-
-	body, err := json.Marshal(tasks.CreateTaskGroup{
-		CourseID: courseID,
-		Name:     name,
-		Data:     []byte("true"),
-	})
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(body))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := testUser.Client.Do(req)
-	require.NoError(t, err)
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var created tasks.CreateTaskGroupResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-
-	return created.ID
+	created := createTestTaskBlock(t, port, testUser, courseID, blocks.TaskGroupRef{
+		New: &blocks.NewTaskGroup{Name: groupName},
+	}, name, patterns)
+	require.NotNil(t, created.TaskGroupID)
+	return *created.TaskGroupID, created.TaskID
 }
 
-// CreateTestTask creates a task by creating a "task"-typed block in the
-// course's current draft, mirroring how the API unifies task and content
-// creation. Patterns are optional; with none the task accepts any files.
+// CreateTestTask creates a task in an existing group by creating a
+// "task"-typed block in the course's current draft, mirroring how the API
+// unifies task and content creation, and returns the task's id. Patterns are
+// optional; with none the task accepts any files.
 func CreateTestTask(
 	t *testing.T,
 	port *mobynetwork.Port,
@@ -643,6 +658,27 @@ func CreateTestTask(
 ) uuid.UUID {
 	t.Helper()
 
+	return createTestTaskBlock(t, port, testUser, courseID, blocks.TaskGroupRef{
+		ID: &groupID,
+	}, name, patterns).TaskID
+}
+
+type createdTestTask struct {
+	TaskID      uuid.UUID  `json:"taskID"`
+	TaskGroupID *uuid.UUID `json:"taskGroupID"`
+}
+
+func createTestTaskBlock(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID uuid.UUID,
+	group blocks.TaskGroupRef,
+	name string,
+	patterns []string,
+) createdTestTask {
+	t.Helper()
+
 	url := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s/blocks",
 		port.Port(),
@@ -651,13 +687,11 @@ func CreateTestTask(
 
 	body, err := json.Marshal(blocks.CreateBlockCommand{
 		BlockType: "task",
-		Data:      []byte("true"),
 		Task: &blocks.TaskData{
-			TaskGroupID: groupID,
-			Name:        name,
-			Patterns:    patterns,
-			MaxGrade:    100,
-			MaxAttempts: 5,
+			TaskGroup: group,
+			Name:      name,
+			Patterns:  patterns,
+			MaxGrade:  100,
 		},
 	})
 	require.NoError(t, err)
@@ -676,12 +710,11 @@ func CreateTestTask(
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
-	var created struct {
-		ID uuid.UUID `json:"id"`
-	}
+	var created createdTestTask
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	require.NotZero(t, created.TaskID)
 
-	return created.ID
+	return created
 }
 
 type sshIdentity struct {
@@ -759,12 +792,21 @@ func runGit(
 ) string {
 	t.Helper()
 
+	out, err := tryGit(dir, identity, args...)
+	require.NoError(t, err, out)
+
+	return out
+}
+
+// tryGit runs a git command in dir as identity's owner and returns its
+// combined output and error.
+func tryGit(dir string, identity sshIdentity, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(
 		os.Environ(),
 		fmt.Sprintf(
-			"GIT_SSH_COMMAND=ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
+			"GIT_SSH_COMMAND=ssh -F /dev/null -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
 			identity.privateKeyPath,
 		),
 		"GIT_AUTHOR_NAME=Test Student",
@@ -774,9 +816,7 @@ func runGit(
 	)
 
 	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(out))
-
-	return string(out)
+	return string(out), err
 }
 
 // CloneTestRepo clones a repository over SSH and returns the checkout path.
@@ -843,7 +883,7 @@ func UploadTestTemplate(
 	t.Helper()
 
 	url := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/tasks/%s/template",
+		"http://127.0.0.1:%s/api/v1/task-groups/%s/template",
 		port.Port(),
 		groupID,
 	)
@@ -940,44 +980,186 @@ func GetRoleInCourse(
 	return &roleResp.Role
 }
 
-type LockCourseResult struct {
-	InitType        string    `json:"initType"`
-	DraftSnapshotID uuid.UUID `json:"draftSnapshotID"`
-}
-
-func LockCourse(
+// PatchTestBlockData sets the data of a block in testUser's draft, editing
+// from the version they see, and returns the response status.
+func PatchTestBlockData(
 	t *testing.T,
 	port *mobynetwork.Port,
 	testUser *TestUser,
-	courseID uuid.UUID,
-) LockCourseResult {
+	courseID, blockID uuid.UUID,
+	data string,
+) int {
+	t.Helper()
+	return PatchTestBlockDataFrom(
+		t,
+		port,
+		testUser,
+		courseID,
+		blockID,
+		blockVersion(t, port, testUser, courseID, blockID),
+		data,
+	)
+}
+
+// PatchTestBlockDataFrom sets the data of a block in testUser's draft,
+// editing from the given version, and returns the response status.
+func PatchTestBlockDataFrom(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID, blockID uuid.UUID,
+	version int,
+	data string,
+) int {
 	t.Helper()
 
-	lockURL := fmt.Sprintf(
-		"http://127.0.0.1:%s/api/v1/courses/%s/lock",
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks/%s",
 		port.Port(),
 		courseID,
+		blockID,
 	)
-
-	lockReq, err := http.NewRequest(http.MethodPost, lockURL, nil)
+	body, err := json.Marshal(
+		blocks.PatchBlockCommand{Version: version, Data: json.RawMessage(data)},
+	)
 	require.NoError(t, err)
-	lockReq.Header.Set("Content-Type", "application/json")
 
-	lockResp, err := testUser.Client.Do(lockReq)
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := testUser.Client.Do(req)
 	require.NoError(t, err)
 	defer func() {
-		err := lockResp.Body.Close()
-		if err != nil {
+		if err := resp.Body.Close(); err != nil {
 			t.Error(err)
 		}
 	}()
 
-	require.Equal(t, http.StatusOK, lockResp.StatusCode)
+	return resp.StatusCode
+}
 
-	var lockResult LockCourseResult
-	require.NoError(t, json.NewDecoder(lockResp.Body).Decode(&lockResult))
+// DeleteTestBlock deletes a block in testUser's draft and returns the
+// response status.
+func DeleteTestBlock(
+	t *testing.T,
+	port *mobynetwork.Port,
+	testUser *TestUser,
+	courseID, blockID uuid.UUID,
+) int {
+	t.Helper()
 
-	require.NotEqual(t, uuid.Nil, lockResult.DraftSnapshotID)
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/blocks/%s?version=%d",
+		port.Port(),
+		courseID,
+		blockID,
+		blockVersion(t, port, testUser, courseID, blockID),
+	)
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	require.NoError(t, err)
 
-	return lockResult
+	resp, err := testUser.Client.Do(req)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	return resp.StatusCode
+}
+
+// InviteTestTeacher makes member a teacher of the course through an invite
+// created by teacher.
+func InviteTestTeacher(
+	t *testing.T,
+	port *mobynetwork.Port,
+	teacher, member *TestUser,
+	courseID uuid.UUID,
+) {
+	t.Helper()
+
+	invite, err := createInvite(t, port, teacher, courseID, membership.TeacherRole)
+	require.NoError(t, err)
+	require.NoError(t, joinCourse(t, port, member, invite.ID))
+}
+
+func createInvite(
+	t *testing.T,
+	port *mobynetwork.Port,
+	user *TestUser,
+	courseID uuid.UUID,
+	role membership.Role,
+) (courses.InviteResponse, error) {
+	inviteURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/courses/%s/invites",
+		port.Port(),
+		courseID,
+	)
+	expiresAt := time.Now().Add(24 * time.Hour)
+	inviteBody, _ := json.Marshal(
+		membership.CreateInvite{
+			ProvidedRole: role,
+			ExpiresAt:    &expiresAt,
+		},
+	)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		inviteURL,
+		bytes.NewBuffer(inviteBody),
+	)
+	if err != nil {
+		return courses.InviteResponse{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := user.Client.Do(req)
+	if err != nil {
+		return courses.InviteResponse{}, err
+	}
+	defer func() {
+		err := resp.Body.Close()
+		require.NoError(t, err)
+	}()
+
+	if resp.StatusCode != http.StatusCreated {
+		return courses.InviteResponse{}, fmt.Errorf(
+			"unexpected status code: %d",
+			resp.StatusCode,
+		)
+	}
+
+	var invite courses.InviteResponse
+	err = json.NewDecoder(resp.Body).Decode(&invite)
+	return invite, err
+}
+
+func joinCourse(
+	t *testing.T,
+	port *mobynetwork.Port,
+	user *TestUser,
+	inviteID uuid.UUID,
+) error {
+	joinURL := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/invites/%s/join",
+		port.Port(),
+		inviteID,
+	)
+	req, err := http.NewRequest(http.MethodPost, joinURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := user.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err := resp.Body.Close()
+		require.NoError(t, err)
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	return nil
 }

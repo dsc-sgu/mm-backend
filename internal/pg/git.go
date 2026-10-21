@@ -55,32 +55,47 @@ const (
 		SELECT a.user_id, a.task_id, att.transition_data, t.task_group_id, tg.course_id
 		FROM attempts a
 		JOIN attempt_transitions att ON att.attempt_id = a.id
-		JOIN tasks t ON a.task_id = t.block_id
+		JOIN tasks t ON a.task_id = t.id
 		JOIN task_groups tg ON t.task_group_id = tg.id
 		WHERE a.id = $1 AND att.state = 'submitted'
 		ORDER BY att.transition_at DESC
 		LIMIT 1
 	`
 
-	repoForTaskSQL = `
-		SELECT cs.course_id, t.task_group_id
+	// Unlike repoForTaskSQL, this is not restricted to published tasks: it
+	// backs authorization for viewing already-recorded attempts, which must
+	// keep resolving even if the task's block is later deleted.
+	getTaskCourseIDSQL = `
+		SELECT tg.course_id
 		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id
-		JOIN course_snapshots cs ON cs.id = b.snapshot_id
-		JOIN courses c ON c.id = cs.course_id
-		WHERE t.block_id = $1 AND b.snapshot_id = c.active_snapshot_id
+		JOIN task_groups tg ON tg.id = t.task_group_id
+		WHERE t.id = $1
+	`
+)
+
+// taskCourseSQL is the course of the task $1, for the published view of it.
+const taskCourseSQL = `(SELECT tg.course_id FROM tasks t JOIN task_groups tg ON tg.id = t.task_group_id WHERE t.id = $1)`
+
+var (
+	// Only a task whose block is published can be attempted.
+	repoForTaskSQL = `
+		WITH v AS (` + blockView(taskCourseSQL, "NULL") + `)
+		SELECT v.course_id, t.task_group_id
+		FROM tasks t
+		JOIN task_blocks tb ON tb.task_id = t.id
+		JOIN v ON v.id = tb.block_id AND NOT v.deleted
+		WHERE t.id = $1 AND t.deleted_at IS NULL
 	`
 
-	// Unlike repoForTaskSQL, this is not restricted to the active snapshot:
-	// it backs authorization for viewing already-recorded attempts, which
-	// must keep resolving even if the task later drops out of the active
-	// snapshot.
-	getTaskCourseIDSQL = `
-		SELECT cs.course_id
-		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id
-		JOIN course_snapshots cs ON cs.id = b.snapshot_id
-		WHERE t.block_id = $1
+	// The attempt limit is read from the published settings of the task.
+	getAttemptLimitSQL = `
+		WITH v AS (` + blockView(taskCourseSQL, "NULL") + `)
+		SELECT (v.data->>'maxAttempts')::integer AS max_attempts,
+		       (SELECT count(*) FROM attempts a
+		        WHERE a.task_id = tb.task_id AND a.user_id = $2) AS used
+		FROM task_blocks tb
+		JOIN v ON v.id = tb.block_id AND NOT v.deleted
+		WHERE tb.task_id = $1
 	`
 )
 
@@ -261,7 +276,7 @@ func (r *PGRepo) IsCourseTeacher(
 }
 
 // GetTaskCourseID resolves the course a task belongs to, for authorization
-// purposes only - deliberately not scoped to the active snapshot.
+// purposes only - deliberately not restricted to published tasks.
 func (r *PGRepo) GetTaskCourseID(
 	ctx context.Context,
 	taskID uuid.UUID,
@@ -277,4 +292,36 @@ func (r *PGRepo) GetTaskCourseID(
 		return uuid.Nil, fmt.Errorf("get task course: %w", err)
 	}
 	return courseID, nil
+}
+
+func (r *PGRepo) GetAttemptLimit(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (*int, int, error) {
+	var row struct {
+		Limit *int `db:"max_attempts"`
+		Used  int  `db:"used"`
+	}
+	if err := r.db.GetContext(ctx, &row, getAttemptLimitSQL, taskID, participantID); err != nil {
+		return nil, 0, fmt.Errorf("get attempt limit: %w", err)
+	}
+	return row.Limit, row.Used, nil
+}
+
+func (r *PGRepo) CountAttempts(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (int, error) {
+	var used int
+	err := r.db.GetContext(
+		ctx,
+		&used,
+		`SELECT count(*) FROM attempts WHERE task_id = $1 AND user_id = $2`,
+		taskID,
+		participantID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("count attempts: %w", err)
+	}
+	return used, nil
 }

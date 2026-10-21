@@ -108,8 +108,6 @@ func TestGetCourseByID(t *testing.T) {
 	require.Equal(t, courseID, receivedCourse.ID)
 	require.Equal(t, "Test Course", receivedCourse.Name)
 	require.Equal(t, disciplineID, receivedCourse.DisciplineID)
-	require.NotNil(t, receivedCourse.ActiveSnapshotID)
-	require.Equal(t, 1, receivedCourse.Version)
 }
 
 func TestGetPaginatedCourse(t *testing.T) {
@@ -372,8 +370,6 @@ func TestUpdateCourse(t *testing.T) {
 	require.Equal(t, courseID, updatedCourse.ID)
 	require.Equal(t, "Updated Test Course", updatedCourse.DisplayName)
 	require.Equal(t, disciplineID, updatedCourse.DisciplineID)
-	require.NotNil(t, updatedCourse.ActiveSnapshotID)
-	require.Equal(t, 1, updatedCourse.Version)
 }
 
 func TestCourseInviteWorkflow(t *testing.T) {
@@ -594,9 +590,8 @@ func TestCourseInviteWorkflow(t *testing.T) {
 	})
 }
 
-// TestDeleteCourse verifies that deleting a course cascades: the course
-// itself, all of its snapshots (the initial published one and any drafts),
-// and all blocks belonging to those snapshots must all be soft-deleted.
+// TestDeleteCourse verifies that a deleted course is soft-deleted and that
+// its blocks can no longer be read or edited.
 func TestDeleteCourse(t *testing.T) {
 	clearDatabases(t)
 
@@ -625,31 +620,11 @@ func TestDeleteCourse(t *testing.T) {
 		"Test Course",
 	)
 
-	// Lock the course to create a second (draft) snapshot, and add blocks
-	// to it, so deletion has more than just the initial empty snapshot to
-	// cascade over.
-	draftSnapshotID := LockCourse(
-		t,
-		&backendPort,
-		&teacher,
-		courseID,
-	).DraftSnapshotID
-	require.NotZero(t, draftSnapshotID)
-
-	block1ID := CreateTestBlock(
-		t,
-		&backendPort,
-		&teacher,
-		courseID,
-		draftSnapshotID,
-	)
-	block2ID := CreateTestBlock(
-		t,
-		&backendPort,
-		&teacher,
-		courseID,
-		draftSnapshotID,
-	)
+	// Publish one block and draft another, so deletion has both kinds to
+	// hide.
+	block1ID := CreateTestBlock(t, &backendPort, &teacher, courseID)
+	require.Equal(t, http.StatusOK, Publish(t, &backendPort, &teacher, courseID))
+	block2ID := CreateTestBlock(t, &backendPort, &teacher, courseID)
 
 	deleteURL := fmt.Sprintf(
 		"http://127.0.0.1:%s/api/v1/courses/%s",
@@ -692,39 +667,20 @@ func TestDeleteCourse(t *testing.T) {
 	).Scan(&courseDeletedAt))
 	require.True(t, courseDeletedAt.Valid, "course should be soft-deleted")
 
-	// Every snapshot of the course (the initial published one and the
-	// draft) should have been marked stale.
-	rows, err := testPostgres.Query(
-		`SELECT status FROM course_snapshots WHERE course_id = $1`,
-		courseID,
-	)
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, rows.Close())
-	}()
-
-	snapshotCount := 0
-	for rows.Next() {
-		var status string
-		require.NoError(t, rows.Scan(&status))
-		require.Equal(t, "stale", status)
-		snapshotCount++
-	}
-	require.NoError(t, rows.Err())
-	require.Equal(
-		t,
-		2,
-		snapshotCount,
-		"expected the initial published snapshot and the draft",
-	)
-
-	// Every block created in the draft snapshot should be soft-deleted too.
+	// The blocks are gone with the course, published and draft alike.
 	for _, blockID := range []uuid.UUID{block1ID, block2ID} {
-		var blockDeletedAt sql.NullTime
-		require.NoError(t, testPostgres.QueryRow(
-			`SELECT deleted_at FROM blocks WHERE id = $1`,
+		blockURL := fmt.Sprintf(
+			"http://127.0.0.1:%s/api/v1/courses/%s/blocks/%s",
+			backendPort.Port(),
+			courseID,
 			blockID,
-		).Scan(&blockDeletedAt))
-		require.True(t, blockDeletedAt.Valid, "block should be soft-deleted")
+		)
+		resp, err := teacher.Client.Get(blockURL)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	}
+	require.Equal(t, http.StatusNotFound, PatchTestBlockDataFrom(
+		t, &backendPort, &teacher, courseID, block1ID, 1, `{"version":2}`,
+	))
 }

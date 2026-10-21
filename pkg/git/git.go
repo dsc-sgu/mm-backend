@@ -72,6 +72,8 @@ type Task struct {
 	ID       uuid.UUID
 	Name     string
 	Patterns []string
+	// MaxAttempts is nil when attempts are not limited.
+	MaxAttempts *int
 }
 
 // Store is what serving course repositories over SSH needs from the database.
@@ -84,6 +86,8 @@ type Store interface {
 	// GetLiveTasks lists the tasks of a task group in its course's active
 	// snapshot.
 	GetLiveTasks(ctx context.Context, taskGroupID uuid.UUID) ([]Task, error)
+	// CountAttempts tells how many attempts participantID has made at taskID.
+	CountAttempts(ctx context.Context, taskID, participantID uuid.UUID) (int, error)
 	SaveAttempt(repoID RepoID, taskID uuid.UUID, commitHash string) error
 }
 
@@ -251,6 +255,16 @@ func checkPush(
 		}
 	}
 	task := tasks[i]
+
+	if task.MaxAttempts != nil {
+		used, err := store.CountAttempts(ctx, task.ID, id.ParticipantID)
+		if err != nil {
+			return uuid.Nil, nil, fmt.Errorf("count attempts: %w", err)
+		}
+		if used+len(tags) > *task.MaxAttempts {
+			return uuid.Nil, nil, fmt.Errorf("%w: no attempts left for task '%s'", ErrPushRejected, task.Name)
+		}
+	}
 
 	compiledPatterns := CompilePatterns(task.Patterns)
 	commits := make(map[plumbing.ReferenceName]plumbing.Hash, len(tags))
