@@ -13,7 +13,6 @@ import (
 
 	"github.com/dsc-sgu/mm-backend/internal/courses"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
-	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 )
 
 const (
@@ -24,22 +23,21 @@ const (
 	`
 
 	getCourseByIDSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
+		SELECT id, discipline_id, owner_id, name, display_name, created_at, deleted_at
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
+	`
+	getCourseByNameSQL = `
+		SELECT id, discipline_id, owner_id, name, display_name, created_at, deleted_at
+		FROM courses
+		WHERE name = $1 AND deleted_at IS NULL
 	`
 
 	updateCourseByIDSQL = `
 		UPDATE courses
 		SET owner_id = COALESCE($1, owner_id), name = COALESCE($2, name), display_name = COALESCE($3, display_name)
 		WHERE id = $4 AND deleted_at IS NULL
-		RETURNING id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
-	`
-
-	publishSnapshotToCourseSQL = `
-		UPDATE courses
-		SET active_snapshot_id = $1, version = version + 1
- 		WHERE id = $2 AND version = $3 AND deleted_at IS NULL
+		RETURNING id, discipline_id, owner_id, name, display_name, created_at, deleted_at
 	`
 
 	deleteCourseByIDSQL = `
@@ -71,9 +69,8 @@ func (r *PGRepo) ExecInTx(
 	return tx.Commit()
 }
 
-// CreateCourseWithInitialSnapshot atomically creates a course together with
-// its first published snapshot and links them.
-func (r *PGRepo) CreateCourseWithInitialSnapshot(
+// CreateCourse creates a course with its owner as its first teacher.
+func (r *PGRepo) CreateCourse(
 	ctx context.Context,
 	model *courses.CreateCourse,
 	ownerID uuid.UUID,
@@ -82,39 +79,10 @@ func (r *PGRepo) CreateCourseWithInitialSnapshot(
 
 	err := r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
 		var txErr error
-
 		createdCourse, txErr = r.createCourseTx(ctx, tx, model, ownerID)
 		if txErr != nil {
 			return fmt.Errorf("create course: %w", txErr)
 		}
-
-		firstSnapshot := &snapshots.Snapshot{
-			CourseID:  createdCourse.ID,
-			Version:   1,
-			Status:    snapshots.PublishedStatus,
-			CreatedBy: ownerID,
-			CreatedAt: time.Now(),
-		}
-
-		createdSnapshot, txErr := r.CreateSnapshot(ctx, tx, firstSnapshot)
-		if txErr != nil {
-			return fmt.Errorf("create initial snapshot: %w", txErr)
-		}
-
-		txErr = r.publishSnapshotToCourseTx(
-			ctx,
-			tx,
-			createdCourse.ID,
-			createdSnapshot.ID,
-			0,
-		)
-		if txErr != nil {
-			return fmt.Errorf("link initial snapshot: %w", txErr)
-		}
-
-		createdCourse.ActiveSnapshotID = &createdSnapshot.ID
-		createdCourse.Version = 1
-
 		return nil
 	})
 	if err != nil {
@@ -206,6 +174,16 @@ func (r *PGRepo) GetCourseByID(
 	return &course, nil
 }
 
+func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
+	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
+
+	var course courses.Course
+	if err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name); err != nil {
+		return nil, err
+	}
+	return &course, nil
+}
+
 // GetPaginatedCourses lists courses in a stable, gapless order using keyset
 // (seek) pagination. The cursor condition must compare the same columns the
 // results are ordered by - here (name, id), with id as a tie-breaker since
@@ -292,108 +270,21 @@ func (r *PGRepo) UpdateCourseByID(
 	return &course, nil
 }
 
-// PublishDraft atomically links the draft snapshot as the course's active
-// snapshot (checking the optimistic lock) and marks it published.
-func (r *PGRepo) PublishDraft(
-	ctx context.Context,
-	courseID, draftSnapshotID uuid.UUID,
-	expectedVersion int,
-	userID, sessionID uuid.UUID,
-) error {
-	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		if err := r.publishSnapshotToCourseTx(
-			ctx,
-			tx,
-			courseID,
-			draftSnapshotID,
-			expectedVersion,
-		); err != nil {
-			return err
-		}
+// DeleteCourseByID soft-deletes a course. Its blocks stay as they are:
+// every block query starts from the live course row and finds none.
+func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
+	zap.L().Debug("Executing query", zap.String("query", deleteCourseByIDSQL))
 
-		if err := r.UpdateSnapshotStatus(
-			ctx,
-			tx,
-			draftSnapshotID,
-			snapshots.PublishedStatus,
-		); err != nil {
-			return err
-		}
-
-		zap.L().
-			Debug("Executing query within transaction", zap.String("query", deleteCourseLockSQL))
-		if _, err := tx.ExecContext(
-			ctx,
-			deleteCourseLockSQL,
-			courseID,
-			userID,
-			sessionID,
-		); err != nil {
-			return fmt.Errorf("tx delete course lock: %w", err)
-		}
-
-		return nil
-	})
-}
-
-func (r *PGRepo) publishSnapshotToCourseTx(
-	ctx context.Context,
-	tx *sqlx.Tx,
-	courseID, newSnapshotID uuid.UUID,
-	expectedVersion int,
-) error {
-	zap.L().
-		Debug("Executing query within transaction", zap.String("query", publishSnapshotToCourseSQL))
-
-	res, err := tx.ExecContext(
-		ctx,
-		publishSnapshotToCourseSQL,
-		newSnapshotID,
-		courseID,
-		expectedVersion,
-	)
+	res, err := r.db.ExecContext(ctx, deleteCourseByIDSQL, id)
 	if err != nil {
-		return fmt.Errorf("tx publish course version: %w", err)
+		return fmt.Errorf("soft delete course: %w", err)
 	}
-
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return fmt.Errorf("soft delete course rows affected: %w", err)
 	}
 	if affected == 0 {
 		return sql.ErrNoRows
 	}
-
 	return nil
-}
-
-// DeleteCourseByID soft-deletes a course together with all of its snapshots
-// and blocks, in one transaction.
-func (r *PGRepo) DeleteCourseByID(ctx context.Context, id uuid.UUID) error {
-	return r.ExecInTx(ctx, func(tx *sqlx.Tx) error {
-		zap.L().
-			Debug("Executing query within transaction", zap.String("query", deleteCourseByIDSQL))
-
-		res, err := tx.ExecContext(ctx, deleteCourseByIDSQL, id)
-		if err != nil {
-			return fmt.Errorf("tx soft delete course: %w", err)
-		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("tx soft delete course rows affected: %w", err)
-		}
-		if affected == 0 {
-			return sql.ErrNoRows
-		}
-
-		if err := r.DeleteAllSnapshotsByCourseID(ctx, tx, id); err != nil {
-			return fmt.Errorf("cascade delete snapshots: %w", err)
-		}
-
-		if err := r.DeleteAllBlocksByCourseID(ctx, tx, id); err != nil {
-			return fmt.Errorf("cascade delete blocks: %w", err)
-		}
-
-		return nil
-	})
 }

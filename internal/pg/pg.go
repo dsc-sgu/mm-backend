@@ -11,11 +11,10 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/sshkeys"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 	"github.com/dsc-sgu/mm-backend/internal/blocks"
+	"github.com/dsc-sgu/mm-backend/internal/checkpoints"
 	"github.com/dsc-sgu/mm-backend/internal/courses"
-	"github.com/dsc-sgu/mm-backend/internal/courses/locks"
 	"github.com/dsc-sgu/mm-backend/internal/courses/membership"
 	"github.com/dsc-sgu/mm-backend/internal/disciplines"
-	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 )
 
@@ -41,8 +40,7 @@ var (
 	_ blocks.Repo      = (*PGRepo)(nil)
 	_ courses.Repo     = (*PGRepo)(nil)
 	_ disciplines.Repo = (*PGRepo)(nil)
-	_ snapshots.Repo   = (*PGRepo)(nil)
-	_ locks.Repo       = (*PGRepo)(nil)
+	_ checkpoints.Repo = (*PGRepo)(nil)
 	_ membership.Repo  = (*PGRepo)(nil)
 	_ sshkeys.Repo     = (*PGRepo)(nil)
 	_ tasks.Repo       = (*PGRepo)(nil)
