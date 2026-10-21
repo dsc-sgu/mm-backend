@@ -12,7 +12,6 @@ import (
 
 type RepositoryStore interface {
 	UpdateTemplate(taskGroupID uuid.UUID, files []pkggit.FileInfo) error
-	WritePatterns(repoID pkggit.RepoID, patterns map[string][]string) error
 }
 
 // MemberChecker resolves a course membership, the same gate course-editing
@@ -192,38 +191,4 @@ func (s *Service) UploadTemplate(
 	}
 
 	return s.repositories.UpdateTemplate(tg.ID, files)
-}
-
-func (s *Service) RefreshRepositoryPatterns(
-	ctx context.Context,
-	repoID pkggit.RepoID,
-) error {
-	patterns, err := s.repo.GetTaskPatterns(ctx, repoID.TaskGroupID)
-	if err != nil {
-		return err
-	}
-	return s.repositories.WritePatterns(repoID, patterns)
-}
-
-func (s *Service) GetTaskGroupIDByName(
-	ctx context.Context,
-	name string,
-	courseID uuid.UUID,
-) (uuid.UUID, error) {
-	return s.repo.GetTaskGroupIDByName(ctx, name, courseID)
-}
-
-func (s *Service) GetTaskByName(
-	ctx context.Context,
-	taskGroupID uuid.UUID,
-	name string,
-) (uuid.UUID, error) {
-	return s.repo.GetTaskByName(ctx, taskGroupID, name)
-}
-
-func (s *Service) GetTaskPatternsByTaskID(
-	ctx context.Context,
-	taskID uuid.UUID,
-) ([]string, error) {
-	return s.repo.GetTaskPatternsByTaskID(ctx, taskID)
 }

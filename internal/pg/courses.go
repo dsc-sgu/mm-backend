@@ -28,11 +28,6 @@ const (
 		FROM courses
 		WHERE id = $1 AND deleted_at IS NULL
 	`
-	getCourseByNameSQL = `
-		SELECT id, discipline_id, active_snapshot_id, owner_id, name, display_name, version, created_at, deleted_at
-		FROM courses
-		WHERE name = $1 AND deleted_at IS NULL
-	`
 
 	updateCourseByIDSQL = `
 		UPDATE courses
@@ -206,16 +201,6 @@ func (r *PGRepo) GetCourseByID(
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
-		return nil, err
-	}
-	return &course, nil
-}
-
-func (r *PGRepo) GetCourseByName(ctx context.Context, name string) (*courses.Course, error) {
-	zap.L().Debug("Executing query", zap.String("query", getCourseByNameSQL))
-
-	var course courses.Course
-	if err := r.db.GetContext(ctx, &course, getCourseByNameSQL, name); err != nil {
 		return nil, err
 	}
 	return &course, nil

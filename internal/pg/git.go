@@ -34,6 +34,14 @@ const (
 		WHERE fingerprint = $1
 	`
 
+	repoForPathSQL = `
+		SELECT c.id, tg.id, k.owner_id
+		FROM courses c
+		JOIN task_groups tg ON tg.course_id = c.id AND tg.name = $2 AND tg.deleted_at IS NULL
+		JOIN ssh_keys k ON k.fingerprint = $3
+		WHERE c.name = $1 AND c.deleted_at IS NULL
+	`
+
 	saveAttemptSQL = `
 		WITH new_attempt AS (
 			INSERT INTO attempts (user_id, task_id)
@@ -181,16 +189,24 @@ func (r *PGRepo) GetAttemptCommitInfo(
 	return info, nil
 }
 
-func (r *PGRepo) GetCourse(
+// RepoForPath resolves a course and its live task group by name and the
+// owner of the SSH key with fingerprint to their repository.
+func (r *PGRepo) RepoForPath(
 	ctx context.Context,
-	name string,
-) (uuid.UUID, error) {
-	course, err := r.GetCourseByName(ctx, name)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("course %q: %w", name, err)
-	}
+	course, group, fingerprint string,
+) (pkggit.RepoID, error) {
+	zap.L().Debug("Executing query", zap.String("query", repoForPathSQL))
 
-	return course.ID, nil
+	var id pkggit.RepoID
+	err := r.db.QueryRowContext(ctx, repoForPathSQL, course, group, fingerprint).
+		Scan(&id.CourseID, &id.TaskGroupID, &id.ParticipantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return pkggit.RepoID{}, fmt.Errorf("%w: %s/%s", pkggit.ErrInvalidRepo, course, group)
+	}
+	if err != nil {
+		return pkggit.RepoID{}, fmt.Errorf("resolve repository %s/%s: %w", course, group, err)
+	}
+	return id, nil
 }
 
 func (r *PGRepo) RepoForTask(

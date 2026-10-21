@@ -25,11 +25,9 @@ func CompilePatterns(patterns []string) CompiledPatterns {
 
 // MatchAny reports whether name matches any of the compiled patterns.
 // Patterns are compiled with no separator characters, so '*' and '?' match
-// '/' too — the same rule the pre-receive hook applies via a shell case
-// statement (see WritePreReceiveHook), rather than filepath.Match's, where
-// '*' stops at '/'. This keeps the accept/reject decision for a submission
-// identical whether it arrives over SSH git push or through the web zip
-// upload (see the "Mask gate" in internal/attempts/README.md).
+// '/' too, unlike filepath.Match, where '*' stops at '/'. Both the SSH
+// pre-receive hook and the web zip upload decide with this one function (see
+// the "Mask gate" in internal/attempts/README.md).
 func (c CompiledPatterns) MatchAny(name string) bool {
 	for _, g := range c {
 		if g.Match(name) {

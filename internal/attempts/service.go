@@ -4,26 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/charmbracelet/log"
-	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
 	"github.com/google/uuid"
-	"go.uber.org/zap"
-	gossh "golang.org/x/crypto/ssh"
 
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 type Service struct {
-	repo       Repo
-	git        GitManager
-	tasks      TaskReader
-	courses    CourseReader
-	identities IdentityReader
+	repo    Repo
+	git     GitManager
+	tasks   TaskReader
+	courses CourseReader
 }
 
 func NewService(
@@ -31,14 +22,12 @@ func NewService(
 	git GitManager,
 	tasks TaskReader,
 	courses CourseReader,
-	identities IdentityReader,
 ) *Service {
 	return &Service{
-		repo:       repo,
-		git:        git,
-		tasks:      tasks,
-		courses:    courses,
-		identities: identities,
+		repo:    repo,
+		git:     git,
+		tasks:   tasks,
+		courses: courses,
 	}
 }
 
@@ -125,22 +114,6 @@ func (s *Service) repoForTask(
 	return id, nil
 }
 
-// recordAttempt is the shared tail of every submission: whatever transport
-// produced the commit, the rules that govern accepting it and storing it live
-// here and nowhere else. Access is already settled by the caller's gate
-// (repoForTask over HTTP, authRepo over SSH), which runs before any work.
-func (s *Service) recordAttempt(
-	ctx context.Context,
-	id pkggit.RepoID,
-	taskID uuid.UUID,
-	commitHash string,
-) error {
-	if err := s.repo.SaveAttempt(id, taskID, commitHash); err != nil {
-		return fmt.Errorf("save attempt: %w", err)
-	}
-	return nil
-}
-
 // Pushes files from added zip to a repo and makes an attempt by those rules: if zip is empty or all files from it dont match any patterns then user gets error and PushAttempt falls. Files from existing user repo get deleted if they dont match patterns. All files from zip get to repo.
 func (s *Service) PushAttempt(
 	ctx context.Context,
@@ -175,11 +148,10 @@ func (s *Service) PushAttempt(
 			return "", fmt.Errorf("%w (%v)", ErrPatternMismatch, patterns)
 		}
 	}
+	unlock := s.git.Lock(id)
+	defer unlock()
 	if err := s.git.EnsureRepo(id); err != nil {
 		return "", fmt.Errorf("init repository: %w", err)
-	}
-	if err := s.tasks.RefreshRepositoryPatterns(ctx, id); err != nil {
-		zap.L().Warn("refresh repository patterns", zap.Error(err))
 	}
 
 	existing, err := s.git.ListFiles(id)
@@ -201,8 +173,8 @@ func (s *Service) PushAttempt(
 	if err != nil {
 		return "", err
 	}
-	if err := s.recordAttempt(ctx, id, taskID, hash); err != nil {
-		return "", err
+	if err := s.repo.SaveAttempt(id, taskID, hash); err != nil {
+		return "", fmt.Errorf("save attempt: %w", err)
 	}
 	return hash, nil
 }
@@ -248,211 +220,4 @@ func (s *Service) GetDiff(
 		include = pkggit.CompilePatterns(patterns).MatchAny
 	}
 	return s.git.Diff(id, one.CommitHash, two.CommitHash, include)
-}
-
-// SSHMiddleware serves Git repositories over SSH: it resolves the raw
-// course/group SSH path to a RepoID, checks course membership, runs the
-// git command, and records pushed attempts. Repos are stored under repoDir.
-func (s *Service) SSHMiddleware(repoDir string) wish.Middleware {
-	return func(sh ssh.Handler) ssh.Handler {
-		return func(sess ssh.Session) {
-			cmd := sess.Command()
-			if len(cmd) != 2 {
-				sh(sess)
-				return
-			}
-
-			gc := cmd[0]
-			pk := sess.PublicKey()
-			rawRepo := cmd[1]
-
-			repo, err := s.repoRename(sess.Context(), rawRepo, pk)
-			if err != nil {
-				log.Error("repo rename failed", "error", err, "repo", rawRepo)
-				pkggit.Fatal(sess, err)
-				return
-			}
-
-			access := s.authRepo(sess.Context(), rawRepo, repo, pk)
-			switch pkggit.GitCmd(gc) {
-			case pkggit.GitReceivePack:
-				switch access {
-				case pkggit.ReadWriteAccess, pkggit.AdminAccess:
-					if err := pkggit.GitPack(
-						sess,
-						gc,
-						repoDir,
-						repo,
-					); err != nil {
-						log.Error(
-							"git push failed",
-							"error",
-							err,
-							"repo",
-							rawRepo,
-						)
-						pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
-					} else {
-						s.onPush(sess.Context(), rawRepo, repo, pk)
-					}
-				default:
-					pkggit.Fatal(sess, pkggit.ErrNotAuthed)
-				}
-			case pkggit.GitUploadPack:
-				switch access {
-				case pkggit.ReadOnlyAccess,
-					pkggit.ReadWriteAccess,
-					pkggit.AdminAccess:
-					if err := pkggit.GitPack(
-						sess,
-						gc,
-						repoDir,
-						repo,
-					); err != nil {
-						switch {
-						case errors.Is(err, pkggit.ErrInvalidRepo):
-							pkggit.Fatal(sess, pkggit.ErrInvalidRepo)
-						default:
-							log.Error("unknown git error", "error", err)
-							pkggit.Fatal(sess, pkggit.ErrSystemMalfunction)
-						}
-					} else {
-						s.onFetch(sess.Context(), rawRepo, repo, pk)
-					}
-				default:
-					pkggit.Fatal(sess, pkggit.ErrNotAuthed)
-				}
-			default:
-				sh(sess)
-			}
-		}
-	}
-}
-
-func (s *Service) repoRename(
-	ctx context.Context,
-	original string,
-	key gossh.PublicKey,
-) (string, error) {
-	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
-	if err != nil {
-		return "", err
-	}
-	if err = s.git.EnsureRepo(id); err != nil {
-		return "", err
-	}
-	if err = s.tasks.RefreshRepositoryPatterns(ctx, id); err != nil {
-		zap.L().Warn("refresh repository patterns", zap.Error(err))
-	}
-	return id.IntoPath() + ".git", nil
-}
-
-func (s *Service) authRepo(
-	ctx context.Context,
-	original, repo string,
-	key ssh.PublicKey,
-) pkggit.AccessLevel {
-	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
-	if err != nil {
-		return pkggit.NoAccess
-	}
-	if err := s.assertMember(ctx, id.ParticipantID, id.CourseID); err != nil {
-		return pkggit.NoAccess
-	}
-	return pkggit.ReadWriteAccess
-}
-
-func (s *Service) onPush(
-	ctx context.Context,
-	original, repo string,
-	key ssh.PublicKey,
-) {
-	id, err := s.GetRepoID(ctx, original, gossh.FingerprintSHA256(key))
-	if err != nil {
-		zap.L().Error("resolve pushed repository", zap.Error(err))
-		return
-	}
-	base := s.git.RepoPath(id)
-	options, err := os.ReadFile(filepath.Join(base, "push-options"))
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err := os.Remove(filepath.Join(base, "push-options")); err != nil {
-			zap.L().Warn("remove push-options file", zap.Error(err))
-		}
-	}()
-	name := parseSubmitOption(
-		strings.Split(strings.TrimSpace(string(options)), "\n"),
-	)
-	if name == "" {
-		return
-	}
-	taskID, err := s.tasks.GetTaskByName(ctx, id.TaskGroupID, name)
-	if err != nil {
-		return
-	}
-	tags, err := os.ReadFile(filepath.Join(base, "push-tags"))
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err := os.Remove(filepath.Join(base, "push-tags")); err != nil {
-			zap.L().Warn("remove push-tags file", zap.Error(err))
-		}
-	}()
-	for _, hash := range strings.Fields(string(tags)) {
-		if err := s.recordAttempt(ctx, id, taskID, hash); err != nil {
-			zap.L().Error("save pushed attempt", zap.Error(err))
-		}
-	}
-}
-
-func (s *Service) onFetch(context.Context, string, string, ssh.PublicKey) {}
-
-func (s *Service) GetRepoID(
-	ctx context.Context,
-	path, fingerprint string,
-) (pkggit.RepoID, error) {
-	parts := strings.Split(
-		strings.Trim(
-			strings.TrimSuffix(path, ".git"),
-			string(os.PathSeparator),
-		),
-		string(os.PathSeparator),
-	)
-	if len(parts) < 2 {
-		return pkggit.RepoID{}, errors.New(
-			"invalid path: need course/group_name",
-		)
-	}
-	courseID, err := s.courses.GetCourse(ctx, parts[0])
-	if err != nil {
-		return pkggit.RepoID{}, err
-	}
-	groupID, err := s.tasks.GetTaskGroupIDByName(ctx, parts[1], courseID)
-	if err != nil {
-		return pkggit.RepoID{}, err
-	}
-	participantID, err := s.identities.ParticipantID(fingerprint)
-	if err != nil {
-		return pkggit.RepoID{}, err
-	}
-	return pkggit.RepoID{
-		CourseID:      courseID,
-		TaskGroupID:   groupID,
-		ParticipantID: participantID,
-	}, nil
-}
-
-func parseSubmitOption(options []string) string {
-	for _, option := range options {
-		if value, ok := strings.CutPrefix(
-			strings.TrimSpace(option),
-			"submit=",
-		); ok {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

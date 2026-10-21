@@ -10,37 +10,21 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
+	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
 )
 
 const (
-	// Scoped to the active snapshot, same as getTaskByNameSQL: with each
-	// snapshot generation of a task keeping its own row, an unscoped query
-	// here would mix in patterns from historical, no-longer-live generations.
-	//
-	// Deliberately not filtered to tasks with a non-empty patterns array:
-	// the pre-receive hook needs every live task name, including
-	// pattern-less ones, to tell "no patterns required" apart from "no such
-	// task" for an "-o submit=<name>" it doesn't recognize.
-	getTaskPatternsSQL = `
-		SELECT t.name, t.patterns
-		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
-		JOIN course_snapshots cs ON cs.id = t.snapshot_id
-		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = t.snapshot_id
-		WHERE t.task_group_id = $1
-		ORDER BY t.name
-	`
-
 	// Only resolves a task if its block is part of the course's currently
 	// active (published) snapshot, so a git push can't target a task that
 	// only exists in an unpublished draft.
-	getTaskByNameSQL = `
-		SELECT t.block_id
+	getLiveTasksSQL = `
+		SELECT t.block_id, t.name, t.patterns
 		FROM tasks t
 		JOIN blocks b ON b.id = t.block_id AND b.deleted_at IS NULL
 		JOIN course_snapshots cs ON cs.id = b.snapshot_id
 		JOIN courses c ON c.id = cs.course_id AND c.active_snapshot_id = b.snapshot_id
-		WHERE t.task_group_id = $1 AND t.name = $2
+		WHERE t.task_group_id = $1
+		ORDER BY t.name
 	`
 
 	getTaskPatternsByTaskIDSQL = `
@@ -56,12 +40,6 @@ const (
 	getTaskGroupByIDSQL = `
 		SELECT id, course_id, name FROM task_groups
 		WHERE id = $1 AND deleted_at IS NULL
-	`
-
-	getTaskGroupByNameSQL = `
-		SELECT id, course_id, name
-		FROM task_groups
-		WHERE name = $1 AND course_id = $2 AND deleted_at IS NULL
 	`
 
 	updateTaskGroupSQL = `
@@ -126,49 +104,11 @@ const (
 		RETURNING block_id, task_group_id, name, patterns, max_grade, max_attempts, available_at, deadline_at
 	`
 
-	getTaskGroupIDByNameSQL = `
-		SELECT id FROM task_groups
-		WHERE name = $1 AND course_id = $2 AND deleted_at IS NULL
-	`
-
 	getCourseIDByTaskGroupSQL = `
 		SELECT course_id FROM task_groups
 		WHERE id = $1 AND deleted_at IS NULL
 	`
-
-	getTaskCountSQL = `
-		SELECT COUNT(*) FROM tasks WHERE task_group_id = $1
-	`
 )
-
-func (r *PGRepo) GetTaskGroupIDByName(
-	ctx context.Context,
-	name string,
-	courseID uuid.UUID,
-) (uuid.UUID, error) {
-	zap.L().
-		Debug("Executing query", zap.String("query", getTaskGroupIDByNameSQL))
-
-	var groupID uuid.UUID
-	err := r.db.GetContext(
-		ctx,
-		&groupID,
-		getTaskGroupIDByNameSQL,
-		name,
-		courseID,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return uuid.Nil, fmt.Errorf(
-				"task group %q in course %s: not found",
-				name,
-				courseID,
-			)
-		}
-		return uuid.Nil, fmt.Errorf("get task group id by name: %w", err)
-	}
-	return groupID, nil
-}
 
 func (r *PGRepo) CreateTaskGroup(
 	ctx context.Context,
@@ -202,28 +142,6 @@ func (r *PGRepo) GetTaskGroupByID(
 	return &tg, nil
 }
 
-func (r *PGRepo) GetTaskGroupByName(
-	ctx context.Context,
-	name string,
-	courseID uuid.UUID,
-) (*tasks.TaskGroup, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskGroupByNameSQL))
-
-	var tg tasks.TaskGroup
-	err := r.db.GetContext(ctx, &tg, getTaskGroupByNameSQL, name, courseID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf(
-				"task group %q in course %s: not found",
-				name,
-				courseID,
-			)
-		}
-		return nil, fmt.Errorf("get task group by name: %w", err)
-	}
-	return &tg, nil
-}
-
 func (r *PGRepo) UpdateTaskGroup(
 	ctx context.Context,
 	id uuid.UUID,
@@ -251,23 +169,6 @@ func (r *PGRepo) DeleteTaskGroup(ctx context.Context, id uuid.UUID) error {
 		return fmt.Errorf("delete task group: %w", err)
 	}
 	return nil
-}
-
-func (r *PGRepo) GetTaskByID(
-	ctx context.Context,
-	taskID uuid.UUID,
-) (*tasks.Task, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskByIDSQL))
-
-	var task tasks.Task
-	err := r.db.GetContext(ctx, &task, getTaskByIDSQL, taskID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("task %s: not found", taskID)
-		}
-		return nil, fmt.Errorf("get task by id: %w", err)
-	}
-	return &task, nil
 }
 
 func (r *PGRepo) GetTasks(
@@ -303,20 +204,6 @@ func (r *PGRepo) GetTasks(
 	return taskList, rows.Err()
 }
 
-func (r *PGRepo) GetTaskCount(
-	ctx context.Context,
-	taskGroupID uuid.UUID,
-) (int, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskCountSQL))
-
-	var count int
-	err := r.db.GetContext(ctx, &count, getTaskCountSQL, taskGroupID)
-	if err != nil {
-		return 0, fmt.Errorf("get task count: %w", err)
-	}
-	return count, nil
-}
-
 func (r *PGRepo) GetCourseIDByTaskGroup(
 	ctx context.Context,
 	taskGroupID uuid.UUID,
@@ -344,60 +231,34 @@ func (r *PGRepo) GetCourseIDByTaskGroup(
 	return courseID, nil
 }
 
-// GetTaskPatterns returns every active task in taskGroupID by name, mapped
-// to its required file patterns - an empty (but present) slice for a task
-// that doesn't require any. The presence of the key, not just its length,
-// is what lets a caller distinguish a real task with no pattern
-// requirements from a name that doesn't exist at all.
-func (r *PGRepo) GetTaskPatterns(
+// GetLiveTasks lists the tasks of taskGroupID in its course's active snapshot.
+func (r *PGRepo) GetLiveTasks(
 	ctx context.Context,
 	taskGroupID uuid.UUID,
-) (map[string][]string, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskPatternsSQL))
+) ([]pkggit.Task, error) {
+	zap.L().Debug("Executing query", zap.String("query", getLiveTasksSQL))
 
-	rows, err := r.db.QueryxContext(ctx, getTaskPatternsSQL, taskGroupID)
+	rows, err := r.db.QueryContext(ctx, getLiveTasksSQL, taskGroupID)
 	if err != nil {
-		return nil, fmt.Errorf("get task patterns: %w", err)
+		return nil, fmt.Errorf("get live tasks: %w", err)
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			zap.L().Warn("close task patterns rows", zap.Error(err))
+			zap.L().Warn("close live tasks rows", zap.Error(err))
 		}
 	}()
 
-	result := make(map[string][]string)
+	var liveTasks []pkggit.Task
 	for rows.Next() {
-		var name string
+		var task pkggit.Task
 		var patterns pq.StringArray
-		if err := rows.Scan(&name, &patterns); err != nil {
-			return nil, fmt.Errorf("scan task patterns: %w", err)
+		if err := rows.Scan(&task.ID, &task.Name, &patterns); err != nil {
+			return nil, fmt.Errorf("scan live task: %w", err)
 		}
-		result[name] = patterns
+		task.Patterns = patterns
+		liveTasks = append(liveTasks, task)
 	}
-	return result, rows.Err()
-}
-
-func (r *PGRepo) GetTaskByName(
-	ctx context.Context,
-	taskGroupID uuid.UUID,
-	name string,
-) (uuid.UUID, error) {
-	zap.L().Debug("Executing query", zap.String("query", getTaskByNameSQL))
-
-	var taskID uuid.UUID
-	err := r.db.QueryRowContext(ctx, getTaskByNameSQL, taskGroupID, name).
-		Scan(&taskID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return uuid.Nil, fmt.Errorf(
-				"task %q in group %s: not found",
-				name,
-				taskGroupID,
-			)
-		}
-		return uuid.Nil, fmt.Errorf("get task by name: %w", err)
-	}
-	return taskID, nil
+	return liveTasks, rows.Err()
 }
 
 func (r *PGRepo) GetTaskPatternsByTaskID(

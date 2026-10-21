@@ -47,10 +47,6 @@ func (s *Service) Delete(ownerID uuid.UUID, fingerprint string) error {
 	return s.repo.DeleteSSHKey(ownerID, fingerprint)
 }
 
-func (s *Service) ParticipantID(fingerprint string) (uuid.UUID, error) {
-	return s.repo.GetParticipant(fingerprint)
-}
-
 // CheckPublicKeyAuth admits an SSH connection when its key is registered to a user.
 func (s *Service) CheckPublicKeyAuth(_ ssh.Context, key ssh.PublicKey) bool {
 	_, err := s.repo.GetParticipant(gossh.FingerprintSHA256(key))

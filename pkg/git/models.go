@@ -4,15 +4,11 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"path/filepath"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	// PatternsFileName is the file consumed by the Git pre-receive hook.
-	PatternsFileName = ".mm-patterns"
 	// MaxZipFileCount is the maximum number of regular files a submitted
 	// archive may contain.
 	MaxZipFileCount = 2000
@@ -49,17 +45,8 @@ func TemplateRepoName(taskGroupID uuid.UUID) string {
 
 // FileInfo is a file transferred through the Git integration.
 type FileInfo struct {
-	FileName    string    `json:"fileName"    binding:"required"`
-	FilePath    string    `json:"filePath"    binding:"required"`
-	FileSize    int64     `json:"fileSize"    binding:"required"`
-	ContentType string    `json:"contentType" binding:"required"`
-	MD5Hash     string    `json:"md5Hash"     binding:"required"`
-	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
-	Content     []byte    `json:"content"     binding:"required"`
-}
-
-func PatternsFilePath(repoPath string) string {
-	return filepath.Join(repoPath, PatternsFileName)
+	FileName string
+	Content  []byte
 }
 
 // FileStatus is how a file changed between the two commits Manager.Diff compares.

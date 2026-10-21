@@ -12,20 +12,6 @@ import (
 
 type AttemptStatus string
 
-const (
-	AttemptStatusSent     AttemptStatus = "sent"
-	AttemptStatusAssessed AttemptStatus = "assessed"
-	AttemptStatusRetrieve AttemptStatus = "retrieve"
-)
-
-type FileInfo struct {
-	FileName    string    `json:"fileName"    binding:"required"`
-	FileSize    int64     `json:"fileSize"    binding:"required"`
-	ContentType string    `json:"contentType" binding:"required"`
-	MD5Hash     string    `json:"md5Hash"     binding:"required"`
-	UploadedAt  time.Time `json:"uploadedAt"  binding:"required"`
-}
-
 type AttemptCommitInfo struct {
 	UserID      uuid.UUID
 	TaskID      uuid.UUID
@@ -59,23 +45,16 @@ type Repo interface {
 }
 
 type TaskReader interface {
-	GetTaskGroupIDByName(context.Context, string, uuid.UUID) (uuid.UUID, error)
-	GetTaskByName(context.Context, uuid.UUID, string) (uuid.UUID, error)
 	GetTaskPatternsByTaskID(context.Context, uuid.UUID) ([]string, error)
-	RefreshRepositoryPatterns(context.Context, pkggit.RepoID) error
 }
 
 type CourseReader interface {
-	GetCourse(context.Context, string) (uuid.UUID, error)
 	IsCourseMember(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 	IsCourseTeacher(context.Context, uuid.UUID, uuid.UUID) (bool, error)
 }
 
-type IdentityReader interface {
-	ParticipantID(fingerprint string) (uuid.UUID, error)
-}
-
 type GitManager interface {
+	Lock(pkggit.RepoID) (unlock func())
 	EnsureRepo(pkggit.RepoID) error
 	RepoPath(pkggit.RepoID) string
 	ListFiles(pkggit.RepoID) ([]string, error)

@@ -40,6 +40,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 	"github.com/dsc-sgu/mm-backend/internal/tasks"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
+	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 type App struct {
@@ -184,7 +185,7 @@ func main() {
 	gitManager := pkggit.NewManager("repos")
 	sshKeyService := sshkeys.NewService(pgRepo)
 	taskService := tasks.NewService(pgRepo, gitManager, membershipService)
-	attemptService := attempt.NewService(pgRepo, gitManager, taskService, pgRepo, sshKeyService)
+	attemptService := attempt.NewService(pgRepo, gitManager, pgRepo, pgRepo)
 
 	rebalanceWorker := blocks.NewRebalanceWorker(pgRepo, 64)
 	go rebalanceWorker.Run(ctx)
@@ -235,10 +236,12 @@ func main() {
 			net.JoinHostPort(config.Host, strconv.Itoa(config.SSHPort)),
 		),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
+		wish.WithIdleTimeout(2*time.Minute),
+		wish.WithMaxTimeout(30*time.Minute),
 		ssh.PublicKeyAuth(sshKeyService.CheckPublicKeyAuth),
 		ssh.PasswordAuth(sshKeyService.CheckPasswordAuth),
 		wish.WithMiddleware(
-			attemptService.SSHMiddleware("repos"),
+			middleware.SSHMiddleware(pgRepo, gitManager),
 			logging.Middleware(),
 		),
 	)

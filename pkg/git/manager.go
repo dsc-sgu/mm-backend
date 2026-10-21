@@ -10,11 +10,10 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"github.com/go-git/go-billy/v6/util"
 	gogit "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
@@ -22,11 +21,14 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/format/index"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // Manager owns bare-repository filesystem operations. It has no application-domain dependencies.
 type Manager struct {
 	RepoDir string
+	// locks holds one *sync.Mutex per repository path, see Lock.
+	locks sync.Map
 }
 
 func NewManager(repoDir string) *Manager {
@@ -37,6 +39,17 @@ func NewManager(repoDir string) *Manager {
 // deterministic local path derived by hashing id, not a
 // human-readable name.
 func (m *Manager) RepoPath(id RepoID) string { return filepath.Join(m.RepoDir, id.IntoPath()+".git") }
+
+// Lock serializes access to the repository identified by id: web uploads and
+// SSH sessions (clone, fetch and push alike) to the same repository must not
+// interleave, since go-git leaves serializing concurrent writers to its
+// caller. The returned func releases the lock.
+func (m *Manager) Lock(id RepoID) (unlock func()) {
+	value, _ := m.locks.LoadOrStore(m.RepoPath(id), &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
 
 // Checks if repository exists on the server.
 func repoExists(path string) (bool, error) {
@@ -72,15 +85,16 @@ func (m *Manager) initRepoWithTemplate(id RepoID) error {
 		return err
 	}
 	if !templateExists {
-		_, err := gogit.PlainInit(barePath, true)
-		return err
+		if _, err := gogit.PlainInit(barePath, true); err != nil {
+			return fmt.Errorf("init repository: %w", err)
+		}
+		return nil
 	}
-	_, err = gogit.PlainClone(barePath, &gogit.CloneOptions{
+	if _, err := gogit.PlainClone(barePath, &gogit.CloneOptions{
 		URL:            templatePath,
 		Bare:           true,
 		AllowEmptyRepo: true,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("clone template: %w", err)
 	}
 	return nil
@@ -99,8 +113,10 @@ func (m *Manager) UpdateTemplate(taskGroupID uuid.UUID, files []FileInfo) error 
 			return fmt.Errorf("init template repo: %w", err)
 		}
 	}
-	_, err = m.CommitFiles(path, files, nil, "update template")
-	return err
+	if _, err := m.CommitFiles(path, files, nil, "update template"); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Returns a list of paths to existing files in user repository.
@@ -182,7 +198,7 @@ func UnzipFiles(data []byte) ([]FileInfo, error) {
 			)
 		}
 		files = append(files, FileInfo{
-			FileName: name, FileSize: int64(len(content)), UploadedAt: time.Now(), Content: content,
+			FileName: name, Content: content,
 		})
 	}
 	return files, nil
@@ -221,10 +237,18 @@ func (m *Manager) CommitFiles(barePath string, files []FileInfo, remove []string
 	}
 	defer func() {
 		if err := os.RemoveAll(tmp); err != nil {
-			log.Error("remove temp dir", "error", err, "path", tmp)
+			zap.L().Error("remove temp dir", zap.Error(err), zap.String("path", tmp))
 		}
 	}()
-	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{URL: barePath, AllowEmptyRepo: true, Depth: 1})
+	// Tags are not fetched: a shallow clone with a tag ahead of the branch makes
+	// go-git reject the push below as non-fast-forward.
+	repo, err := gogit.PlainClone(tmp, &gogit.CloneOptions{
+		URL:            barePath,
+		AllowEmptyRepo: true,
+		Depth:          1,
+		SingleBranch:   true,
+		Tags:           plumbing.NoTags,
+	})
 	if err != nil {
 		return "", fmt.Errorf("clone: %w", err)
 	}
@@ -324,30 +348,4 @@ func commitByHash(repo *gogit.Repository, s string) (*object.Commit, error) {
 		return nil, fmt.Errorf("commit %s: %w", s, err)
 	}
 	return c, nil
-}
-
-// WritePatterns writes the pre-receive hook's ".mm-patterns" file: one
-// "<task name>\t<glob>" line per required pattern. A task with no patterns
-// still gets a single "<task name>\t" line with an empty glob - the hook
-// needs a line for every live task name, not just ones with patterns, to
-// tell "no patterns required" apart from "no such task" for an
-// "-o submit=<name>" it doesn't recognize.
-func (m *Manager) WritePatterns(id RepoID, patterns map[string][]string) error {
-	var content strings.Builder
-	names := make([]string, 0, len(patterns))
-	for name := range patterns {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		filePatterns := patterns[name]
-		if len(filePatterns) == 0 {
-			_, _ = fmt.Fprintf(&content, "%s\t\n", name)
-			continue
-		}
-		for _, pattern := range filePatterns {
-			_, _ = fmt.Fprintf(&content, "%s\t%s\n", name, pattern)
-		}
-	}
-	return os.WriteFile(PatternsFilePath(m.RepoPath(id)), []byte(content.String()), 0o644)
 }
