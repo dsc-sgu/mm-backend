@@ -119,12 +119,6 @@ func TestBlockPositionRebalancing(t *testing.T) {
 		"Rebalance Course",
 		"Rebalance Course",
 	)
-	draftSnapshotID := LockCourse(
-		t,
-		backendPort,
-		&testUser,
-		courseID,
-	).DraftSnapshotID
 
 	// The anchor stays the first block throughout; every subsequent block
 	// is inserted immediately after it. Since the anchor's own position
@@ -137,7 +131,6 @@ func TestBlockPositionRebalancing(t *testing.T) {
 		backendPort,
 		&testUser,
 		courseID,
-		draftSnapshotID,
 		nil,
 	)
 	neighborID := CreateTestBlockAfter(
@@ -145,7 +138,6 @@ func TestBlockPositionRebalancing(t *testing.T) {
 		backendPort,
 		&testUser,
 		courseID,
-		draftSnapshotID,
 		&anchorID,
 	)
 
@@ -157,7 +149,6 @@ func TestBlockPositionRebalancing(t *testing.T) {
 			backendPort,
 			&testUser,
 			courseID,
-			draftSnapshotID,
 			&anchorID,
 		)
 	}
@@ -179,13 +170,7 @@ func TestBlockPositionRebalancing(t *testing.T) {
 	var finalBlocks []*blocks.Block
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		finalBlocks = GetSnapshotBlocks(
-			t,
-			backendPort,
-			&testUser,
-			courseID,
-			draftSnapshotID,
-		)
+		finalBlocks = GetDraftBlocks(t, backendPort, &testUser, courseID)
 
 		longest := 0
 		for _, b := range finalBlocks {
