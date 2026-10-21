@@ -17,29 +17,30 @@ type TaskGroup struct {
 }
 
 type Task struct {
-	ID          uuid.UUID      `json:"id"          db:"block_id"      binding:"required"`
-	SnapshotID  uuid.UUID      `json:"-"           db:"snapshot_id"`
-	TaskGroupID uuid.UUID      `json:"taskGroupID" db:"task_group_id" binding:"required"`
-	Name        string         `json:"name"        db:"name"          binding:"required"`
-	Patterns    pq.StringArray `json:"patterns"    db:"patterns"`
-	MaxGrade    float32        `json:"maxGrade"    db:"max_grade"     binding:"required"`
-	MaxAttempts int            `json:"maxAttempts" db:"max_attempts"  binding:"required"`
-	AvailableAt *time.Time     `json:"availableAt" db:"available_at"`
-	DeadlineAt  *time.Time     `json:"deadlineAt"  db:"deadline_at"`
+	ID          uuid.UUID        `json:"id"                  db:"id"            binding:"required"`
+	TaskGroupID uuid.UUID        `json:"taskGroupID"         db:"task_group_id" binding:"required"`
+	Name        string           `json:"name"                db:"name"          binding:"required"`
+	Statement   *json.RawMessage `json:"statement,omitempty" db:"statement"`
+	Patterns    pq.StringArray   `json:"patterns"            db:"patterns"`
+	MaxGrade    float32          `json:"maxGrade"            db:"max_grade"     binding:"required"`
+	MaxAttempts int              `json:"maxAttempts"         db:"max_attempts"  binding:"required"`
+	AvailableAt *time.Time       `json:"availableAt"         db:"available_at"`
+	DeadlineAt  *time.Time       `json:"deadlineAt"          db:"deadline_at"`
 }
 
-type CreateTaskGroup struct {
-	CourseID uuid.UUID       `json:"courseID" binding:"required"`
-	Name     string          `json:"name"     binding:"required"`
-	Data     json.RawMessage `json:"data"     binding:"required" swaggertype:"object"`
+// TaskUpdate is the input for patching a task. TaskGroupID and Name are
+// immutable after creation, so they have no place here.
+type TaskUpdate struct {
+	Statement   json.RawMessage `json:"statement,omitempty"`
+	Patterns    *[]string       `json:"patterns,omitempty"`
+	MaxGrade    *float32        `json:"maxGrade,omitempty"`
+	MaxAttempts *int            `json:"maxAttempts,omitempty"`
+	AvailableAt *time.Time      `json:"availableAt,omitempty"`
+	DeadlineAt  *time.Time      `json:"deadlineAt,omitempty"`
 }
 
 type UpdateTaskGroup struct {
-	Name *string `json:"name"`
-}
-
-type CreateTaskGroupResponse struct {
-	ID uuid.UUID `json:"id"`
+	Name string `json:"name" minLength:"1" maxLength:"128"`
 }
 
 type TaskGroupWithTasks struct {
@@ -49,32 +50,49 @@ type TaskGroupWithTasks struct {
 
 type Repo interface {
 	// TaskGroups
-	CreateTaskGroup(
-		ctx context.Context,
-		model *CreateTaskGroup,
-	) (*TaskGroup, error)
 	GetTaskGroupByID(ctx context.Context, id uuid.UUID) (*TaskGroup, error)
+	GetTaskGroupByName(
+		ctx context.Context,
+		name string,
+		courseID uuid.UUID,
+	) (*TaskGroup, error)
 	UpdateTaskGroup(
 		ctx context.Context,
 		id uuid.UUID,
 		update *UpdateTaskGroup,
 	) (*TaskGroup, error)
-	DeleteTaskGroup(ctx context.Context, id uuid.UUID) error
 
 	// Tasks
+	GetTaskByID(ctx context.Context, taskID uuid.UUID) (*Task, error)
+	UpdateTask(
+		ctx context.Context,
+		taskID uuid.UUID,
+		update *TaskUpdate,
+	) (*Task, error)
+	// GetTasks lists the tasks of a group whose blocks are live as viewerID
+	// sees the course: their own drafts over the published blocks. With
+	// viewerID = uuid.Nil it is the published course.
 	GetTasks(
 		ctx context.Context,
-		taskGroupID, snapshotID uuid.UUID,
+		taskGroupID, viewerID uuid.UUID,
 	) ([]*Task, error)
+	GetTaskCount(ctx context.Context, taskGroupID uuid.UUID) (int, error)
+	GetTaskGroupIDByName(
+		ctx context.Context,
+		name string,
+		courseID uuid.UUID,
+	) (uuid.UUID, error)
 	GetCourseIDByTaskGroup(
 		ctx context.Context,
 		taskGroupID uuid.UUID,
 	) (uuid.UUID, error)
-	// ResolveViewSnapshot picks which snapshot generation of tasks a caller
-	// should see for a course: their own in-progress draft, if any, else the
-	// course's active snapshot.
-	ResolveViewSnapshot(
+	GetTaskByName(
 		ctx context.Context,
-		courseID, userID, sessionID uuid.UUID,
+		taskGroupID uuid.UUID,
+		name string,
 	) (uuid.UUID, error)
+	GetTaskPatternsByTaskID(
+		ctx context.Context,
+		taskID uuid.UUID,
+	) ([]string, error)
 }
