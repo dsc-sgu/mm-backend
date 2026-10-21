@@ -52,24 +52,12 @@ func setupGitTask(
 		"gitcourse",
 		"Git Course",
 	)
-	groupID := CreateTestTaskGroup(
+	groupID, taskID := CreateTestTaskInNewGroup(
 		t,
 		&backendPort,
 		&testUser,
 		courseID,
 		"group1",
-	)
-
-	// Creating a task creates a "task"-typed block, which requires a draft
-	// snapshot to exist for the course.
-	lockResult := LockCourse(t, &backendPort, &testUser, courseID)
-
-	taskID = CreateTestTask(
-		t,
-		&backendPort,
-		&testUser,
-		courseID,
-		groupID,
 		"taskA",
 		patterns...,
 	)
@@ -77,11 +65,9 @@ func setupGitTask(
 		UploadTestTemplate(t, &backendPort, &testUser, groupID, template)
 	}
 
-	// A task only becomes attemptable (over HTTP or SSH) once it is part of
-	// the course's active, published snapshot.
-	require.Equal(t, http.StatusNoContent, PublishDraft(
-		t, &backendPort, &testUser, courseID, lockResult.DraftSnapshotID,
-	))
+	// A task only becomes attemptable (over HTTP or SSH) once its block is
+	// published.
+	require.Equal(t, http.StatusOK, Publish(t, &backendPort, &testUser, courseID))
 
 	identity = generateSSHKeyPair(t)
 	RegisterTestSSHKey(
