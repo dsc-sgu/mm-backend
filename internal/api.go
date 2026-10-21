@@ -328,9 +328,19 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 	huma.Register(
 		api,
 		huma.Operation{
+			Method:  http.MethodGet,
+			Path:    "/tasks/{task_id}",
+			Summary: "Get task, with the settings of the block version the caller sees",
+			Tags:    []string{"Task"},
+		},
+		handler.GetTask,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
 			Method:  http.MethodPatch,
 			Path:    "/tasks/{task_id}",
-			Summary: "Update task",
+			Summary: "Update task settings in the caller's draft, publishing them at once if they had none",
 			Tags:    []string{"Task"},
 		},
 		handler.PatchTask,

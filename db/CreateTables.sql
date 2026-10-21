@@ -67,7 +67,9 @@ CREATE TABLE blocks (
     -- NOTE(nrydanov): the frontend names block types; "task" is the only one
     -- the backend gives a meaning to
     block_type varchar(64) NOT NULL CHECK (block_type ~ '^[a-z0-9-]+$'),
-    -- content the backend does not read, NULL for a task block
+    -- content the backend does not read, except for a task block, whose data
+    -- holds the task's settings (statement, patterns, grade, attempt limit,
+    -- schedule) and so is versioned and published with the block
     data jsonb,
     -- NOTE(Ezhkin-Kot): fractional indexing
     position varchar(64) NOT NULL COLLATE "C",
@@ -211,23 +213,17 @@ CREATE TABLE task_groups (
 -- deleted name can be reused.
 CREATE UNIQUE INDEX idx_task_groups_course_name ON task_groups(course_id, name) WHERE (deleted_at IS NULL);
 
--- NOTE(nrydanov): a task lives outside block versions, so its id stays the
--- same while its block is edited and attempts keep pointing at it. A course
--- reaches its tasks through task_blocks. A task name is unique among the
--- tasks of its group in one course; the database cannot express that, so
--- the block service checks it.
+-- NOTE(nrydanov): a task row is the task's identity: its id stays the same
+-- while its block is edited and attempts keep pointing at it. Everything a
+-- teacher edits about the task lives in the data of its block and is
+-- versioned with it. A course reaches its tasks through task_blocks. A task
+-- name is unique among the tasks of its group in one course; the database
+-- cannot express that, so the block service checks it.
 CREATE TABLE tasks (
     id uuid PRIMARY KEY DEFAULT uuidv7(),
     task_group_id uuid NOT NULL REFERENCES task_groups(id),
+    -- the key a git push names the task by; set at creation and never changed
     name varchar(128) NOT NULL,
-    statement jsonb,
-    -- glob patterns matching the files that count as this task's solution
-    patterns text[] NOT NULL DEFAULT '{}',
-    max_grade real NOT NULL,
-    -- NULL means attempts are not limited
-    max_attempts integer CHECK (max_attempts > 0),
-    available_at timestamptz,
-    deadline_at timestamptz,
     deleted_at timestamp
 );
 

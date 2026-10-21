@@ -56,7 +56,8 @@ const (
 
 	getCheckpointBlocksSQL = `
 		SELECT b.id, b.version, b.course_id, b.block_type,
-		       COALESCE(b.data, jsonb_build_object('version', 1, 'taskId', tb.task_id)) AS data,
+		       CASE WHEN tb.task_id IS NULL THEN b.data
+		            ELSE b.data || jsonb_build_object('taskId', tb.task_id) END AS data,
 		       b.position, b.draft, b.deleted, b.created_by, b.base_version
 		FROM checkpoint_blocks cb
 		JOIN blocks b ON b.id = cb.block_id AND b.version = cb.version
