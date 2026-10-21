@@ -101,7 +101,9 @@ func publishCourse(
 	return resp.StatusCode, body
 }
 
-// Publish publishes testUser's drafts and returns the response status.
+// Publish publishes testUser's drafts and returns the response status. A
+// publish that went through must have left the course consistent with its
+// latest checkpoint.
 func Publish(
 	t *testing.T,
 	port *mobynetwork.Port,
@@ -111,7 +113,66 @@ func Publish(
 	t.Helper()
 
 	status, _ := publishCourse(t, port, testUser, courseID)
+	if status == http.StatusOK {
+		requireCheckpointMatchesPublished(t, courseID)
+	}
 	return status
+}
+
+// requireCheckpointMatchesPublished checks the invariant every publish and
+// restore keeps: the map of the course's latest checkpoint names exactly
+// the block versions the published course is read from. Checkpoints are
+// history only, so nothing but this test would notice them drifting.
+func requireCheckpointMatchesPublished(t *testing.T, courseID uuid.UUID) {
+	t.Helper()
+
+	checkpoint := queryBlockVersions(t, `
+		SELECT cb.block_id, cb.version
+		FROM checkpoint_blocks cb
+		WHERE cb.checkpoint_id = (
+			SELECT id FROM checkpoints
+			WHERE course_id = $1
+			ORDER BY created_at DESC, id DESC
+			LIMIT 1
+		)`, courseID)
+	published := queryBlockVersions(t, `
+		SELECT id, version
+		FROM (
+			SELECT DISTINCT ON (id) id, version, deleted
+			FROM blocks
+			WHERE course_id = $1 AND NOT draft
+			ORDER BY id, version DESC
+		) head
+		WHERE NOT deleted`, courseID)
+
+	require.ElementsMatch(
+		t,
+		published,
+		checkpoint,
+		"the latest checkpoint must map the published block versions",
+	)
+}
+
+// queryBlockVersions runs a query returning (block id, version) rows for
+// courseID and returns them as "id@version" strings.
+func queryBlockVersions(t *testing.T, query string, courseID uuid.UUID) []string {
+	t.Helper()
+
+	rows, err := testPostgres.Query(query, courseID)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rows.Close())
+	}()
+
+	var versions []string
+	for rows.Next() {
+		var id string
+		var version int
+		require.NoError(t, rows.Scan(&id, &version))
+		versions = append(versions, fmt.Sprintf("%s@%d", id, version))
+	}
+	require.NoError(t, rows.Err())
+	return versions
 }
 
 // CancelEdit discards testUser's drafts and returns the response status.
@@ -197,6 +258,9 @@ func RestoreCheckpoint(
 		require.NoError(t, err)
 	}()
 
+	if resp.StatusCode == http.StatusOK {
+		requireCheckpointMatchesPublished(t, courseID)
+	}
 	return resp.StatusCode
 }
 
