@@ -55,34 +55,33 @@ const (
 		SELECT a.user_id, a.task_id, att.transition_data, t.task_group_id, tg.course_id
 		FROM attempts a
 		JOIN attempt_transitions att ON att.attempt_id = a.id
-		JOIN tasks t ON a.task_id = t.block_id
+		JOIN tasks t ON a.task_id = t.id
 		JOIN task_groups tg ON t.task_group_id = tg.id
 		WHERE a.id = $1 AND att.state = 'submitted'
 		ORDER BY att.transition_at DESC
 		LIMIT 1
 	`
 
-	repoForTaskSQL = `
-		SELECT cs.course_id, t.task_group_id
-		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id
-		JOIN course_snapshots cs ON cs.id = b.snapshot_id
-		JOIN courses c ON c.id = cs.course_id
-		WHERE t.block_id = $1 AND b.snapshot_id = c.active_snapshot_id
-	`
-
-	// Unlike repoForTaskSQL, this is not restricted to the active snapshot:
-	// it backs authorization for viewing already-recorded attempts, which
-	// must keep resolving even if the task later drops out of the active
-	// snapshot.
+	// Unlike repoForTaskSQL, this is not restricted to published tasks: it
+	// backs authorization for viewing already-recorded attempts, which must
+	// keep resolving even if the task's block is later deleted.
 	getTaskCourseIDSQL = `
-		SELECT cs.course_id
+		SELECT tg.course_id
 		FROM tasks t
-		JOIN blocks b ON b.id = t.block_id
-		JOIN course_snapshots cs ON cs.id = b.snapshot_id
-		WHERE t.block_id = $1
+		JOIN task_groups tg ON tg.id = t.task_group_id
+		WHERE t.id = $1
 	`
 )
+
+// Only a task whose block is published can be attempted.
+var repoForTaskSQL = `
+	WITH v AS (` + blockView("(SELECT tg.course_id FROM tasks t JOIN task_groups tg ON tg.id = t.task_group_id WHERE t.id = $1)", "NULL") + `)
+	SELECT v.course_id, t.task_group_id
+	FROM tasks t
+	JOIN task_blocks tb ON tb.task_id = t.id
+	JOIN v ON v.id = tb.block_id AND NOT v.deleted
+	WHERE t.id = $1 AND t.deleted_at IS NULL
+`
 
 func (r *PGRepo) AddSSHKey(model *sshkeys.SSHKey) error {
 	zap.L().Debug("Executing query", zap.String("query", addSSHKeySQL))
@@ -261,7 +260,7 @@ func (r *PGRepo) IsCourseTeacher(
 }
 
 // GetTaskCourseID resolves the course a task belongs to, for authorization
-// purposes only - deliberately not scoped to the active snapshot.
+// purposes only - deliberately not restricted to published tasks.
 func (r *PGRepo) GetTaskCourseID(
 	ctx context.Context,
 	taskID uuid.UUID,

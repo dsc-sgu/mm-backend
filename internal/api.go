@@ -77,35 +77,35 @@ func setupUserRoutes(public, private huma.API, uc *users.Handler) {
 }
 
 func setupBlockRoutes(api huma.API, bh *blocks.Handler) {
-	const blockPath = "/courses/{course_id}/snapshots/{snapshot_id}/blocks"
+	const blockPath = "/courses/{course_id}/blocks"
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/{course_id}/blocks",
-		Summary: "Create block in the current course draft", DefaultStatus: http.StatusCreated,
+		Method: http.MethodPost, Path: blockPath,
+		Summary: "Create block in the caller's draft of the course", DefaultStatus: http.StatusCreated,
 		Tags: []string{"Block"},
 	}, bh.CreateBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodGet, Path: blockPath + "/{block_id}",
-		Summary: "Get block by id", DefaultStatus: http.StatusOK,
+		Summary: "Get block by id, in the caller's draft version if any", DefaultStatus: http.StatusOK,
 		Tags: []string{"Block"},
 	}, bh.GetBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}",
-		Summary: "Update existing block", DefaultStatus: http.StatusOK,
+		Summary: "Update block in the caller's draft", DefaultStatus: http.StatusOK,
 		Tags: []string{"Block"},
 	}, bh.PatchBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPatch, Path: blockPath + "/{block_id}/move",
-		Summary: "Move block position in snapshot", DefaultStatus: http.StatusOK,
+		Summary: "Move block in the caller's draft", DefaultStatus: http.StatusOK,
 		Tags: []string{"Block"},
 	}, bh.MoveBlock)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodDelete, Path: blockPath + "/{block_id}",
-		Summary: "Delete block", DefaultStatus: http.StatusNoContent,
+		Summary: "Delete block in the caller's draft", DefaultStatus: http.StatusNoContent,
 		Tags: []string{"Block"},
 	}, bh.DeleteBlock)
 }
