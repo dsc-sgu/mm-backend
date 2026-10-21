@@ -623,7 +623,35 @@ func patchTestTask(
 	}
 	var task tasks.UpdatedTask
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&task))
+	if task.Published {
+		courseID, err := uuid.Parse(courseIDOfTask(t, testUser, task.TaskGroupID))
+		require.NoError(t, err)
+		requireCheckpointMatchesPublished(t, courseID)
+	}
 	return resp.StatusCode, &task
+}
+
+// courseIDOfTask returns the course of a task group, through the group.
+func courseIDOfTask(t *testing.T, testUser *TestUser, groupID uuid.UUID) string {
+	t.Helper()
+
+	url := fmt.Sprintf(
+		"http://127.0.0.1:%s/api/v1/task-groups/%s",
+		backendPort.Port(),
+		groupID,
+	)
+	resp, err := testUser.Client.Get(url)
+	require.NoError(t, err)
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var group tasks.TaskGroupWithTasks
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&group))
+	return group.CourseID.String()
 }
 
 // TestUpdateTask patches a published task through PATCH /tasks/{task_id}.
