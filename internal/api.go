@@ -125,55 +125,37 @@ func setupCourseRoutes(api huma.API, ch *courses.Handler) {
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodGet, Path: "/courses/{course_id}/content",
-		Summary: "Get course with content", DefaultStatus: http.StatusOK,
+		Summary: "Get course with its published blocks, or with the caller's draft over them", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course"},
 	}, ch.GetCourseContent)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/courses/{course_id}/snapshots",
-		Summary: "Get course snapshots timeline", DefaultStatus: http.StatusOK,
+		Method: http.MethodGet, Path: "/courses/{course_id}/checkpoints",
+		Summary: "List the publishes of the course, latest first", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course editing"},
-	}, ch.GetCourseSnapshots)
+	}, ch.GetCheckpoints)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/courses/{course_id}/snapshots/{snapshot_id}",
-		Summary: "Get metadata for a single snapshot", DefaultStatus: http.StatusOK,
+		Method: http.MethodGet, Path: "/courses/{course_id}/checkpoints/{checkpoint_id}/blocks",
+		Summary: "Get the blocks of the course as a publish left them", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course editing"},
-	}, ch.GetCourseSnapshot)
+	}, ch.GetCheckpointBlocks)
 
 	huma.Register(api, huma.Operation{
-		Method: http.MethodGet, Path: "/courses/{course_id}/snapshots/{snapshot_id}/blocks",
-		Summary: "Get all blocks in a specific snapshot", DefaultStatus: http.StatusOK,
+		Method: http.MethodPost, Path: "/courses/{course_id}/checkpoints/{checkpoint_id}/restore",
+		Summary: "Publish the course as it was at a checkpoint", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course editing"},
-	}, ch.GetSnapshotBlocks)
-
-	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/{course_id}/lock",
-		Summary: "Acquire course editing lock and init draft", DefaultStatus: http.StatusOK,
-		Tags: []string{"Course editing"},
-	}, ch.LockCourse)
-
-	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/{course_id}/heartbeat",
-		Summary: "Refresh course editing lock", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course editing"},
-	}, ch.Heartbeat)
-
-	huma.Register(api, huma.Operation{
-		Method: http.MethodPost, Path: "/courses/{course_id}/snapshots/switch",
-		Summary: "Switch current draft content to target snapshot content", DefaultStatus: http.StatusNoContent,
-		Tags: []string{"Course editing"},
-	}, ch.SwitchSnapshot)
+	}, ch.RestoreCheckpoint)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/publish",
-		Summary: "Publish draft snapshot to course", DefaultStatus: http.StatusNoContent,
+		Summary: "Publish the caller's draft blocks", DefaultStatus: http.StatusOK,
 		Tags: []string{"Course editing"},
-	}, ch.PublishDraft)
+	}, ch.Publish)
 
 	huma.Register(api, huma.Operation{
 		Method: http.MethodPost, Path: "/courses/{course_id}/cancel-edit",
-		Summary: "Cancel course editing session", DefaultStatus: http.StatusNoContent,
+		Summary: "Discard the caller's draft blocks", DefaultStatus: http.StatusNoContent,
 		Tags: []string{"Course editing"},
 	}, ch.CancelEdit)
 
@@ -314,34 +296,12 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 	huma.Register(
 		api,
 		huma.Operation{
-			Method:        http.MethodPost,
-			Path:          "/task-groups",
-			Summary:       "Create task group",
-			DefaultStatus: http.StatusCreated,
-			Tags:          []string{"Task"},
-		},
-		handler.CreateTaskGroup,
-	)
-	huma.Register(
-		api,
-		huma.Operation{
 			Method:  http.MethodPatch,
 			Path:    "/task-groups/{group_id}",
 			Summary: "Update task group",
 			Tags:    []string{"Task"},
 		},
 		handler.PatchTaskGroup,
-	)
-	huma.Register(
-		api,
-		huma.Operation{
-			Method:        http.MethodDelete,
-			Path:          "/task-groups/{group_id}",
-			Summary:       "Delete task group",
-			DefaultStatus: http.StatusNoContent,
-			Tags:          []string{"Task"},
-		},
-		handler.DeleteTaskGroup,
 	)
 	huma.Register(
 		api,
@@ -364,5 +324,15 @@ func setupTaskRoutes(api huma.API, handler *tasks.Handler) {
 			Tags:    []string{"Task"},
 		},
 		handler.GetTasks,
+	)
+	huma.Register(
+		api,
+		huma.Operation{
+			Method:  http.MethodPatch,
+			Path:    "/tasks/{task_id}",
+			Summary: "Update task",
+			Tags:    []string{"Task"},
+		},
+		handler.PatchTask,
 	)
 }
