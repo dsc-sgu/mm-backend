@@ -62,6 +62,14 @@ const (
 		LIMIT 1
 	`
 
+	getAttemptLimitSQL = `
+		SELECT t.max_attempts,
+		       (SELECT count(*) FROM attempts a
+		        WHERE a.task_id = t.id AND a.user_id = $2) AS used
+		FROM tasks t
+		WHERE t.id = $1
+	`
+
 	// Unlike repoForTaskSQL, this is not restricted to published tasks: it
 	// backs authorization for viewing already-recorded attempts, which must
 	// keep resolving even if the task's block is later deleted.
@@ -276,4 +284,36 @@ func (r *PGRepo) GetTaskCourseID(
 		return uuid.Nil, fmt.Errorf("get task course: %w", err)
 	}
 	return courseID, nil
+}
+
+func (r *PGRepo) GetAttemptLimit(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (*int, int, error) {
+	var row struct {
+		Limit *int `db:"max_attempts"`
+		Used  int  `db:"used"`
+	}
+	if err := r.db.GetContext(ctx, &row, getAttemptLimitSQL, taskID, participantID); err != nil {
+		return nil, 0, fmt.Errorf("get attempt limit: %w", err)
+	}
+	return row.Limit, row.Used, nil
+}
+
+func (r *PGRepo) CountAttempts(
+	ctx context.Context,
+	taskID, participantID uuid.UUID,
+) (int, error) {
+	var used int
+	err := r.db.GetContext(
+		ctx,
+		&used,
+		`SELECT count(*) FROM attempts WHERE task_id = $1 AND user_id = $2`,
+		taskID,
+		participantID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("count attempts: %w", err)
+	}
+	return used, nil
 }

@@ -224,7 +224,8 @@ CREATE TABLE tasks (
     -- glob patterns matching the files that count as this task's solution
     patterns text[] NOT NULL DEFAULT '{}',
     max_grade real NOT NULL,
-    max_attempts integer NOT NULL,
+    -- NULL means attempts are not limited
+    max_attempts integer CHECK (max_attempts > 0),
     available_at timestamptz,
     deadline_at timestamptz,
     deleted_at timestamp
