@@ -38,6 +38,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/pg"
 	"github.com/dsc-sgu/mm-backend/internal/snapshots"
 	pkggit "github.com/dsc-sgu/mm-backend/pkg/git"
+	"github.com/dsc-sgu/mm-backend/pkg/middleware"
 )
 
 type App struct {
@@ -116,6 +117,8 @@ func main() {
 	conf := zap.NewDevelopmentConfig()
 	conf.Level = config.LogLevel
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
+
+	middleware.InstallErrorHandling()
 
 	dbConn, err := db.CreateDB(config.Postgres.GetURL())
 	if err != nil {

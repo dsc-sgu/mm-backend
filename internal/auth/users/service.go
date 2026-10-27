@@ -12,6 +12,7 @@ import (
 	"github.com/dsc-sgu/mm-backend/internal/auth/cookie"
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/session"
+	"github.com/dsc-sgu/mm-backend/pkg/domainerr"
 )
 
 // NewUser is the input for creating a user, used by both the service and repository layers.
@@ -56,6 +57,8 @@ func NewService(
 var (
 	ErrWrongCredentials = errors.New("wrong credentials")
 	ErrSessionNotFound  = errors.New("session not found")
+
+	ErrUserAlreadyExists = domainerr.New(domainerr.KindConflict, "username or email already taken")
 )
 
 func (c *Service) Login(
