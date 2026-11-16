@@ -8,7 +8,7 @@ require (
 	github.com/go-git/go-billy/v6 v6.0.0-beta.1
 	github.com/gobwas/glob v1.1.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/moby/moby/api v1.56.1
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/stretchr/testify v1.12.1
