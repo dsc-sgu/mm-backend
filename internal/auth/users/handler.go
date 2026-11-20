@@ -76,7 +76,7 @@ func (h *Handler) Register(ctx context.Context, input *RegisterInput) (*Register
 
 	user, err := h.svc.CreateUser(ctx, &newUser)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, err
 	}
 
 	return &RegisterOutput{Body: &RegisterResponse{ID: user.ID}}, nil

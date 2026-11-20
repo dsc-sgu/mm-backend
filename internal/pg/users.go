@@ -3,15 +3,21 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"go.uber.org/zap"
 
 	"github.com/dsc-sgu/mm-backend/internal/auth/password"
 	"github.com/dsc-sgu/mm-backend/internal/auth/users"
 )
+
+// Postgres error code for a unique constraint violation
+// https://www.postgresql.org/docs/current/errcodes-appendix.html
+const pgUniqueViolation = "23505"
 
 const (
 	createUserSQL = `
@@ -69,6 +75,10 @@ func (r *PGRepo) CreateUser(
 
 	rows, err := r.db.NamedQueryContext(ctx, createUserSQL, newUser)
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == pgUniqueViolation {
+			return nil, users.ErrUserAlreadyExists
+		}
 		return nil, fmt.Errorf("create user: insert in db: %w", err)
 	}
 

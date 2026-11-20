@@ -118,6 +118,8 @@ func main() {
 	conf.Level = config.LogLevel
 	zap.ReplaceGlobals(zap.Must(conf.Build()))
 
+	middleware.InstallErrorHandling()
+
 	dbConn, err := db.CreateDB(config.Postgres.GetURL())
 	if err != nil {
 		zap.S().Fatalf("establishing database connection: %s", err.Error())
